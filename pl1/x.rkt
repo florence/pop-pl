@@ -1,4 +1,4 @@
-#lang planet robby/pop-pl:1:1
+#lang pop-pl
 
 Boolean x = false;
 Boolean Or Unknown cats = unknown;

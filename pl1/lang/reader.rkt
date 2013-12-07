@@ -1,5 +1,5 @@
 #lang s-exp syntax/module-reader
-(planet robby/pop-pl:1/runtime)
+pop-pl/runtime
 #:read poppl-read
 #:read-syntax poppl-read-syntax
 #:whole-body-readers? #t
