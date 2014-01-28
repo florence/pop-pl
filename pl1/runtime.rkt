@@ -26,9 +26,9 @@
            (syntax-case stx ()
              [x 
               (identifier? #'x)
-              #'(hash-ref bindings 'id)]
+              #'(get-binding 'id)]
              [(x . rest)
-              #'(#%app (hash-ref bindings 'id) . rest)]))
+              #'(#%app (get-binding 'id) . rest)]))
          (do-decl 'type 'id init))]))
 
 (define (do-decl type id init)
@@ -206,15 +206,160 @@
     (struct n/a ())
     (values (n/a) unknown?)))
 
-(define-syntax-rule 
+(define-syntax-rule
   (bang! id expr)
-  (hash-set! bindings 'id expr))
+  (do-bang! 'id expr))
 
-(provide #%module-begin decl prompt true false #%datum
+(define reads #f)
+
+(define (do-bang! sym v)
+  (when reads
+    (when (hash-ref reads sym #f)
+      (error '<- "assignment after read of ~a: ~e" sym v)))
+  (hash-set! bindings sym v))
+
+(define (get-binding sym)
+  (when reads
+    (hash-set! reads sym #t))
+  (hash-ref bindings sym))
+
+(provide decl prompt true false #%datum
          (rename-out [-when when]) if
          or
          #%top-interaction #%app
          known? unknown? unknown n/a n/a?
          begin bang! not)
 
+;; ============================================================
+
+(provide (rename-out [module-begin #%module-begin])
+         quote in-units
+         (rename-out [units:* *]
+                     [units:+ +]
+                     [units:< <]
+                     [units:<= <=]
+                     [units:= =])
+         unit/ do
+         define list
+         get-val set-val! cons
+         make-external-function make-device
+         whenever assert assert-signaled scenario events)
+
+(define-syntax-rule (module-begin form ...)
+  (#%module-begin form ... (run-scenarios)))
+
+(define whenevers null)
+(define (add-whenever! test action)
+  (set! whenevers (cons (cons test action) whenevers)))
+
+(define-syntax (whenever stx)
+  (syntax-case stx ()
+    [(_ test action)
+     #`(add-whenever! #,(syntax/loc #'test (lambda () test))
+                      #,(syntax/loc #'action (lambda () action)))]))
+
+(define (run-whenevers)
+  (for ([w (in-list (reverse whenevers))])
+    (when ((car w))
+      ((cdr w)))))
+
+(define scenarios null)
+(define (add-scenario! thunks)
+  (set! scenarios (cons thunks scenarios)))
+
+(define-syntax-rule (scenario stmt ...)
+  (add-scenario! (list (lambda () stmt (void)) ...)))
+
+(define copy (hash))
+(define (do-events thunk)
+  (map hash-restore! devices copy)
+  (set! device-assignments #f)
+  (set! device-reads #f)
+  (thunk)
+  (set! device-assignments (make-hash))
+  (set! device-reads (make-hash))
+  (set! signals (make-hash))
+  (set! reads (make-hash))
+  (run-whenevers)
+  (set! reads #f))
+
+(define-syntax-rule (events e ...)
+  (do-events (lambda () e ... (void))))
+
+(define (run-scenarios)
+  (set! copy (map hash-copy devices))
+  (define bindings-copy (hash-copy bindings))
+  (for ([s (in-list scenarios)])
+    (hash-restore! bindings bindings-copy)
+    (for ([t (in-list s)])
+      (t))
+    (printf "scenario done\n")))
+
+(define-syntax-rule (assert e)
+  (unless e
+    (error 'assert "failed: ~s" 'e)))
+
+(define-syntax-rule (assert-signaled expect e)
+  (unless (equal? (hash-ref signals 'e #f) expect)
+    (error 'assert "~asignaled: ~a" (if expect "not " "") 'e)))
+
 (define (not x) (and (boolean? x) (if x #f #t)))
+
+(define (in-units a b) a)
+
+(define (units:* a b)
+  (* a b))
+(define (units:+ a b)
+  (+ a b))
+(define (units:< a b)
+  (and (< a b) b))
+(define (units:<= a b)
+  (and (<= a b) b))
+(define (units:= a b)
+  (and (= a b) b))
+
+(define (unit/ a b) a)
+
+(define (do action rate) 'ok)
+
+(define device-assignments (make-hash))
+(define device-reads (make-hash))
+
+(define (set-val! o f v)
+  (define key (cons (hash-ref o '@name) f))
+
+  (when device-reads
+    (when (hash-ref device-reads key #f)
+      (error '<- "assignment after read of ~a.~a: ~v" (hash-ref o '@name) f v)))
+
+  (when device-assignments
+    (define prev (hash-ref device-assignments key (lambda () v)))
+    (unless (equal? prev v)
+      (error '<- "conflicting assignments to ~a.~a: ~v vs. ~v" (hash-ref o '@name) f prev v))
+    (hash-set! device-assignments key v))
+
+  (hash-set! o f v))
+
+(define (get-val o f)
+  (when device-reads
+    (hash-set! device-reads (cons (hash-ref o '@name #f) f) #t))
+  (hash-ref o f))
+
+(define signals (make-hash))
+
+(define (make-external-function name)
+  (lambda ()
+    (hash-set! signals name #t)
+    (displayln name)))
+
+(define devices null)
+
+(define (make-device name . content)
+  (define ht (make-hash content))
+  (hash-set! ht '@name name)
+  (set! devices (cons ht devices))
+  ht)
+
+(define (hash-restore! dest src)
+  (for ([(k v) (in-hash src)])
+    (hash-set! dest k v)))

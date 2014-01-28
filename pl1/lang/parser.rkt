@@ -3,36 +3,51 @@
 (require parser-tools/lex parser-tools/yacc
          (prefix-in : parser-tools/lex-sre)
          rackunit
-         syntax/readerr)
+         syntax/readerr
+         (for-syntax racket/base))
 
-(define-tokens tokens (id num binop unop str Base-type))
-(define-empty-tokens mt-tokens (when prompt 
+(define-tokens tokens (symbolic num binop unop str Base-type unit))
+(define-empty-tokens mt-tokens (when whenever import device prompt assert signaled scenario events
                                  open-brace close-brace open-paren close-paren
-                                 semi bars eoft
-                                 Or
-                                 if then else fi 
+                                 semi bars separator eoft
+                                 Or not
+                                 if do at then else fi
                                  dot n/a <-
-                                 equal comma))
+                                 equal comma slash times))
 
 (define current-source (make-parameter #f))
 
 (define lex
   (lexer-src-pos
+   ["import" (token-import)]
+   ["device" (token-device)]
    ["when" (token-when)]
+   ["whenever" (token-whenever)]
+   ["assert" (token-assert)]
+   ["signaled" (token-signaled)]
+   ["scenario" (token-scenario)]
+   ["events" (token-events)]
    ["prompt" (token-prompt)]
    [(:or "Boolean" "Unknown" "Number" "N/A")
     (token-Base-type (string->symbol lexeme))]
    ["Or" (token-Or)]
-   [(:or "known?" "unknown?" "n/a?" "not") (token-unop (string->symbol lexeme))]
+   ["not" (token-not)]
+   [(:or "known?" "unknown?" "n/a?") (token-unop (string->symbol lexeme))]
    ["=" (token-equal)]
+   ["/" (token-slash)]
+   ["||" (token-bars)]
    ["<-" (token-<-)]
-   [(:or #\< #\!) (token-binop (string->symbol lexeme))]
+   [(:or "<" "<=" "!" "*" "+") (token-binop (string->symbol lexeme))]
    ["or" (token-binop 'or)]
    ["if" (token-if)]
+   ["do" (token-do)]
+   ["at" (token-at)]
    ["n/a" (token-n/a)]
    ["then" (token-then)]
    ["else" (token-else)]
    ["fi" (token-fi)]
+   [(:: (:or "unit" "hour" "mL") (:? "s"))
+    (token-unit (string->symbol (regexp-replace* #rx"s$" lexeme "")))]
    [#\; (token-semi)]
    [#\{ (token-open-brace)]
    [#\} (token-close-brace)]
@@ -42,14 +57,15 @@
    [#\. (token-dot)]
    [(:: (:/ #\a #\z #\A #\Z)
         (:* #\_ #\? (:/ #\a #\z #\A #\Z #\0 #\9)))
-    (token-id (string->symbol lexeme))]
+    (token-symbolic (string->symbol lexeme))]
    [(:: #\= (:: #\= (:: #\= (:: #\= (:* #\=)))))
-    (token-bars)]
+    (token-separator)]
    [(:+ (:/ #\0 #\9))
     (token-num (string->number lexeme))]
    [(:: #\" (:* (char-complement #\")) #\")
     (token-str (substring lexeme 1 (- (string-length lexeme) 1)))]
    [(:+ whitespace) (return-without-pos (lex input-port))]
+   [(:: "//" (:* (char-complement (:or "\r" "\n")))) (return-without-pos (lex input-port))]
    [(eof) (token-eoft)]
    [(char-complement (union)) 
     (raise-read-error (format "unexpected character ~a" lexeme)
@@ -70,42 +86,72 @@
                   (loop)))))))
 
 (check-equal? (str->toks "when (x) { prompt(); }")
-              '(when open-paren id close-paren open-brace prompt open-paren close-paren semi close-brace eoft))
+              '(when open-paren symbolic close-paren open-brace prompt open-paren close-paren semi close-brace eoft))
 
 (define parse
   (parser
    [grammar 
-    (start [(decls bars stmts) (add-srcloc (append $1 $3) $1-start-pos $3-end-pos)])
-    (decls [(decl semi decls) (cons (add-srcloc $1 $1-start-pos $1-end-pos) $3)]
-           [(decl semi) (list (add-srcloc $1 $1-start-pos $1-end-pos))])
-    (decl [(type id equal expr) `(decl ,$1 ,(add-srcloc $2 $2-start-pos $2-end-pos) ,$4)])
-    (type [(Base-type) (add-srcloc $1 $1-start-pos $n-start-pos)]
-          [(type Or type) (prec Or) (add-srcloc `(Or ,$1 ,$3) $1-start-pos $n-end-pos)])
-    (stmt [(when open-paren expr close-paren stmt)
-           (add-srcloc `(when ,$3 ,$5) $1-start-pos $n-end-pos)]
+    (start [(decls separator stmts) (->stx (append $1 $3))])
+    (decls [(decl decls) (cons $1 $2)]
+           [(decl) (list $1)])
+    (id   [(symbolic) (->stx $1)])
+    (id-val-seq [() null]
+                [(non-empty-id-val-seq) $1])
+    (non-empty-id-val-seq [(id equal expr) (list `(cons ',$1 ,$3))]
+                          [(id equal expr comma non-empty-id-val-seq) (cons `(cons ',$1 ,$3) $5)])
+    (decl [(type id equal expr semi) (->stx `(decl ,$1 ,$2 ,$4))]
+          [(id equal expr semi) (->stx `(decl val ,$1 ,$3))]
+          [(import id semi) (->stx `(define ,$2 (make-external-function ',$2)))]
+          [(device id open-brace id-val-seq close-brace) (->stx `(define ,$2 (make-device ',$2 . ,$4)))]
+          [(scenario open-brace stmts close-brace) (->stx `(scenario . ,$3))])
+    (type [(Base-type) $1]
+          [(type Or type) (prec Or) (->stx `(Or ,$1 ,$3))])
+    (stmt [(when open-paren expr close-paren stmt) (->stx `(when ,$3 ,$5))]
+          [(whenever open-paren expr close-paren stmt) (->stx `(whenever ,$3 ,$5))]
           [(prompt open-paren id comma id comma expr close-paren semi)
-           (add-srcloc `(prompt ,$3 ,(add-srcloc $5 $5-start-pos $5-end-pos #t) ,$7)
-                       $1-start-pos $n-end-pos)]
+           (->stx `(prompt ,$3 ,$5 ,$7))]
           [(if expr then stmt else stmt fi)
-           (add-srcloc `(if ,$2 ,$4 ,$6) $1-start-pos $n-end-pos)]
-          [(id <- expr semi)
-           (add-srcloc `(bang! ,(add-srcloc $1 $1-start-pos $1-end-pos) ,$3)
-                       $1-start-pos $n-end-pos)]
-          [(open-brace stmts close-brace)
-           (add-srcloc `(begin ,@$2) $1-start-pos $n-end-pos)])
-    (stmts [(stmt stmts) (cons (add-srcloc $1 $1-start-pos $1-end-pos) $2)]
-           [(stmt) (list (add-srcloc $1 $1-start-pos $1-end-pos))])
-    (expr [(expr op expr) (prec binop) (add-srcloc `(,$2 ,$1 ,$3) $1-start-pos $n-end-pos)]
-          [(if expr then expr else expr fi) (add-srcloc `(if ,$2 ,$4 ,$6) $1-start-pos $n-end-pos)]
-          [(num) (add-srcloc $1 $1-start-pos $n-end-pos)]
-          [(id) (add-srcloc $1 $1-start-pos $n-end-pos #t)]
-          [(n/a) (add-srcloc 'n/a $1-start-pos $n-end-pos)]
-          [(str) (add-srcloc $1 $1-start-pos $n-end-pos)]
-          [(unop open-paren expr close-paren) (add-srcloc `(,(add-srcloc $1 $1-start-pos $n-end-pos) ,$3) $1-start-pos $n-end-pos)]
-          [(open-paren expr close-paren) (add-srcloc $2 $1-start-pos $n-end-pos)])
+           (->stx `(if ,$2 ,$4 ,$6))]
+          [(id <- expr semi) (->stx `(bang! ,$1 ,$3))]
+          [(expr dot id <- expr semi) (->stx `(set-val! ,$1 ',$3 ,$5))]
+          [(do expr at expr semi) (->stx `(do ,$2 ,$4))]
+          [(stmt-expr semi) $1]
+          [(open-brace stmts close-brace) (->stx `(begin ,@$2))]
+          [(events open-brace stmts close-brace) (->stx `(events ,@$3))]
+          [(assert expr semi) (->stx `(assert ,$2))]
+          [(assert signaled id semi) (->stx `(assert-signaled #t ,$3))]
+          [(assert not signaled id semi) (->stx `(assert-signaled #f ,$4))])
+    (stmts [(stmt stmts) (cons $1 $2)]
+           [() null])
+    (stmt-expr [(expr open-paren expr-seq close-paren) (->stx `(,$1 . ,$3))])
+    (expr [(stmt-expr) $1]
+          [(expr op expr) (prec binop) (->stx `(,$2 ,$1 ,$3))]
+          [(if expr then expr else expr fi) (->stx `(if ,$2 ,$4 ,$6))]
+          [(open-paren exprs close-paren) (->stx `(list . ,$2))]
+          [(expr dot id) (->stx `(get-val ,$1 ',$3))]
+          [(num units) (->stx `(in-units ,$1 ,$2))]
+          [(num) (->stx $1)]
+          [(id) $1]
+          [(n/a) (->stx 'n/a)]
+          [(str) (->stx $1)]
+          [(expr bars expr) (->stx `(or ,$1 ,$3))]
+          [(any-unop open-paren expr close-paren) (->stx `(,$1 ,$3))]
+          [(open-paren expr close-paren) $2])
+    (exprs [(expr expr) (list $1 $2)]
+           [(expr exprs) `(,$1 . ,$2)])
+    (expr-seq [() null]
+              [(non-empty-expr-seq) $1])
+    (non-empty-expr-seq [(expr) (list $1)]
+                        [(expr comma non-empty-expr-seq) `(,$1 . ,$3)])
     (op [(equal) '=]
-        [(binop) $1])]
-   [precs (right binop) (right Or)]
+        [(binop) $1])
+    [any-unop [(unop) $1]
+              [(not) (->stx 'not)]]
+    (units [(unit-seq) $1]
+           [(unit-seq slash units) (->stx `(unit/ ,$1 ,$3))])
+    (unit-seq [(unit) (->stx `(quote ,$1))]
+              [(unit unit-seq) (->stx `(unit* ,$1 ,$2))])]
+   [precs (left binop) (right Or)]
    [tokens mt-tokens tokens]
    [src-pos]
    [start start]
@@ -115,36 +161,41 @@
       (raise-syntax-error 
        'parse-error 
        (format "~s" (if tok-ok?
-                        tok-value
+                        (or tok-value tok-name)
                         'unknown))
        (add-srcloc (if tok-ok?
-                       tok-value
+                       (or tok-value tok-name)
                        'unknown)
                    start-pos
                    end-pos)))]))
 
-(define (add-srcloc stuff start-pos end-pos [id? #f])
-  (cond
-    [id?
-     (define str (symbol->string stuff))
-     (define prt (open-input-string str))
-     (port-count-lines! prt)
-     (set-port-next-location! prt 
-                              (position-line start-pos)
-                              (position-col start-pos)
-                              (position-offset start-pos))
-     (read-syntax (current-source) prt)]
-    [else
-     (datum->syntax #f stuff (locs->vec start-pos end-pos))]))
+(define (add-srcloc stuff start-pos end-pos)
+  (datum->syntax #f stuff (locs->vec start-pos end-pos) orig-prop))
 
-(define (locs->vec start-pos end-pos)
+(define-syntax (->stx stx)
+  ;; A non-hygienic marco to access $1-start-pos and $n-end-pos, which
+  ;; are bound by the `cfg-parse` form in a grammar production's
+  ;; action:
+  (syntax-case stx ()
+    [(_ e)
+     (let ([start (datum->syntax stx '$1-start-pos)]
+           [end (datum->syntax stx '$n-end-pos)])
+       #`(add-srcloc e #,start #,end))]))
+
+;; This property tells DrRacket that a constructed syntax object
+;; should be treated as being in the original source:
+(define orig-prop (read-syntax 'src (open-input-bytes #"x")))
+
+(define (locs->vec start end)
   (vector
    (current-source)
-   (position-line start-pos)
-   (position-col start-pos)
-   (position-offset start-pos)
-   (- (position-offset end-pos)
-      (position-offset start-pos))))
+   (position-line start)
+   (position-col start)
+   (position-offset start)
+   (and (position-offset end)
+        (position-offset start)
+        (- (position-offset end)
+           (position-offset start)))))
 
 (define (run-p src p)
   (parameterize ([current-source src])
