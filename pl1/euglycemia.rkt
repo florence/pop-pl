@@ -1,5 +1,25 @@
 #lang pop-pl
 
+//-------------------------------------------
+// comments from discussion on 1/29 meeting at NWU
+// also, there is a bug; run the program and get 
+// "<: contract violation" which seems wrong.
+
+// Time: in addition to recovery, there's also 
+// scheduling problems (36 patients on one wing
+// and only 3 nurses all of whom get a dose of whatever at 6am) 
+// and there should be an allowed
+// interval. There is a "happy hour" of performance for drugs
+// so okay to be given in a window.
+
+// 80ml/hour is bad: too much stuff.  Instead the units for
+// insulin is "units" (believe it or not ... sigh)
+
+// for a demo: it would be nice to turn the devices section
+// into a little GUI window that you can use to send input in.
+
+//-------------------------------------------
+
 // Device fields initialized here are intended as outputs,
 // which a real device would produce an a `scenario` blocks
 // sets inside `events`. Device inputs are not declared here
@@ -44,6 +64,12 @@
     }
     assert signaled initiate_stale_glucometry_notification_protocol;
   }
+
+ scenario {
+   events {
+      glucose_reading.value <- 0;
+   }
+ }
 
 ============================================================
 
