@@ -331,12 +331,13 @@
   (run/check = a b))
 
 ;; (number number -> boolean) (maybe/c number) (maybe/c number) -> (maybe/c number)
-;; any expression might return false, so lets check for that
+;; any expression might return false, so lets check for that. This allows falses to propigate up
 (define (run/check f a b)
   (and a b (f a b) b))
 (module+ test
   (check-equal? (units:< 1 2) 2)
-  (check-equal? (units:<= 1 2) 2))
+  (check-equal? (units:<= 1 2) 2)
+  (check-equal? (units:= 1 (units:= 1 2)) #f))
 
 (define (unit/ a b) a)
 
