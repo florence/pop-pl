@@ -249,21 +249,31 @@
 (define-syntax-rule (module-begin form ...)
   (#%module-begin form ... (run-scenarios)))
 
+;; represents a "whenever" clause
+;; means "if test is true perform action"
+;; (-> boolean) (-> any)
+(struct whenever/struct (test action) #:transparent)
 (define whenevers null)
+;; (-> boolean) (-> any) -> Void
+;; add a new whenever
 (define (add-whenever! test action)
-  (set! whenevers (cons (cons test action) whenevers)))
+  (set! whenevers (cons (whenever/struct test action) whenevers)))
 
+;; expand the whenever stx to setup a new whenever clause
 (define-syntax (whenever stx)
   (syntax-case stx ()
     [(_ test action)
      #`(add-whenever! #,(syntax/loc #'test (lambda () test))
                       #,(syntax/loc #'action (lambda () action)))]))
 
+;; run all the whenevers
+;; -> Void
 (define (run-whenevers)
   (for ([w (in-list (reverse whenevers))])
-    (when ((car w))
-      ((cdr w)))))
+    (when ((whenever/struct-test w))
+      ((whenever/struct-action w)))))
 
+;;
 (define scenarios null)
 (define (add-scenario! thunks)
   (set! scenarios (cons thunks scenarios)))
@@ -275,7 +285,7 @@
 (define (do-events thunk)
   (map hash-restore! devices copy)
   (set! device-assignments #f)
-  (set! device-reads #f)
+ (set! device-reads #f)
   (thunk)
   (set! device-assignments (make-hash))
   (set! device-reads (make-hash))
@@ -312,12 +322,21 @@
   (* a b))
 (define (units:+ a b)
   (+ a b))
+
 (define (units:< a b)
-  (and (< a b) b))
+  (run/check < a b))
 (define (units:<= a b)
-  (and (<= a b) b))
+  (run/check <= a b))
 (define (units:= a b)
-  (and (= a b) b))
+  (run/check = a b))
+
+;; (number number -> boolean) (maybe/c number) (maybe/c number) -> (maybe/c number)
+;; any expression might return false, so lets check for that
+(define (run/check f a b)
+  (and a b (f a b) b))
+(module+ test
+  (check-equal? (units:< 1 2) 2)
+  (check-equal? (units:<= 1 2) 2))
 
 (define (unit/ a b) a)
 
