@@ -9,7 +9,7 @@
 (define-tokens tokens (symbolic num binop unop str Base-type unit))
 (define-empty-tokens mt-tokens (when whenever import device prompt assert signaled scenario events
                                  open-brace close-brace open-paren close-paren
-                                 semi bars separator eoft
+                                 semi bars ands separator eoft
                                  Or not
                                  if do at then else fi
                                  dot n/a <-
@@ -36,6 +36,7 @@
    ["=" (token-equal)]
    ["/" (token-slash)]
    ["||" (token-bars)]
+   ["&&" (token-ands)]
    ["<-" (token-<-)]
    [(:or "<" "<=" "!" "*" "+") (token-binop (string->symbol lexeme))]
    ["or" (token-binop 'or)]
@@ -85,8 +86,11 @@
                   '()
                   (loop)))))))
 
-(check-equal? (str->toks "when (x) { prompt(); }")
-              '(when open-paren symbolic close-paren open-brace prompt open-paren close-paren semi close-brace eoft))
+(module+ test
+  (check-equal? (str->toks "when (x) { prompt(); }")
+                '(when open-paren symbolic close-paren open-brace prompt open-paren close-paren semi close-brace eoft))
+  (check-equal? (str->toks "when (5 < x <= 6) { prompt(); }")
+                '(when open-paren num binop symbolic binop num close-paren open-brace prompt open-paren close-paren semi close-brace eoft)))
 
 (define parse
   (parser
@@ -135,6 +139,7 @@
           [(n/a) (->stx 'n/a)]
           [(str) (->stx $1)]
           [(expr bars expr) (->stx `(or ,$1 ,$3))]
+          [(expr ands expr) (->stx `(and ,$1 ,$3))]
           [(any-unop open-paren expr close-paren) (->stx `(,$1 ,$3))]
           [(open-paren expr close-paren) $2])
     (exprs [(expr expr) (list $1 $2)]

@@ -4,6 +4,9 @@
 // comments from discussion on 1/29 meeting at NWU
 // also, there is a bug; run the program and get 
 // "<: contract violation" which seems wrong.
+// addendum: contract violation was due to parser issue
+// x < y < z did not translate to (< x y z) but (< (< x z) y)
+// patched by adding '&&'. The former syntax is probably better...
 
 // Time: in addition to recovery, there's also 
 // scheduling problems (36 patients on one wing
@@ -115,6 +118,11 @@
     hypoglycemia_resuscitation_protocol();
   }
   
-  whenever(40 <= glucose_reading.value < 60) {
+ // this exposed a possible parser bug: this translated as (< (<= 40 value) 60)
+ // fixed (for now) by adding &&
+ // whenever(40 <= glucose_reading.value < 60) {
+ //   hypoglycemia_notification_protocol();
+ // }
+  whenever(40 <= glucose_reading.value && glucose_reading.value < 60) {
     hypoglycemia_notification_protocol();
   }

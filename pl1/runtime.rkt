@@ -226,6 +226,7 @@
 (provide decl prompt true false #%datum
          (rename-out [-when when]) if
          or
+         and
          #%top-interaction #%app
          known? unknown? unknown n/a n/a?
          begin bang! not)
