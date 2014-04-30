@@ -301,7 +301,7 @@
 (define (do-events thunk)
   (map hash-restore! devices copy)
   (set! device-assignments #f)
- (set! device-reads #f)
+  (set! device-reads #f)
   (thunk)
   (set! device-assignments (make-hash))
   (set! device-reads (make-hash))
@@ -329,8 +329,6 @@
 (define (add-whenever! test action)
   (set! whenevers (cons (whenever/struct test action) whenevers)))
 
-
-
 ;; user functions
 (define-syntax-rule (assert e)
   (unless e
@@ -347,6 +345,7 @@
 ;; *, but deals with units
 (define (units:* a b)
   (* a b))
+;; +, but deals with units
 (define (units:+ a b)
   (+ a b))
 
