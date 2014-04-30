@@ -38,7 +38,7 @@
    ["||" (token-bars)]
    ["&&" (token-ands)]
    ["<-" (token-<-)]
-   [(:or "<" "<=" "!" "*" "+") (token-binop (string->symbol lexeme))]
+   [(:or "<" ">" "<=" ">=" "!" "*" "+") (token-binop (string->symbol lexeme))]
    ["or" (token-binop 'or)]
    ["if" (token-if)]
    ["do" (token-do)]

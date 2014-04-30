@@ -238,7 +238,9 @@
          (rename-out [units:* *]
                      [units:+ +]
                      [units:< <]
+                     [units:> >]
                      [units:<= <=]
+                     [units:>= >=]
                      [units:= =])
          unit/ do
          define list
@@ -323,17 +325,17 @@
 (define (units:+ a b)
   (+ a b))
 
-(define (units:< a b)
-  (run/check < a b))
-(define (units:<= a b)
-  (run/check <= a b))
-(define (units:= a b)
-  (run/check = a b))
-
 ;; (number number -> boolean) (maybe/c number) (maybe/c number) -> (maybe/c number)
 ;; any expression might return false, so lets check for that. This allows falses to propigate up
-(define (run/check f a b)
+(define ((run/check f) a b)
   (and a b (f a b) b))
+
+(define units:< (run/check <))
+(define units:> (run/check >))
+(define units:<= (run/check <=))
+(define units:>= (run/check >=))
+(define units:= (run/check =))
+
 (module+ test
   (check-equal? (units:< 1 2) 2)
   (check-equal? (units:<= 1 2) 2)
