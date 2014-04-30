@@ -118,7 +118,7 @@
           [(if expr then stmt else stmt fi)
            (->stx `(if ,$2 ,$4 ,$6))]
           [(id <- expr semi) (->stx `(bang! ,$1 ,$3))]
-          [(expr dot id <- expr semi) (->stx `(set-val! ,$1 ',$3 ,$5))]
+          [(id dot id <- expr semi) (->stx `(set-val! ,$1 ',$3 ,$5))]
           [(do expr at expr semi) (->stx `(do ,$2 ,$4))]
           [(stmt-expr semi) $1]
           [(open-brace stmts close-brace) (->stx `(begin ,@$2))]
@@ -135,12 +135,12 @@
           [(open-paren exprs close-paren) (->stx `(list . ,$2))]
           [(expr bars expr) (prec binop) (->stx `(or ,$1 ,$3))]
           [(expr ands expr) (prec binop) (->stx `(and ,$1 ,$3))]
-          [(val-expr op expr) (prec binop) (->stx `(,$2 ,$1 ,$3))]
           [(any-unop open-paren expr close-paren) (->stx `(,$1 ,$3))]
           [(open-paren expr close-paren) $2])
     (val-expr [(num units) (->stx `(in-units ,$1 ,$2))]
+              [(val-expr op val-expr) (prec binop) (->stx `(,$2 ,$1 ,$3))]
               [(num) (->stx $1)]
-              [(expr dot id) (->stx `(get-val ,$1 ',$3))]
+              [(id dot id) (->stx `(get-val ,$1 ',$3))]
               [(id) $1]
               [(n/a) (->stx 'n/a)]
               [(str) (->stx $1)])
