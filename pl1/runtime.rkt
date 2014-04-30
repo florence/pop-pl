@@ -248,42 +248,56 @@
          make-external-function make-device
          whenever assert assert-signaled scenario events)
 
+;; syntax transforms
 (define-syntax-rule (module-begin form ...)
   (#%module-begin form ... (run-scenarios)))
+
 
 ;; represents a "whenever" clause
 ;; means "if test is true perform action"
 ;; (-> boolean) (-> any)
 (struct whenever/struct (test action) #:transparent)
+;; represents the code to run in a scenario
+;; (listof (-> void)
+(struct scenario/struct (thunks) #:transparent)
+
+
+;;global environment 
+
+;; listof whatever/struct
 (define whenevers null)
-;; (-> boolean) (-> any) -> Void
-;; add a new whenever
-(define (add-whenever! test action)
-  (set! whenevers (cons (whenever/struct test action) whenevers)))
-
-;; expand the whenever stx to setup a new whenever clause
-(define-syntax (whenever stx)
-  (syntax-case stx ()
-    [(_ test action)
-     #`(add-whenever! #,(syntax/loc #'test (lambda () test))
-                      #,(syntax/loc #'action (lambda () action)))]))
-
-;; run all the whenevers
-;; -> Void
-(define (run-whenevers)
-  (for ([w (in-list (reverse whenevers))])
-    (when ((whenever/struct-test w))
-      ((whenever/struct-action w)))))
-
-;;
+;; listof scenario/struct
 (define scenarios null)
-(define (add-scenario! thunks)
-  (set! scenarios (cons thunks scenarios)))
+(define device-assignments (make-hash))
+(define device-reads (make-hash))
+;; maps signals to if they have been calle dor not
+(define signals (make-hash))
+;; list of all default devices
+(define devices null)
+;; copy of all devices, allowing us to reset
+(define copy null)
 
+
+;; runtime
+(define (run-scenarios)
+  (set! copy (map hash-copy devices))
+  (define bindings-copy (hash-copy bindings))
+  (for ([s (in-list scenarios)])
+    (hash-restore! bindings bindings-copy)
+    (for ([t (in-list (scenario/struct-thunks s))])
+      (t))
+    (printf "scenario done\n")))
+
+;; scenarios
 (define-syntax-rule (scenario stmt ...)
   (add-scenario! (list (lambda () stmt (void)) ...)))
+(define (add-scenario! thunks)
+  (set! scenarios (cons (scenario/struct thunks) scenarios)))
 
-(define copy (hash))
+;; events, which should only appear in scenarios
+(define-syntax-rule (events e ...)
+  (do-events (lambda () e ... (void))))
+
 (define (do-events thunk)
   (map hash-restore! devices copy)
   (set! device-assignments #f)
@@ -296,18 +310,28 @@
   (run-whenevers)
   (set! reads #f))
 
-(define-syntax-rule (events e ...)
-  (do-events (lambda () e ... (void))))
+;; whenevers
 
-(define (run-scenarios)
-  (set! copy (map hash-copy devices))
-  (define bindings-copy (hash-copy bindings))
-  (for ([s (in-list scenarios)])
-    (hash-restore! bindings bindings-copy)
-    (for ([t (in-list s)])
-      (t))
-    (printf "scenario done\n")))
+;; run all the whenevers
+;; -> Void
+(define (run-whenevers)
+  (for ([w (in-list (reverse whenevers))])
+    (when ((whenever/struct-test w))
+      ((whenever/struct-action w)))))
 
+(define-syntax (whenever stx)
+  (syntax-case stx ()
+    [(_ test action)
+     #`(add-whenever! #,(syntax/loc #'test (lambda () test))
+                      #,(syntax/loc #'action (lambda () action)))]))
+;; (-> boolean) (-> any) -> Void
+;; add a new whenever
+(define (add-whenever! test action)
+  (set! whenevers (cons (whenever/struct test action) whenevers)))
+
+
+
+;; user functions
 (define-syntax-rule (assert e)
   (unless e
     (error 'assert "failed: ~s" 'e)))
@@ -320,6 +344,7 @@
 
 (define (in-units a b) a)
 
+;; *, but deals with units
 (define (units:* a b)
   (* a b))
 (define (units:+ a b)
@@ -330,6 +355,7 @@
 (define ((run/check f) a b)
   (and a b (f a b) b))
 
+;; comparison, but deals with units
 (define units:< (run/check <))
 (define units:> (run/check >))
 (define units:<= (run/check <=))
@@ -343,11 +369,12 @@
 
 (define (unit/ a b) a)
 
+;; do the given action at the given rate
+;; TODO
 (define (do action rate) 'ok)
 
-(define device-assignments (make-hash))
-(define device-reads (make-hash))
-
+;; set the field f of o to v
+;; blows up if the field has been read or written from before
 (define (set-val! o f v)
   (define key (cons (hash-ref o '@name) f))
 
@@ -368,14 +395,10 @@
     (hash-set! device-reads (cons (hash-ref o '@name #f) f) #t))
   (hash-ref o f))
 
-(define signals (make-hash))
-
 (define (make-external-function name)
   (lambda ()
     (hash-set! signals name #t)
     (displayln name)))
-
-(define devices null)
 
 (define (make-device name . content)
   (define ht (make-hash content))
