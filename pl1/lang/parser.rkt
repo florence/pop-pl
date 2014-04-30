@@ -97,7 +97,8 @@
    [grammar 
     (start [(decls separator stmts) (->stx (append $1 $3))])
     (decls [(decl decls) (cons $1 $2)]
-           [(decl) (list $1)])
+           [(decl) (list $1)]
+           [() null])
     (id   [(symbolic) (->stx $1)])
     (id-val-seq [() null]
                 [(non-empty-id-val-seq) $1])
@@ -129,19 +130,20 @@
            [() null])
     (stmt-expr [(expr open-paren expr-seq close-paren) (->stx `(,$1 . ,$3))])
     (expr [(stmt-expr) $1]
-          [(expr op expr) (prec binop) (->stx `(,$2 ,$1 ,$3))]
+          [(val-expr)  $1]
           [(if expr then expr else expr fi) (->stx `(if ,$2 ,$4 ,$6))]
           [(open-paren exprs close-paren) (->stx `(list . ,$2))]
-          [(expr dot id) (->stx `(get-val ,$1 ',$3))]
-          [(num units) (->stx `(in-units ,$1 ,$2))]
-          [(num) (->stx $1)]
-          [(id) $1]
-          [(n/a) (->stx 'n/a)]
-          [(str) (->stx $1)]
-          [(expr bars expr) (->stx `(or ,$1 ,$3))]
-          [(expr ands expr) (->stx `(and ,$1 ,$3))]
+          [(expr bars expr) (prec binop) (->stx `(or ,$1 ,$3))]
+          [(expr ands expr) (prec binop) (->stx `(and ,$1 ,$3))]
+          [(val-expr op expr) (prec binop) (->stx `(,$2 ,$1 ,$3))]
           [(any-unop open-paren expr close-paren) (->stx `(,$1 ,$3))]
           [(open-paren expr close-paren) $2])
+    (val-expr [(num units) (->stx `(in-units ,$1 ,$2))]
+              [(num) (->stx $1)]
+              [(expr dot id) (->stx `(get-val ,$1 ',$3))]
+              [(id) $1]
+              [(n/a) (->stx 'n/a)]
+              [(str) (->stx $1)])
     (exprs [(expr expr) (list $1 $2)]
            [(expr exprs) `(,$1 . ,$2)])
     (expr-seq [() null]
@@ -212,3 +214,67 @@
 (define (poppl-read-syntax [name #f] [port (current-input-port)])
   (run-p (or name (object-name port))
          port))
+
+(module+ test
+  (define (parse str) (poppl-read (open-input-string str)))
+  (check-equal? (parse "==============\na<-b;whenever(true){b.b<-a;}")
+                '((bang! a b) (whenever true (begin (set-val! b 'b a)))))
+  ;; test precs with <
+  (check-equal? (parse "==============\nwhenever(x < y < z){}")
+                '((whenever (< (< x y) z) (begin))))
+
+  ;; test precs with || and &&
+  (check-equal?
+   (parse 
+    "================\nwhenever (d3.f2 && d2.f1 < 12 || d1.f2 = 12 units) {}")
+   '((whenever 
+       (and (get-val d3 'f2) 
+            (or (< (get-val d2 'f1) 12)
+                (= (get-val d1 'f2) (in-units 12 'unit))))
+       (begin))))
+  ;; massive test
+  (check-equal?
+   (parse
+    #<<PROG
+    // comment here
+    device d1 { f1 = 5, f2 = 12 units/hour }
+    device d2 { f1 = 5 }
+    import i1;
+    device d3 { f1 = 16 units, f2 = false, f3 = 0 }
+    import i2;
+    // comment here
+    scenario {
+       events {
+         d3.f2 <- true;
+       }
+       assert d3.f1 = 12;
+       assert not signaled i2;
+    }
+    ================
+    whenever (d3.f2 && d2.f1 < 12 || d1.f2 = 12 units) {
+         d3.f2 <- false;
+         d1.f2 <- 19 units;
+         i2 ();
+    }
+PROG
+)
+   `((define d1 (make-device 'd1 (cons 'f1 5) (cons 'f2 (in-units 12 (unit/ 'unit 'hour)))))
+     (define d2 (make-device 'd2 (cons 'f1 5)))
+     (define i1 (make-external-function 'i1))
+     (define d3 (make-device 'd3
+                             (cons 'f1 (in-units 16 'unit))
+                             (cons 'f2 false)
+                             (cons 'f3 0)))
+     (define i2 (make-external-function 'i2))
+     (scenario 
+      (events (set-val! d3 'f2 true))
+      (assert (= (get-val d3 'f1) 12))
+      (assert-signaled #f i2))
+     
+     (whenever (and (get-val d3 'f2) 
+                    (or (< (get-val d2 'f1) 12)
+                        (= (get-val d1 'f2) (in-units 12 'unit))))
+               (begin
+                 (set-val! d3 'f2 false)
+                 (set-val! d1 'f2 (in-units 19 'unit))
+                 (i2))))))
