@@ -1,0 +1,38 @@
+continuous =   whenever (current_time is 20 minutes after last_dose) {
+   admitiser (25 mL drug)
+}
+
+setup {
+  continous;
+  whenever (pain > 8 cm) {
+    on_demand_dose()
+  }
+} then when (current_time is 3 days after *start*) =>
+{
+  contious 
+}
+
+
+===========================================
+
+
+Dicontinue (...) 
+then
+{
+start AA
+}
+then
+{
+start fentanyl
+start monitoring
+}
+
+
+===============
+
+// prn Constipation
+whenever (patient.canTakeFlui) {
+  do  
+} else {
+  
+}
