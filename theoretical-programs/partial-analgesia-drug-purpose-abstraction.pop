@@ -1,0 +1,58 @@
+#lang pop-pl
+
+(require stop)
+
+(inputs
+ [adjuvant-type (message "NSAIDs or non-NSAIDs?")
+                (inputs 'nsaid 'non-nsaid)
+                (also-allows 'off)]
+ [opiod? (message "opiods?")
+         (inputs yes)
+         (requires [yes -> nsaid '(yes no)])])
+
+(once immediately ;; bad word? "on start?" maybe?
+      (if opiod 
+          (stop "Opiod" "NSAID")
+          (stop "NSAID")))
+
+;; the idea is this sets up the time tables for that drug application
+(: adjuvant-analgesia : discrete-drug)
+(define adjuvant-analgesia 
+  (case adjuvant-type
+    [(nsaid)
+     (once-drug "ketorolac" "iv or subcut" (? 15 mg)
+                (once (prn "six hours later?")
+                  (give)
+                  ;; one time drugs are still icky....
+                  ;; maybe some kind of "at first then" form?
+                  ;; or maybe some kind of drug stack? how common would these drug stacks be?
+                  (then after 6 hours
+                        (if (prn "is patient unable to take oral meds?")
+                            (discrete-drug "ketorolac" "iv or subcut" (? 15 mg) 
+                                           (every 6 hours (give))
+                                           (after 3 days (set! adjuvant-type 'non-nsaid)))
+                            (discrete-drug "ibuprofen" "p.o." (? 600 mg)
+                                           (every 6 hours (give))
+                                           (after 3 days (set! adjuvant-type 'non-nsaid)))))))]
+    [(non-nsaid)
+     (drug "acetaminophen" "rectally or p.o." (? 975 mg)
+                    (every 6 hours (give));; how should initial time behave?
+                    (when (prn "done with adjuvant?") (set! adjuvant-type 'off)))]
+    [(off) NO-DRUG]))
+
+
+;;; opiod block
+#|
+(when opiod
+  (: continous-fentanyl
+     (continous-drug "fentanyl" "subcut" (? 25 micrograms/hour)
+                     (on increase ???);; how to handle guards on prevent/require?
+                     ))
+  (: on-demand-fentanyl
+     (descrete-drug "fentanyl" "subcut" (? 25 micrograms)
+                    (on demand (give))
+                    (every 1 hour
+                           )))
+  )
+|#
+
