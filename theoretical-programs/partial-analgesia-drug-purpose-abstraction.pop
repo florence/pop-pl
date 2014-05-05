@@ -17,10 +17,11 @@
 (devices
  [pain-meter (score)])
 
-(do-only-once immediately ;; bad word? "on start?" maybe?
-      (if opiod 
-          (stop "Opiod" "NSAID")
-          (stop "NSAID")))
+(prescrible *
+ (do-only-once immediately ;; bad word? "on start?" maybe?
+               (if opiod 
+                   (stop "Opiod" "NSAID")
+                   (stop "NSAID"))))
 
 (prescribe
  at-intervals
