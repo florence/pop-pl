@@ -17,14 +17,13 @@
 (devices
  [pain-meter (score)])
 
-(prescrible *
+(prescrible stop
  (do-only-once immediately ;; bad word? "on start?" maybe?
                (if opiod 
                    (stop "Opiod" "NSAID")
                    (stop "NSAID"))))
 
-(prescribe
- at-intervals
+(prescribe adjuv
  (case adjuvant-type
    [(nsaid)
     (wait (prn "six hours after initial dose")
@@ -48,16 +47,13 @@
      (after (prn "done with adjuvant?") (set! adjuvant-type 'off)))]
    [(off) NO-DRUG]))
 
- 
- 
-
 ;;; opiod block
 
 ;; cont 
-(perscribe continously
-           (do-only-once (paint-meter-score . >= . 8)
-                         (give (drug "fentanyl" "subcut" (? 50 micrograms))))
-           (begin-giving
-            (drug "fentanyl" "subcut" (? 25 micrograms/hour))
-            (begin-after 3 days; needs to set up new sub time tables
-                   (every 4 hours (decrease 10 micrograms/hour)))))
+(perscribe opiad
+  (do-only-once (paint-meter-score . >= . 8)
+                (give (drug "fentanyl" "subcut" (? 50 micrograms))))
+  (begin-giving
+   (drug "fentanyl" "subcut" (? 25 micrograms/hour))
+   (begin-after (3 days)        ; needs to set up new sub time tables
+                (every (4 hours) (decrease 10 micrograms/hour)))))
