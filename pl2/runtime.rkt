@@ -1,21 +1,41 @@
 #lang racket/base
-(require syntax/parse (for-syntax syntax/parse) racket/class racket/undefined)
+(require syntax/parse (for-syntax syntax/parse racket/base racket/syntax) racket/class racket/undefined
+         racket/list racket/match rackunit racket/format)
 (provide 
+ ;; from racket
+ #%datum #%top-interaction #%top
+ quote
+ ;; from here
  yes no
  if
  inputs
  give
  drug
+ prescribe
  NO-DRUG
+ prn
+ ?
  every
- after
  do-only-once
- begin-using
- (rename-out [in:set! set!]
+ begin-drug
+ instructions
+ assert pass scenario events
+ called administering administered
+ (rename-out [in:module-begin #%module-begin]
+             [in:set! set!]
+             [in:after after]
              [in:case case]
              [in:app #%app]
              [in:require require]))
 
+(define (undefined? x)
+  (eq? x undefined))
+(define-syntax (in:module-begin stx)
+  (syntax-parse stx
+    [(_ e ...)
+     #'(#%module-begin
+        (module+ test (require rackunit))
+        e ...)]))
 ; values
 (define yes #t)
 (define no #f)
@@ -41,7 +61,9 @@
     (define/public (call . a)
       (set! called #t)
       (set! args a))
-    (define/public (reset)
+    (define/public (called?) called)
+    (define/public (get-args) args)
+    (define/public (reset!)
       (set! called #f)
       (set! args null))))
 
@@ -49,7 +71,7 @@
 (define input-registry null)
 (define-syntax (inputs stx)
   (syntax-parse stx
-    #:datum-litterals (message inputs also-allows requires ->)
+    #:datum-literals (message inputs also-allows requires ->)
     [(_ [nme (message m:str)
              (inputs is ...+)
              (also-allows oi ...+)
@@ -60,7 +82,7 @@
                (new input%
                     [name 'nme]
                     [initials (list is ...)]
-                    [extras (list io ..)]
+                    [extras (list oi ...)]
                     [requirements (list (list v (lambda () (member (send x get-value) (list r ...)))) ...)])) ...)]))
 (define input%
   (class object%
@@ -70,27 +92,31 @@
     (set! require-registry (cons this require-registry))
     (define all-allowed (append initials extras))
     (define/public (get-value) 
-      (if (not (undefined? name))
+      (if (not (undefined? value))
           value 
-          (error 'stuff)))
+          (error 'input "input ~s has no value" name)))
     (define/public (set-initial-value x)
       (set/restrict x initials))
     (define/public (set-value x)
       (set/restrict x all-allowed))
+    ;; todo check ALL constrains
     (define (set/restrict v l)
-      (if (and (member x l)
-               (let ([f (assoc x requirements)])
-                 (or (not f) (f))))
-          (set! value x)
+      (if (and (member v l)
+               (let ([f (assoc v requirements)])
+                 (or (not f) ((second f)))))
+          (set! value v)
           (error 'stuff)))
-    (define/public (reset)
+    (define/public (reset!)
       (set! value undefined))))
 
 ;; update case to cheat on how we do inputs
 (define-syntax (in:case stx)
   (syntax-parse stx
+    #:datum-literals (else)
     [(_ id e ...)
-     #'(case (send id get-value) e ...)]))
+     #'(case (send id get-value)
+         e ...
+         [else (error 'case "no cases matched")])]))
 
 ;; supporting numbers as units, and objects as functions
 (struct number/unit (amount unit) #:transparent)
@@ -101,6 +127,9 @@
      #'(if (#%app object? f)
            (send f call a ...)
            (#%app f a ...))]))
+(define-syntax (? stx)
+  (syntax-parse stx
+    [(_ n:number u:id) #'(number/unit n 'u)]))
 
 ;;; prescriptions ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; [Listof thunk]
@@ -108,21 +137,22 @@
 (define prescription%
   (class object%
     (init-field body)
+    (inspect #f)
     (super-new)
-    (set! prescription-registry (cons x prescription-registry))
+    (set! prescription-registry (cons this prescription-registry))
     ;; (maybe/c (listof thunk))
     (define p (box #f))
     ;; (maybe/c drug)
     (define d (box #f))
-    (define/public (on-event) (body p d))
-    (define/public (reset)
+    (define/public (event) (body p d))
+    (define/public (get-drug) (unbox d))
+    (define/public (reset!)
       (set-box! d #f)
       (set-box! p #f))))
-;; no drug resets the prescription
-(define-syntax NO-DRUG
-  (make-rename-transformer
-   #'(begin (set-box! (current-prescription) #f)
-            (set-box! (current-drug) #f))))
+;; no drug reset!s the prescription
+(define (NO-DRUG)
+  (set-box! (current-prescription) #f)
+  (set-box! (current-drug) #f))
 ;; [Listof (cons drug-name timestamp)]
 (define given-drugs null)
 (define current-drug (make-parameter #f))
@@ -138,66 +168,93 @@
                 [body
                  (lambda (p d) 
                    (parameterize ([current-drug d]
-                                  [current-percription p]) 
+                                  [current-prescription p]) 
                      e ...))])))]))
+(define-syntax (instructions stx)
+  (syntax-parse stx
+    [(_ e ...)
+     (with-syntax ([id (generate-temporary)])
+       #'(in:instructions 'id e ...))]))
+(define (in:instructions id . e)
+  (define p (current-prescription))
+  (define (run) (for-each (lambda (x) (x)) (rest (unbox p))))
+  (cond [(and (box? p)
+              (unbox p)
+              (eq? (first (unbox p)) id))
+         (run)]
+        [p
+         (set-box! p (cons id e))
+         (run)]
+        [else (error 'instructions "used out side of prescription")]))
 (define-syntax (begin-drug stx)
   (syntax-parse stx
     [(_ d e ...)
      (with-syntax ([id (generate-temporary)])
-       #'(in:begin-drug id d e ...))]))
+       #'(in:begin-drug 'id d e ...))]))
 (define (in:begin-drug id d . e)
   (define p (current-prescription))
-  (cond [(and (box? p) (eq? (first (unbox p)) id) (unbox p)) =>
-         (lambda (l) (foreach (lambda (x) (x)) (rest l)))]
-        [p
-         (set-box! p (current-prescription) (cons id e))
-         (set-box! (current-drug) d)]
+  (define (run) (for-each (lambda (x) (x)) (rest (unbox p))))
+  (cond [(and (box? p) (unbox p) (eq? (first (unbox p)) id))
+         (run)]
+        [(box? p)
+         (set-box! p (cons id e))
+         (set-box! (current-drug) d)
+         (run)]
         [else
          (error 'begin-drug "used outside of prescription")]))
-;; (maybe/c drug) -> void
-(define (give [drug (current-drug)])
-  (set! given-drugs (cons (cons (drug-what drug) (get-current-time)) given-drugs)))
+;; (maybe/c [boxof (maybe/c drug)]) -> void
+(define (give [boxed-drug (current-drug)])
+  (if (and boxed-drug (unbox boxed-drug))
+      (let ([drug (unbox boxed-drug)])
+        (set! given-drugs (cons (cons (drug-what drug) (get-current-time)) given-drugs)))
+      (error 'give "no drug to give")))
 ;;; everys are based off the last time that drug was given
 (define-syntax (every stx)
   (syntax-parse stx
-    #:syntax-literals (prn)
     [(_ t e ...)
      #'(lambda ()
-         (define t (get-last-time-given))
-         (when (or (not t) (> (+ (get-current-time) (time->seconds t)) t))
+         (define time (get-last-time-given))
+         (when (or (not time) (<= (+ time (time->seconds t)) (get-current-time)))
            e ...))]))
-;; drug -> (maybe/c timestamp)
-(define (get-last-time-given [drug (current-drug)])
-  (assoc (drug-what drugs-given) drug))
+;; (boxof drug) -> (maybe/c timestamp)
+(define (get-last-time-given [boxed-drug (current-drug)])
+  (define drug (unbox boxed-drug))
+  (let ([p (assoc (drug-what drug) given-drugs)])
+    (and p (cdr p))))
 
 ;; afters record when the are added, run once, then go away
-(define-syntax (after stx)
-  (syntax-parse
+(define-syntax (in:after stx)
+  (syntax-parse stx
       [(_ t e ...)
        #'(let ([start (get-current-time)])
            (define (actual)
-             (when (> (+ (get-current-time) (time->seconds t)) start)
+             (when (<= (+ start (time->seconds t)) (get-current-time))
                e ...
                (set! actual void)))
            (lambda () (actual)))]))
 (module+ test
   (let ()
     (define r #f)
-    (define t (after (number/unit 0 'second) (set! r #t)))
+    (define t (in:after (number/unit 0 'second) (set! r #t)))
     (t)
     (check-true r)
     (set! r #f)
     (t)
+    (check-false r))
+  (let ()
+    (define r #f)
+    (define t (in:after (number/unit 100 'days) (set! r #f)))
+    (t)
     (check-false r)))
 ;; number/unit -> timestamp
-(define (time->seconds n)
-  (match n
+(define (time->seconds t)
+  (match t
     [(number/unit n (or 'seconds 'second)) n]
     [(number/unit n (or 'minutes 'minute)) (* n 60)]
-    [(number/unit m (or 'hours 'hour))
+    [(number/unit n (or 'hours 'hour))
      (* n
         60 
-        (time->seconds (number/units n 'minutes)))]
+        (time->seconds (number/unit n 'minutes)))]
     [(number/unit n (or 'days 'day))
      (* n
         24
@@ -226,11 +283,12 @@
       b ...)
    #'(module+ test
        (test-begin
-        (reset)
+        (reset!)
+        (send name set-initial-value value) ...
         b ...))]))
 ;; lets do events
-(define time 0)
-(define (get-current-time) time)
+(define current-time 0)
+(define (get-current-time) current-time)
 (define-syntax (events stx)
   (syntax-parse stx
     [(_ e ...)
@@ -238,20 +296,35 @@
 (define (pass time)
   ;; we go one minute a time
   (for ([_ (in-range 0 (time->seconds time) 60)])
-    (set! time (+ time 60))
-    (foreach (lambda (p) (p)) perscription-registry)))
+    (set! current-time (+ current-time 60))
+    (for-each (lambda (p) (send p event)) prescription-registry)))
 ;; and now lets assert things!
 (define-syntax (assert stx)
   (syntax-parse stx
-    [(_ e:expr) #'(check-true e)]
-    [(_)]))
+    #:datum-literals (eq?)
+    [(_ (eq? i s))
+     #'(check-equal? (send i get-value) s)]
+    [(_ e:expr) #'(check-true e)]))
+;; require% any ... -> boolean
+(define (called r . a)
+  (and (send r called?)
+       (equal? (send r get-args) a)))
+;; string number time -> boolean
+(define (administered type amount range)
+  (define mintime (- (get-current-time) (time->seconds range)))
+  (equal?
+   amount
+   (length
+    (filter (lambda (x)
+              (and (equal? (car x) type)
+                   (>= (cdr x) mintime)))
+            given-drugs))))
+(define (administering p d)
+  (equal? d (send p get-drug)))
 
-;; todo called
-;; to administered
-
-(define (reset)
-  (set! time 0)
-  (for-each (lambda (p) (send p reset))
+(define (reset!)
+  (set! current-time 0)
+  (for-each (lambda (p) (send p reset!))
             (append prescription-registry
                     input-registry
                     require-registry)))
