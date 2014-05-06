@@ -45,8 +45,9 @@
    [(non-nsaid)
     (begin-drug
      (drug "acetaminophen" "rectally or p.o." (? 975 mg))
-     ;; perhaps we need an equivance table to say "this drug is use in place of this drug"
+     ;; perhaps we need an equivalence table to say "this drug is use in place of this drug"
      ;; to aid lookups
+     ;; TABLED (not important right now)
      (every (6 hours) (give))
      (do-only-once (prn "done with adjuvant?") (set! adjuvant-type 'off)))]
    [(off) (NO-DRUG)]))
@@ -55,16 +56,20 @@
  (inputs [adjuvant-type 'nsaid]
          [opiod? yes])
  ;; we need testing for order in which "simultaneous events" happened
- (events
-  (pass (1 hour)))
- ;; we need to ensure that stop was called because of THIS event
- (assert (called stop "Opiod" "NSAID"))
- (assert (eq? adjuvant-type 'nsaid))
- (assert (administering adjuv (drug "ketorolac" "iv or subcut" (15 mg))))
- (assert (administered  "ketorolac" 1 (1 hour)))
- #;(events (pass (9 hours)))
- #;(events (pass (7 days)))
- )
+ (event
+  (pass (1 hour))
+  ;; we need to ensure that stop was called because of THIS event
+  (assert (called stop "Opiod" "NSAID"))
+  (assert (eq? adjuvant-type 'nsaid))
+  (assert (administering adjuv (drug "ketorolac" "iv or subcut" (15 mg))))
+  (assert (administered  "ketorolac" 1 (1 hour))))
+ (event
+  (pass (1 hour))
+  ;; want pattern matching instead of exact
+  ;; or do we want a test that makes sure that what is tested
+  ;; is EXACTLY what happened?
+  (assert (not (called stop "Opiod" "NSAID")))))
+
 ;; these should blow up
 (scenario
  (inputs))

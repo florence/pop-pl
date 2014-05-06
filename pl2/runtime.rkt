@@ -6,7 +6,7 @@
  #%datum #%top-interaction #%top
  quote
  ;; from here
- yes no
+ yes no not
  if
  inputs
  give
@@ -19,7 +19,7 @@
  do-only-once
  begin-drug
  instructions
- assert pass scenario events
+ assert pass scenario
  called administering administered
  (rename-out [in:module-begin #%module-begin]
              [in:set! set!]
@@ -84,7 +84,7 @@
                     [name 'nme]
                     [initials (list is ...)]
                     [extras (list oi ...)]
-                    [requirements (list (list v (lambda () (member (send x get-value) (list r ...)))) ...)])) ...)]))
+                    [requirements (list (cons v (lambda () (member (send x get-value) (list r ...)))) ...)])) ...)]))
 (define input%
   (class object%
     (init-field name initials extras requirements)
@@ -109,7 +109,7 @@
       (set! value undefined))
     (define/public (check-restrictions)
       (define f (assoc (get-value) requirements))
-      (when (and f (not ((second f))))
+      (when (and f (not ((cdr f))))
         (error 'input "constrains failed")))))
 
 (define (check-all-requirements)
@@ -287,20 +287,16 @@
  (syntax-parse stx
    #:datum-literals (inputs)
   [(_ (inputs [name value] ...)
-      b ...)
+      (event e a ...) ...)
    #'(module+ test
        (test-begin
         (reset!)
         (send name set-initial-value value) ...
         (check-all-requirements)
-        b ...))]))
+        (begin e a ... (for-each (lambda (r) (send r reset!)) require-registry)) ...))]))
 ;; lets do events
 (define current-time 0)
 (define (get-current-time) current-time)
-(define-syntax (events stx)
-  (syntax-parse stx
-    [(_ e ...)
-     #'(begin e ...)]))
 (define (pass time)
   ;; we go one minute a time
   (for ([_ (in-range 0 (time->seconds time) 60)])
