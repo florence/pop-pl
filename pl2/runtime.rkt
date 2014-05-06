@@ -67,6 +67,7 @@
       (set! called #f)
       (set! args null))))
 
+
 ;;; inputs ;;;;;;;;;;;;;;;;;;;;;;;;;
 (define input-registry null)
 (define-syntax (inputs stx)
@@ -96,18 +97,25 @@
           value 
           (error 'input "input ~s has no value" name)))
     (define/public (set-initial-value x)
-      (set/restrict x initials))
+      (set/restrict x initials #t))
     (define/public (set-value x)
-      (set/restrict x all-allowed))
+      (set/restrict x all-allowed #f))
     ;; todo check ALL constrains
-    (define (set/restrict v l)
-      (if (and (member v l)
-               (let ([f (assoc v requirements)])
-                 (or (not f) ((second f)))))
-          (set! value v)
-          (error 'stuff)))
+    (define (set/restrict v l check)
+      (cond [(member v l)
+             (set! value v)
+             (when check (check-all-requirements))]
+            [else (error 'stuff)]))
     (define/public (reset!)
-      (set! value undefined))))
+      (set! value undefined))
+    (define/public (check-restrictions)
+      (define f (assoc value requirements))
+      (when (and f (not ((cdr f))))
+        (error 'input "constrains failed")))))
+
+(define (check-all-requirements)
+  (for ([i input-registry])
+    (send i check-restrictions)))
 
 ;; update case to cheat on how we do inputs
 (define-syntax (in:case stx)
@@ -285,6 +293,7 @@
        (test-begin
         (reset!)
         (send name set-initial-value value) ...
+        (check-all-requirements)
         b ...))]))
 ;; lets do events
 (define current-time 0)
