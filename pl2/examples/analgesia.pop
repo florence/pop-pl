@@ -1,0 +1,74 @@
+#lang pop-pl
+
+(require stop)
+
+(inputs
+ [adjuvant-type (message "NSAIDs or non-NSAIDs?")
+                (inputs 'nsaid 'non-nsaid)
+                (also-allows 'nsaid-second 'off) 
+                (requires)]
+ [opiod? (message "opiods?")
+         (inputs yes)
+         (also-allows)
+         (requires [yes -> nsaid (yes no)])])
+
+;; devices are READ ONLY (for now)
+#;
+(devices
+ [pain-meter (score)])
+
+(prescrible stop
+ (do-only-once yes ;; bad word? "on start?" maybe?
+               (if opiod 
+                   (stop "Opiod" "NSAID")
+                   (stop "NSAID"))))
+
+(prescribe adjuv
+ (case adjuvant-type
+   [(nsaid)
+    (begin-drug
+     (drug "ketorolac" "iv or subcut" (? 15 mg))
+     (after (6 hours)
+            (give)
+            (set! adjuviant-type 'nsaid-second)))]
+   [(nsaid-second)
+    (if (prn "is patient unable to take oral meds?")
+        (begin-using
+         (drug "ketorolac" "iv or subcut" (? 15 mg))
+         (every (6 hours) (give))
+         (after (3 days) (set! adjuvant-type 'non-nsaid)))
+        (begin-using
+         (drug "ibuprofen" "p.o." (? 600 mg))
+         (every (6 hours) (give))
+         (after (3 days) (set! adjuvant-type 'non-nsaid))))]
+   [(non-nsaid)
+    (begin-using
+     (drug "acetaminophen" "rectally or p.o." (? 975 mg))
+     ;; perhaps we need an equivance table to say "this drug is use in place of this drug"
+     ;; to aid lookups
+     (every (6 hours) (give))
+     (after (prn "done with adjuvant?") (set! adjuvant-type 'off)))]
+   [(off) NO-DRUG]))
+
+(scenario
+ (inputs [adjuvant-type 'nsaid]
+         [opiod yes])
+ (events
+  (pass 1 hour))
+ (assert (called (stop "Opiod" "NSAID")))
+ (assert adjuv administering (drug "ketorolac" "iv or subcut" (15 mg)))
+ (assert (administered  "ketorolac" 1 (1 hour)))
+ (events (pass 9 hours))
+ (events (pass 7 days)))
+
+;;; opiod block
+
+;; cont 
+#;
+(perscribe opiad
+           (do-only-once (paint-meter-score . >= . 8)
+                         (give (drug "fentanyl" "subcut" (? 50 micrograms))))
+           (begin-giving
+            (drug "fentanyl" "subcut" (? 25 micrograms/hour))
+            (begin-after (3 days) ; needs to set up new sub time tables
+                         (every (4 hours) (decrease 10 micrograms/hour)))))
