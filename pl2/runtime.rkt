@@ -90,17 +90,16 @@
     (init-field name initials extras requirements)
     (field [value undefined])
     (super-new)
-    (set! require-registry (cons this require-registry))
+    (set! input-registry (cons this input-registry))
     (define all-allowed (append initials extras))
     (define/public (get-value) 
       (if (not (undefined? value))
           value 
           (error 'input "input ~s has no value" name)))
     (define/public (set-initial-value x)
-      (set/restrict x initials #t))
+      (set/restrict x initials #f))
     (define/public (set-value x)
-      (set/restrict x all-allowed #f))
-    ;; todo check ALL constrains
+      (set/restrict x all-allowed #t))
     (define (set/restrict v l check)
       (cond [(member v l)
              (set! value v)
@@ -109,8 +108,8 @@
     (define/public (reset!)
       (set! value undefined))
     (define/public (check-restrictions)
-      (define f (assoc value requirements))
-      (when (and f (not ((cdr f))))
+      (define f (assoc (get-value) requirements))
+      (when (and f (not ((second f))))
         (error 'input "constrains failed")))))
 
 (define (check-all-requirements)
@@ -283,7 +282,7 @@
 ;; TODO prn
 (define-syntax-rule (prn str) #t)
 
-;;; scenarions ;;;;;;;;;;;;;;;;;;
+;;; scenario ;;;;;;;;;;;;;;;;;;
 (define-syntax (scenario stx)
  (syntax-parse stx
    #:datum-literals (inputs)

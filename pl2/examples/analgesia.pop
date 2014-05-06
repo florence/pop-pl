@@ -57,12 +57,19 @@
  ;; we need testing for order in which "simultaneous events" happened
  (events
   (pass (1 hour)))
+ ;; we need to ensure that stop was called because of THIS event
  (assert (called stop "Opiod" "NSAID"))
  (assert (eq? adjuvant-type 'nsaid))
  (assert (administering adjuv (drug "ketorolac" "iv or subcut" (15 mg))))
  (assert (administered  "ketorolac" 1 (1 hour)))
- (events (pass (9 hours)))
- (events (pass (7 days))))
+ #;(events (pass (9 hours)))
+ #;(events (pass (7 days)))
+ )
+;; these should blow up
+(scenario
+ (inputs))
+(scenario (inputs [adjuvant-type 'nsaid]
+                  [opiod? no]))
 
 ;;; opiod block
 
