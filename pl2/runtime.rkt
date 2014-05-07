@@ -6,9 +6,13 @@
  #%datum #%top-interaction #%top
  quote
  ;; from here
- yes no not
+ yes no true false not
  if
+ ;; state
  inputs
+ state
+ any
+ ;; prescribing
  give
  drug
  prescribe
@@ -19,8 +23,10 @@
  do-only-once
  begin-drug
  instructions
+ ;; tests
  assert pass scenario
  called administering administered
+ ;; renames
  (rename-out [in:module-begin #%module-begin]
              [in:set! set!]
              [in:after after]
@@ -68,55 +74,81 @@
       (set! args null))))
 
 
-;;; inputs ;;;;;;;;;;;;;;;;;;;;;;;;;
-(define input-registry null)
+;;; variables ;;;;;;;;;;;;;;;;;;;;;;;;;
+(define variable-registry null)
 (define-syntax (inputs stx)
   (syntax-parse stx
-    #:datum-literals (message inputs also-allows requires ->)
+    #:datum-literals (message variables also-allows requires ->)
     [(_ [nme (message m:str)
-             (inputs is ...+)
+             (variables is ...+)
              (also-allows oi ...+)
-             (requires [v -> x:id (r ...)] ...)]
+             (requires r ...)]
         ...)
          #`(begin
              (define nme 
-               (new input%
+               (new variable%
                     [name 'nme]
-                    [initials (list is ...)]
-                    [extras (list oi ...)]
-                    [requirements (list (cons v (lambda () (member (send x get-value) (list r ...)))) ...)])) ...)]))
-(define input%
+                    [initials (list (convert is) ...)]
+                    [extras (list (convert oi) ...)]
+                    [requirements (parse-requirements r ...)])) ...)]))
+(define-syntax (state stx)
+  (syntax-parse stx
+    #:datum-literals (allows requires)
+    [(_ [nme val (allows a ...) (requires r ...)])
+     #'(begin
+         (define nme
+           (new variable%
+                [name 'nme]
+                [value val]
+                [initials (list)]
+                [extras (list (convert a) ...)]
+                [requirements (parse-requirements r ...)])))]))
+(define-syntax (parse-requirements stx)
+  (syntax-parse stx
+    #:datum-literals (->)
+    [(_ [v -> x:id (r ...)] ...)
+     #'(list (cons v (lambda () (member (send x get-value) (list r ...)))) ...)]))
+(define (convert v)
+  (match v
+    [(pattern f) f]
+    [v (curry equal? v)]))
+(struct pattern (value) #:transparent)
+(define (any . c)
+  (pattern (lambda (v) (ormap (lambda (f) (f v))) c)))
+(define variable%
   (class object%
-    (init-field name initials extras requirements)
-    (field [value undefined])
+    (init-field name initials extras requirements
+                ;; when set this way value is unchecked
+                [value undefined])
     (super-new)
-    (set! input-registry (cons this input-registry))
+    (set! variable-registry (cons this variable-registry))
     (define all-allowed (append initials extras))
     (define/public (get-value) 
       (if (not (undefined? value))
           value 
-          (error 'input "input ~s has no value" name)))
+          (error 'variable "variable ~s has no value" name)))
     (define/public (set-initial-value x)
       (set/restrict x initials #f))
     (define/public (set-value x)
       (set/restrict x all-allowed #t))
     (define (set/restrict v l check)
-      (cond [(member v l)
+      (cond [(ormap (lambda (?) (? v)) l)
              (set! value v)
              (when check (check-all-requirements))]
             [else (error 'stuff)]))
     (define/public (reset!)
       (set! value undefined))
+    ;; this should be updated to have arbitrary funtions as keys
     (define/public (check-restrictions)
       (define f (assoc (get-value) requirements))
       (when (and f (not ((cdr f))))
-        (error 'input "constrains failed")))))
+        (error 'variable "constrains failed")))))
 
 (define (check-all-requirements)
-  (for ([i input-registry])
+  (for ([i variable-registry])
     (send i check-restrictions)))
 
-;; update case to cheat on how we do inputs
+;; update case to cheat on how we do variables
 (define-syntax (in:case stx)
   (syntax-parse stx
     #:datum-literals (else)
@@ -285,8 +317,8 @@
 ;;; scenario ;;;;;;;;;;;;;;;;;;
 (define-syntax (scenario stx)
  (syntax-parse stx
-   #:datum-literals (inputs)
-  [(_ (inputs [name value] ...)
+   #:datum-literals (variables)
+  [(_ (variables [name value] ...)
       (event e a ...) ...)
    #'(module+ test
        (test-begin
@@ -330,5 +362,5 @@
   (set! current-time 0)
   (for-each (lambda (p) (send p reset!))
             (append prescription-registry
-                    input-registry
+                    variable-registry
                     require-registry)))

@@ -1,0 +1,70 @@
+#lang s-exp "../runtime.rkt"
+
+(input)
+(state [glucose-reader-rate
+        (6 hours)
+        ;; any checks functions
+        (allows (any time?))
+        (requires)]
+       [running? yes
+                 ;; otherwise checks values
+                 (allows yes no)
+                 (requires)])
+
+(inputs stale-glucometry-protocol
+        hypoglycemia-resucitation-protocol
+        hypoglycemia-notification-protocol)
+
+(device [glucose-reader (value date)]
+        [feeding-tube (blocked? fallen-out?)]
+        [insulin-infusion (interrupted?)])
+
+(prescribe insulin 
+           (case running? 
+             [(yes)
+              (begin-drug
+               (drug "insulin" "i.v.?" (80 ml/hour))
+               ;; 'rate', or accept annother drug needs to reference the current drug
+               (whenever (or (feeding-tube.blocked) (feeding-tube.fallen-out))
+                         ;; set-rate! can only reference this drug
+                         ;; do we want some kind of rollback?
+                         (set-rate! (1 ml/hour)))
+               (whenever ((rate) . < . (80 ml/hour))
+                         (set-rate! (* (rate feeding-tube) 42))
+                         (set! glucose-reader-rate (2 hours))))]
+             [(no) (NO-DRUG)]))
+(prescribe feeding-tube
+           (perscribe
+            (drug "feeding tube" "tube" (80 ml/hour))
+            (whenever (insulin-infusion.interrupted)
+                      (set-rate! (20 ml/hour))
+                      (set! glucose-reading-rate (2 hours)))))
+(prescribe safeguards
+           (instructions
+            (after (16 hours) (set! running? no))
+            (whenever (glucose-reader-rate . from . (glucose-reader.date))
+                      (state-glucometry-protocol))
+            ;; BUG! both are called. is bug?
+            (whenever ((glucose-reader.value) . < . 60)
+                      (hypoglycemia-notification-protocol))
+            (whenever ((glucose-reader.value) . < . 40)
+                      (hypoglycemia-resuscitation-protocol))))
+
+
+
+(scenario
+ (initially
+  (inputs)
+  (devices (feeding-tube false false)
+           (glucose-reader 50 (current-time))
+           (insulin-infusion false)))
+ (event
+  (change feeding-tube blocked true)
+  (assert (administering (drug "insulin" "i.v.?" (1 mL/hour))))
+  (assert (called hypoglycemia-notification-protocol))
+  ;; we can't do not called yet
+  )
+ (event
+  (change feeding-tube blocked false)
+  ;; BUG we don't have rollbacks... do we want?
+  (assert (administering (drug "insulin" "i.v.?" (80 mL/hour))))))
