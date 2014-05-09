@@ -1,13 +1,16 @@
 #lang racket/base
 (require syntax/parse (for-syntax syntax/parse racket/base racket/syntax) racket/class racket/undefined
+         racket/function racket/bool
          racket/list racket/match rackunit racket/format)
 (provide 
  ;; from racket
  #%datum #%top-interaction #%top
  quote
+ if cond
+ true false not
+ or and
  ;; from here
- yes no true false not
- if
+ yes no
  ;; state
  inputs
  state
@@ -20,11 +23,13 @@
  prn
  ?
  every
+ whenever
  do-only-once
  begin-drug
  instructions
  ;; tests
- assert pass scenario
+ scenario
+ assert pass change
  called administering administered
  ;; renames
  (rename-out [in:module-begin #%module-begin]
@@ -72,8 +77,6 @@
     (define/public (reset!)
       (set! called #f)
       (set! args null))))
-
-
 ;;; variables ;;;;;;;;;;;;;;;;;;;;;;;;;
 (define variable-registry null)
 (define-syntax (inputs stx)
@@ -110,11 +113,11 @@
      #'(list (cons v (lambda () (member (send x get-value) (list r ...)))) ...)]))
 (define (convert v)
   (match v
-    [(pattern f) f]
+    [(in:pattern f) f]
     [v (curry equal? v)]))
-(struct pattern (value) #:transparent)
+(struct in:pattern (value) #:transparent)
 (define (any . c)
-  (pattern (lambda (v) (ormap (lambda (f) (f v))) c)))
+  (in:pattern (lambda (v) (ormap (lambda (f) (f v))) c)))
 (define variable%
   (class object%
     (init-field name initials extras requirements
@@ -143,11 +146,37 @@
       (define f (assoc (get-value) requirements))
       (when (and f (not ((cdr f))))
         (error 'variable "constrains failed")))))
-
-(define (check-all-requirements)
-  (for ([i variable-registry])
-    (send i check-restrictions)))
-
+;; devices ;;;;;;;;;;;;;;;;;;;;;;;;
+(define device-registry null)
+(define-syntax (device stx)
+  (syntax-parse stx
+    [(_ (nme (flds ...) ...))
+     #`(begin
+         (define nme (new device% [name 'nme] [fields '(flds ...)])) ...)]))
+(define-syntax (get stx)
+  (syntax-parse stx
+    [(_ v f)
+     #'(send v get 'f)]))
+(define device%
+  (class object%
+    (super-new)
+    (init-field name fields)
+    (define in:fields (apply make-hash (map (curryr cons undefined) fields)))
+    (set! device-registry (cons this device-registry))
+    (define/public (get f)
+      (define v (hash-ref in:fields f))
+      (if (not (undefined? v))
+          v
+          (error 'device "not setup")))
+    (define/public (set-initial-values . v) 
+      (for ([f fields] [v v])
+        (set-value f v)))
+    (define (set-value f v)
+      (hash-update! in:fields f v))
+    (define/public (check-restrictions)
+      (for ([(_ v) in:fields])
+        (when (undefined? v)
+          (error 'device "uninitiallized device ~s" name))))))
 ;; update case to cheat on how we do variables
 (define-syntax (in:case stx)
   (syntax-parse stx
@@ -157,6 +186,10 @@
          e ...
          [else (error 'case "no cases matched")])]))
 
+
+(define (check-all-requirements)
+  (for ([i (append device-registry variable-registry)])
+    (send i check-restrictions)))
 ;; supporting numbers as units, and objects as functions
 (struct number/unit (amount unit) #:transparent)
 (define-syntax (in:app stx)
@@ -253,7 +286,7 @@
     [(_ t e ...)
      #'(lambda ()
          (define time (get-last-time-given))
-         (when (or (not time) (<= (+ time (time->seconds t)) (get-current-time)))
+         (when (or (not time) (from t time))
            e ...))]))
 ;; (boxof drug) -> (maybe/c timestamp)
 (define (get-last-time-given [boxed-drug (current-drug)])
@@ -267,7 +300,7 @@
       [(_ t e ...)
        #'(let ([start (get-current-time)])
            (define (actual)
-             (when (<= (+ start (time->seconds t)) (get-current-time))
+             (when (from start t)
                e ...
                (set! actual void)))
            (lambda () (actual)))]))
@@ -285,6 +318,27 @@
     (define t (in:after (number/unit 100 'days) (set! r #f)))
     (t)
     (check-false r)))
+;; whenever the condition occurs
+(define-syntax (whenever stx)
+  (syntax-parse stx
+    [(_ test body ...)
+     #'(lambda () (when test body ... (void)))]))
+(define (from after before)
+  ((get-current-time) . >= . (+ (time->seconds after) (time->seconds before))))
+(define (set-time! t)
+  (set! current-time t))
+(module+ test
+  (let ()
+    (define-syntax (at stx)
+      (syntax-parse stx
+        [(_ test time)
+         #'(let ([x (get-current-time)])
+             (set-time! time)
+             test
+             (set-time! x))]))
+    ((check-true (10 . from . 0)) . at . 11)
+    ((check-true (10 . from . 0)) . at . 10)
+    ((check-false (10 . from . 0)) . at . 9)))
 ;; number/unit -> timestamp
 (define (time->seconds t)
   (match t
@@ -297,7 +351,8 @@
     [(number/unit n (or 'days 'day))
      (* n
         24
-        (time->seconds (number/unit 1 'hour)))]))
+        (time->seconds (number/unit 1 'hour)))]
+    [(? number? n) n]))
 (module+ test
   (check-equal? (time->seconds (number/unit 3 'days))
                 ;; google says...
@@ -318,12 +373,15 @@
 (define-syntax (scenario stx)
  (syntax-parse stx
    #:datum-literals (variables)
-  [(_ (variables [name value] ...)
+   [(_ (initially 
+        (variables [vname vvalue] ...)
+        (devices [dname dvalue ...]))
       (event e a ...) ...)
    #'(module+ test
        (test-begin
         (reset!)
-        (send name set-initial-value value) ...
+        (send vname set-initial-value value) ...
+        (send dname set-initial-values dvalue ...)
         (check-all-requirements)
         (begin e a ... (for-each (lambda (r) (send r reset!)) require-registry)) ...))]))
 ;; lets do events
@@ -334,6 +392,10 @@
   (for ([_ (in-range 0 (time->seconds time) 60)])
     (set! current-time (+ current-time 60))
     (for-each (lambda (p) (send p event)) prescription-registry)))
+(define-syntax (change stx)
+  (syntax-parse stx
+    [(_ d f v)
+     #'(send d set-value 'f v)]))
 ;; and now lets assert things!
 (define-syntax (assert stx)
   (syntax-parse stx
@@ -357,10 +419,10 @@
             given-drugs))))
 (define (administering p d)
   (equal? d (send p get-drug)))
-
 (define (reset!)
   (set! current-time 0)
   (for-each (lambda (p) (send p reset!))
             (append prescription-registry
+                    device-registry
                     variable-registry
                     require-registry)))

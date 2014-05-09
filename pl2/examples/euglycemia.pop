@@ -11,9 +11,9 @@
                  (allows yes no)
                  (requires)])
 
-(inputs stale-glucometry-protocol
-        hypoglycemia-resucitation-protocol
-        hypoglycemia-notification-protocol)
+(require stale-glucometry-protocol
+         hypoglycemia-resucitation-protocol
+         hypoglycemia-notification-protocol)
 
 (device [glucose-reader (value date)]
         [feeding-tube (blocked? fallen-out?)]
@@ -22,16 +22,14 @@
 (prescribe insulin 
            (case running? 
              [(yes)
-              (begin-drug
-               (drug "insulin" "i.v.?" (80 ml/hour))
-               ;; 'rate', or accept annother drug needs to reference the current drug
-               (whenever (or (feeding-tube.blocked) (feeding-tube.fallen-out))
-                         ;; set-rate! can only reference this drug
-                         ;; do we want some kind of rollback?
-                         (set-rate! (1 ml/hour)))
-               (whenever ((rate) . < . (80 ml/hour))
-                         (set-rate! (* (rate feeding-tube) 42))
-                         (set! glucose-reader-rate (2 hours))))]
+              (cond
+               [(or (get feeding-tube blocked) (get feeding-tube fallen-out))
+                (begin-drug (drug "insulin" "i.v." (1 ml/hour)))]
+               [(and (rate) ((rate) . < . (80 ml/hour)))
+                (begin-drug (drug "insulin" "i.v." (* (rate feeding-tube) 42))
+                            ;; perhaps an is instead of a `set!`?
+                            (ensure glucose-reader-rate (2 hours)))]
+               [else (begin-drug "insulin" "i.v." (80 ml/hour))])]
              [(no) (NO-DRUG)]))
 (prescribe feeding-tube
            (perscribe
@@ -54,7 +52,7 @@
 
 (scenario
  (initially
-  (inputs)
+  (variables)
   (devices (feeding-tube false false)
            (glucose-reader 50 (current-time))
            (insulin-infusion false)))
@@ -67,4 +65,6 @@
  (event
   (change feeding-tube blocked false)
   ;; BUG we don't have rollbacks... do we want?
+  ;; perhaps tables to assign rangeso
+  ;; to avoid duplicate calls tag current state?
   (assert (administering (drug "insulin" "i.v.?" (80 mL/hour))))))
