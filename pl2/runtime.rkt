@@ -498,8 +498,10 @@
 
 
 
-;; (number number -> boolean) (maybe/c number) (maybe/c number) -> (maybe/c number)
-;; any expression might return false, so lets check for that. This allows falses to propigate up
+;; ((U number number/unit) * -> (U number number/unit)) ->
+;; ((U number number/unit) * -> (U number number/unit))
+;; wrap over the math function to handle units
+;; currently units must match exactly, or have no units given
 (define ((run/check f) . a)
   (define ((make-numberizer f) a)
     (if (number/unit? a) (f a) a))
@@ -514,6 +516,7 @@
 ;; comparison, but deals with units
 (define units:* (run/check *))
 (define units:+ (run/check +))
+(define units:/ (run/check /))
 (define units:< (run/check <))
 (define units:> (run/check >))
 (define units:= (run/check =))
