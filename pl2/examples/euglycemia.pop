@@ -1,6 +1,6 @@
 #lang s-exp "../runtime.rkt"
 
-(input)
+(inputs)
 (state [glucose-reader-rate
         (6 hours)
         ;; any checks functions
@@ -15,38 +15,39 @@
          hypoglycemia-resucitation-protocol
          hypoglycemia-notification-protocol)
 
-(device [glucose-reader (value date)]
-        [feeding-tube (blocked? fallen-out?)]
-        [insulin-infusion (interrupted?)])
+(devices [glucose-reader (value date)]
+         [feeding-tube (blocked? fallen-out?)]
+         [insulin-infusion (interrupted?)])
 
 (prescribe insulin 
            (case running? 
-             [(yes)
+             [(#t)
               (cond
-               [(or (get feeding-tube blocked) (get feeding-tube fallen-out))
+               [(or (get feeding-tube blocked?) (get feeding-tube fallen-out?))
                 (begin-drug (drug "insulin" "i.v." (1 ml/hour)))]
                [(and (rate) ((rate) . < . (80 ml/hour)))
-                (begin-drug (drug "insulin" "i.v." (* (rate feeding-tube) 42))
+                (begin-drug (drug "insulin" "i.v." (* (rate p:feeding-tube) 42))
                             ;; perhaps an is instead of a `set!`?
                             (ensure glucose-reader-rate (2 hours)))]
                [else (begin-drug "insulin" "i.v." (80 ml/hour))])]
-             [(no) (NO-DRUG)]))
-(prescribe feeding-tube
-           (perscribe
+             [(#f)
+              (NO-DRUG)]))
+(prescribe p:feeding-tube
+           (begin-drug
             (drug "feeding tube" "tube" (80 ml/hour))
-            (whenever (insulin-infusion.interrupted)
+            (whenever (get insulin-infusion interrupted?)
                       (set-rate! (20 ml/hour))
-                      (set! glucose-reading-rate (2 hours)))))
+                      (set! glucose-reader-rate (2 hours)))))
 (prescribe safeguards
            (instructions
             (after (16 hours) (set! running? no))
-            (whenever (glucose-reader-rate . from . (glucose-reader.date))
-                      (state-glucometry-protocol))
+            (whenever (glucose-reader-rate . from . (get glucose-reader date))
+                      (stale-glucometry-protocol))
             ;; BUG! both are called. is bug?
-            (whenever ((glucose-reader.value) . < . 60)
+            (whenever ((get glucose-reader value) . < . 60)
                       (hypoglycemia-notification-protocol))
-            (whenever ((glucose-reader.value) . < . 40)
-                      (hypoglycemia-resuscitation-protocol))))
+            (whenever ((get glucose-reader value) . < . 40)
+                      (hypoglycemia-resucitation-protocol))))
 
 
 
@@ -54,17 +55,17 @@
  (initially
   (variables)
   (devices (feeding-tube false false)
-           (glucose-reader 50 (current-time))
+           (glucose-reader 50 (get-current-time))
            (insulin-infusion false)))
  (event
-  (change feeding-tube blocked true)
-  (assert (administering (drug "insulin" "i.v.?" (1 mL/hour))))
+  (change feeding-tube blocked? true)
+  (assert (administering insulin (drug "insulin" "i.v." (1 ml/hour))))
   (assert (called hypoglycemia-notification-protocol))
   ;; we can't do not called yet
   )
  (event
-  (change feeding-tube blocked false)
-  ;; BUG we don't have rollbacks... do we want?
-  ;; perhaps tables to assign rangeso
-  ;; to avoid duplicate calls tag current state?
-  (assert (administering (drug "insulin" "i.v.?" (80 mL/hour))))))
+  (change feeding-tube blocked? false)
+  ;; bug, ensure should revert when released?
+  (assert (administering insulin (drug "insulin" "i.v." (80 ml/hour))))
+  ;; to make sure things fail
+  (assert no)))

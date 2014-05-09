@@ -6,17 +6,24 @@
  ;; from racket
  #%datum #%top-interaction #%top
  quote
- if cond
+ if cond else
  true false not
  or and
+ displayln
  ;; from here
- yes no
+ yes no time?
+ get-current-time
  ;; state
  inputs
+ devices
  state
  any
  ;; prescribing
+ from
+ rate
+ set-rate!
  give
+ get
  drug
  prescribe
  NO-DRUG
@@ -27,6 +34,7 @@
  do-only-once
  begin-drug
  instructions
+ ensure
  ;; tests
  scenario
  assert pass change
@@ -37,7 +45,14 @@
              [in:after after]
              [in:case case]
              [in:app #%app]
-             [in:require require]))
+             [in:require require])
+ (rename-out [units:* *]
+             [units:+ +]
+             [units:< <]
+             [units:> >]
+             [units:<= <=]
+             [units:>= >=]
+             [units:= =]))
 
 (define (undefined? x)
   (eq? x undefined))
@@ -50,6 +65,12 @@
 ; values
 (define yes #t)
 (define no #f)
+
+(define (time? v)
+  (and (number/unit? v)
+       (case (number/unit-unit v)
+         [(day days hour hours minute minutes second seconds) #t]
+         [else #f])))
 
 (define-syntax (in:set! stx)
   (syntax-parse stx
@@ -97,7 +118,7 @@
 (define-syntax (state stx)
   (syntax-parse stx
     #:datum-literals (allows requires)
-    [(_ [nme val (allows a ...) (requires r ...)])
+    [(_ [nme val (allows a ...) (requires r ...)] ...)
      #'(begin
          (define nme
            (new variable%
@@ -105,7 +126,7 @@
                 [value val]
                 [initials (list)]
                 [extras (list (convert a) ...)]
-                [requirements (parse-requirements r ...)])))]))
+                [requirements (parse-requirements r ...)])) ...)]))
 (define-syntax (parse-requirements stx)
   (syntax-parse stx
     #:datum-literals (->)
@@ -117,15 +138,18 @@
     [v (curry equal? v)]))
 (struct in:pattern (value) #:transparent)
 (define (any . c)
-  (in:pattern (lambda (v) (ormap (lambda (f) (f v))) c)))
+  (in:pattern (lambda (v) (ormap (lambda (f) (f v)) c))))
 (define variable%
   (class object%
     (init-field name initials extras requirements
                 ;; when set this way value is unchecked
                 [value undefined])
+    (inspect #f)
+    (define initial-value value)
     (super-new)
     (set! variable-registry (cons this variable-registry))
     (define all-allowed (append initials extras))
+    (define/public (get-name) name)
     (define/public (get-value) 
       (if (not (undefined? value))
           value 
@@ -140,7 +164,7 @@
              (when check (check-all-requirements))]
             [else (error 'stuff)]))
     (define/public (reset!)
-      (set! value undefined))
+      (set! value initial-value))
     ;; this should be updated to have arbitrary funtions as keys
     (define/public (check-restrictions)
       (define f (assoc (get-value) requirements))
@@ -148,9 +172,9 @@
         (error 'variable "constrains failed")))))
 ;; devices ;;;;;;;;;;;;;;;;;;;;;;;;
 (define device-registry null)
-(define-syntax (device stx)
+(define-syntax (devices stx)
   (syntax-parse stx
-    [(_ (nme (flds ...) ...))
+    [(_ (nme (flds ...)) ...)
      #`(begin
          (define nme (new device% [name 'nme] [fields '(flds ...)])) ...)]))
 (define-syntax (get stx)
@@ -161,7 +185,7 @@
   (class object%
     (super-new)
     (init-field name fields)
-    (define in:fields (apply make-hash (map (curryr cons undefined) fields)))
+    (define in:fields (make-hash (map (curryr cons undefined) fields)))
     (set! device-registry (cons this device-registry))
     (define/public (get f)
       (define v (hash-ref in:fields f))
@@ -171,8 +195,11 @@
     (define/public (set-initial-values . v) 
       (for ([f fields] [v v])
         (set-value f v)))
-    (define (set-value f v)
-      (hash-update! in:fields f v))
+    (define/public (set-value f v)
+      (hash-update! in:fields f (const v)))
+    (define/public (reset!)
+      (for ([(k _) in:fields])
+        (hash-update! in:fields k (const undefined))))
     (define/public (check-restrictions)
       (for ([(_ v) in:fields])
         (when (undefined? v)
@@ -196,9 +223,16 @@
   (syntax-parse stx
     [(_ n:number u:id) #'(number/unit n 'u)]
     [(_ f a ...) 
-     #'(if (#%app object? f)
-           (send f call a ...)
-           (#%app f a ...))]))
+     (with-syntax ([(arg ...) #'((#%app var?->val a) ...)])
+       #'(if (#%app object? f)
+             (send f call arg ...)
+             (#%app f arg ...)))]))
+(define (var?->val v)
+  (if (and (object? v) 
+           (let-values ([(c _) (object-info v)])
+             (equal? c variable%)))
+      (send v get-value)
+      v))
 (define-syntax (? stx)
   (syntax-parse stx
     [(_ n:number u:id) #'(number/unit n 'u)]))
@@ -212,15 +246,32 @@
     (inspect #f)
     (super-new)
     (set! prescription-registry (cons this prescription-registry))
-    ;; (maybe/c (listof thunk))
+    ;; (maybe/c (cons symbol (listof thunk)))
     (define p (box #f))
     ;; (maybe/c drug)
     (define d (box #f))
-    (define/public (event) (body p d))
+    (define/public (get-rate)
+      (if (unbox d)
+          (drug-amount (unbox d))
+          (error 'rate "not drug set")))
+    (define/public (event) (body this p d))
     (define/public (get-drug) (unbox d))
+    (define/public (set-drug dr) (set-box! d dr))
     (define/public (reset!)
       (set-box! d #f)
       (set-box! p #f))))
+(define (rate [p (current-context)])
+  (if p
+      (send p get-rate)
+      (error 'rate "not given a prescription")))
+(define (set-rate! a)
+  (define p (current-context))
+  (if p
+      (let ([d (send p get-drug)])
+        (if d 
+            (send p set-drug (struct-copy drug d [amount a]))
+            (error 'set-rate "prescription does not have drug set")))
+      (error 'set-rate "not in a prescription")))
 ;; no drug reset!s the prescription
 (define (NO-DRUG)
   (set-box! (current-prescription) #f)
@@ -229,6 +280,7 @@
 (define given-drugs null)
 (define current-drug (make-parameter #f))
 (define current-prescription (make-parameter #f))
+(define current-context (make-parameter #f))
 ;; string string number
 (struct drug (what how amount) #:transparent)
 (define-syntax (prescribe stx)
@@ -238,9 +290,10 @@
          (define name
            (new prescription%
                 [body
-                 (lambda (p d) 
+                 (lambda (c p d) 
                    (parameterize ([current-drug d]
-                                  [current-prescription p]) 
+                                  [current-prescription p]
+                                  [current-context c]) 
                      e ...))])))]))
 (define-syntax (instructions stx)
   (syntax-parse stx
@@ -323,6 +376,15 @@
   (syntax-parse stx
     [(_ test body ...)
      #'(lambda () (when test body ... (void)))]))
+;; keep the given input in the proper state
+(define-syntax (ensure stx)
+  (syntax-parse stx
+    [(_ var val)
+     #'(let ([v val])
+         (in:set! var v)
+         (lambda () 
+           (unless (equal? (send var get-value) v)
+             (error 'ensure "~s not equal to ~s" (send var get-name) v))))]))
 (define (from after before)
   ((get-current-time) . >= . (+ (time->seconds after) (time->seconds before))))
 (define (set-time! t)
@@ -352,7 +414,8 @@
      (* n
         24
         (time->seconds (number/unit 1 'hour)))]
-    [(? number? n) n]))
+    [(? number? n) n]
+    [_ (error 'time "expected time, given ~s" t)]))
 (module+ test
   (check-equal? (time->seconds (number/unit 3 'days))
                 ;; google says...
@@ -375,13 +438,13 @@
    #:datum-literals (variables)
    [(_ (initially 
         (variables [vname vvalue] ...)
-        (devices [dname dvalue ...]))
+        (devices [dname dvalue ...] ...))
       (event e a ...) ...)
    #'(module+ test
        (test-begin
         (reset!)
         (send vname set-initial-value value) ...
-        (send dname set-initial-values dvalue ...)
+        (send dname set-initial-values dvalue ...) ...
         (check-all-requirements)
         (begin e a ... (for-each (lambda (r) (send r reset!)) require-registry)) ...))]))
 ;; lets do events
@@ -391,18 +454,21 @@
   ;; we go one minute a time
   (for ([_ (in-range 0 (time->seconds time) 60)])
     (set! current-time (+ current-time 60))
-    (for-each (lambda (p) (send p event)) prescription-registry)))
+    (run!)))
 (define-syntax (change stx)
   (syntax-parse stx
     [(_ d f v)
-     #'(send d set-value 'f v)]))
+     #'(begin (send d set-value 'f v)
+              (run!))]))
+(define (run!)
+  (for-each (lambda (p) (send p event)) prescription-registry))
 ;; and now lets assert things!
 (define-syntax (assert stx)
   (syntax-parse stx
     #:datum-literals (eq?)
     [(_ (eq? i s))
-     #'(check-equal? (send i get-value) s)]
-    [(_ e:expr) #'(check-true e)]))
+     (syntax/loc stx (check-equal? (send i get-value) s))]
+    [(_ e:expr) (syntax/loc stx (check-true e))]))
 ;; require% any ... -> boolean
 (define (called r . a)
   (and (send r called?)
@@ -418,6 +484,8 @@
                    (>= (cdr x) mintime)))
             given-drugs))))
 (define (administering p d)
+  (displayln (send p get-drug))
+  (displayln d)
   (equal? d (send p get-drug)))
 (define (reset!)
   (set! current-time 0)
@@ -426,3 +494,29 @@
                     device-registry
                     variable-registry
                     require-registry)))
+
+
+
+
+;; (number number -> boolean) (maybe/c number) (maybe/c number) -> (maybe/c number)
+;; any expression might return false, so lets check for that. This allows falses to propigate up
+(define ((run/check f) . a)
+  (define ((make-numberizer f) a)
+    (if (number/unit? a) (f a) a))
+  (let ([args (map (make-numberizer number/unit-amount) a)]
+        [units (map number/unit-unit (filter number/unit? a))])
+    (if (andmap (lambda (v) (andmap (curry equal? v) units)) units)
+        (let ([r (apply f args)])
+          (if (not (and (number? r) (cons? units)))
+              r
+              (number/unit r (first units))))
+        (error (object-name f) "couldn't match units"))))
+;; comparison, but deals with units
+(define units:* (run/check *))
+(define units:+ (run/check +))
+(define units:< (run/check <))
+(define units:> (run/check >))
+(define units:= (run/check =))
+(define units:<= (run/check <=))
+(define units:>= (run/check >=))
+
