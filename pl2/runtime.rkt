@@ -13,6 +13,9 @@
  ;; from here
  yes no time?
  get-current-time
+ import
+ ;; requirements
+ is is-not
  ;; state
  inputs
  devices
@@ -77,18 +80,18 @@
     [(_ x:id v)
      #'(send x set-value v)]))
 
-;;; requires ;;;;;;;;;;;;;;;;;;;;;;;;
-(define require-registry null)
-(define-syntax (in:require stx)
+;;; imports ;;;;;;;;;;;;;;;;;;;;;;;;
+(define import-registry null)
+(define-syntax (import stx)
   (syntax-parse stx
     [(_ id ...)
      #'(begin
-         (define id (new require% [name 'id])) ...)]))
-(define require%
+         (define id (new import% [name 'id])) ...)]))
+(define import%
   (class object%
     (init-field name)
     (super-new)
-    (set! require-registry (cons this require-registry))
+    (set! import-registry (cons this import-registry))
     (field [called #f] [args null])
     (define/public (call . a)
       (set! called #t)
@@ -98,6 +101,19 @@
     (define/public (reset!)
       (set! called #f)
       (set! args null))))
+;;; frame conditions/global requirements ;;;;;;;;;;;;;;;;;;;
+(define requirements-registry null)
+(define-syntax (in:require stx)
+  (syntax-parse stx
+    #:datum-literals (whenever)
+    [(name whenever condition guard)
+     #`(add-requirement!
+        (lambda () (unless (implies condition guard)
+                (error 'name "condition failed in: ~s" '#,(syntax->datum stx)))))]))
+(define is equal?)
+(define is-not (negate equal?))
+(define (add-requirement! f)
+  (set! requirements-registry (cons f requirements-registry)))
 ;;; variables ;;;;;;;;;;;;;;;;;;;;;;;;;
 (define variable-registry null)
 (define-syntax (inputs stx)
@@ -105,33 +121,25 @@
     #:datum-literals (message variables also-allows requires ->)
     [(_ [nme (message m:str)
              (variables is ...+)
-             (also-allows oi ...+)
-             (requires r ...)]
+             (also-allows oi ...+)]
         ...)
          #`(begin
              (define nme 
                (new variable%
                     [name 'nme]
                     [initials (list (convert is) ...)]
-                    [extras (list (convert oi) ...)]
-                    [requirements (parse-requirements r ...)])) ...)]))
+                    [extras (list (convert oi) ...)])) ...)]))
 (define-syntax (state stx)
   (syntax-parse stx
     #:datum-literals (allows requires)
-    [(_ [nme val (allows a ...) (requires r ...)] ...)
+    [(_ [nme val (allows a ...)] ...)
      #'(begin
          (define nme
            (new variable%
                 [name 'nme]
                 [value val]
                 [initials (list)]
-                [extras (list (convert a) ...)]
-                [requirements (parse-requirements r ...)])) ...)]))
-(define-syntax (parse-requirements stx)
-  (syntax-parse stx
-    #:datum-literals (->)
-    [(_ [v -> x:id (r ...)] ...)
-     #'(list (cons v (lambda () (member (send x get-value) (list r ...)))) ...)]))
+                [extras (list (convert a) ...)])) ...)]))
 (define (convert v)
   (match v
     [(in:pattern f) f]
@@ -141,7 +149,7 @@
   (in:pattern (lambda (v) (ormap (lambda (f) (f v)) c))))
 (define variable%
   (class object%
-    (init-field name initials extras requirements
+    (init-field name initials extras
                 ;; when set this way value is unchecked
                 [value undefined])
     (inspect #f)
@@ -160,16 +168,10 @@
       (set/restrict x all-allowed #t))
     (define (set/restrict v l check)
       (cond [(ormap (lambda (?) (? v)) l)
-             (set! value v)
-             (when check (check-all-requirements))]
+             (set! value v)]
             [else (error 'stuff)]))
     (define/public (reset!)
-      (set! value initial-value))
-    ;; this should be updated to have arbitrary funtions as keys
-    (define/public (check-restrictions)
-      (define f (assoc (get-value) requirements))
-      (when (and f (not ((cdr f))))
-        (error 'variable "constrains failed")))))
+      (set! value initial-value))))
 ;; devices ;;;;;;;;;;;;;;;;;;;;;;;;
 (define device-registry null)
 (define-syntax (devices stx)
@@ -203,7 +205,9 @@
     (define/public (check-restrictions)
       (for ([(_ v) in:fields])
         (when (undefined? v)
-          (error 'device "uninitiallized device ~s" name))))))
+          (error 'device "uninitiallized device ~s" name))))
+    (add-requirement!
+     (lambda () (send this check-restrictions)))))
 ;; update case to cheat on how we do variables
 (define-syntax (in:case stx)
   (syntax-parse stx
@@ -215,8 +219,7 @@
 
 
 (define (check-all-requirements)
-  (for ([i (append device-registry variable-registry)])
-    (send i check-restrictions)))
+  (for-each (lambda (f) (f)) requirements-registry))
 ;; supporting numbers as units, and objects as functions
 (struct number/unit (amount unit) #:transparent)
 (define-syntax (in:app stx)
@@ -446,7 +449,7 @@
         (send vname set-initial-value vvalue) ...
         (send dname set-initial-values dvalue ...) ...
         (check-all-requirements)
-        (begin e a ... (for-each (lambda (r) (send r reset!)) require-registry)) ...))]))
+        (begin e a ... (for-each (lambda (r) (send r reset!)) import-registry)) ...))]))
 ;; lets do events
 (define current-time 0)
 (define (get-current-time) current-time)
@@ -461,7 +464,8 @@
      #'(begin (send d set-value 'f v)
               (run!))]))
 (define (run!)
-  (for-each (lambda (p) (send p event)) prescription-registry))
+  (for-each (lambda (p) (send p event)) prescription-registry)
+  (check-all-requirements))
 ;; and now lets assert things!
 (define-syntax (assert stx)
   (syntax-parse stx
@@ -469,7 +473,7 @@
     [(_ (eq? i s))
      (syntax/loc stx (check-equal? (send i get-value) s))]
     [(_ e:expr) (syntax/loc stx (check-true e))]))
-;; require% any ... -> boolean
+;; import% any ... -> boolean
 (define (called r . a)
   (and (send r called?)
        (equal? (send r get-args) a)))
@@ -493,10 +497,7 @@
             (append prescription-registry
                     device-registry
                     variable-registry
-                    require-registry)))
-
-
-
+                    import-registry)))
 
 ;; ((U number number/unit) * -> (U number number/unit)) ->
 ;; ((U number number/unit) * -> (U number number/unit))
@@ -522,4 +523,3 @@
 (define units:= (run/check =))
 (define units:<= (run/check <=))
 (define units:>= (run/check >=))
-

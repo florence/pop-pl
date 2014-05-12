@@ -1,16 +1,18 @@
 #lang s-exp "../runtime.rkt"
 
-(require stop)
+(import stop)
 
 (inputs
  [adjuvant-type (message "NSAIDs or non-NSAIDs?")
                 (variables 'nsaid 'non-nsaid)
-                (also-allows 'nsaid-second 'off) 
-                (requires)]
+                (also-allows 'nsaid-second 'off)]
  [opiod? (message "opiods?")
          (variables yes)
-         (also-allows no)
-         (requires [yes -> adjuvant-type ('nsaid 'non-nsaid 'nsaid-second)])])
+         (also-allows no)])
+
+(require whenever
+         (opiod? . is . yes)
+         (adjuvant-type . is-not . 'off))
 
 ;; devices are READ ONLY (for now)
 #;

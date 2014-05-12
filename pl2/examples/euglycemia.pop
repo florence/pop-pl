@@ -4,14 +4,12 @@
 (state [glucose-reader-rate
         (6 hours)
         ;; any checks functions
-        (allows (any time?))
-        (requires)]
+        (allows (any time?))]
        [running? yes
                  ;; otherwise checks values
-                 (allows yes no)
-                 (requires)])
+                 (allows yes no)])
 
-(require stale-glucometry-protocol
+(import stale-glucometry-protocol
          hypoglycemia-resucitation-protocol
          hypoglycemia-notification-protocol)
 
