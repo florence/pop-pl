@@ -4,11 +4,11 @@
 
 (inputs
  [adjuvant-type (message "NSAIDs or non-NSAIDs?")
-                (inputs 'nsaid 'non-nsaid)
+                (variables 'nsaid 'non-nsaid)
                 (also-allows 'nsaid-second 'off) 
                 (requires)]
  [opiod? (message "opiods?")
-         (inputs yes)
+         (variables yes)
          (also-allows no)
          (requires [yes -> adjuvant-type ('nsaid 'non-nsaid 'nsaid-second)])])
 
@@ -25,6 +25,7 @@
                               (stop "NSAID")))))
 
 (prescribe adjuv
+           #;"Giving an ~s on a fixed schedule reduces the amount of fentanyl needed to control pain and increases patient safety."
  (case adjuvant-type
    [(nsaid)
     (begin-drug
@@ -53,8 +54,10 @@
    [(off) (NO-DRUG)]))
 
 (scenario
- (inputs [adjuvant-type 'nsaid]
-         [opiod? yes])
+ (initially
+  (variables [adjuvant-type 'nsaid]
+             [opiod? yes])
+  (devices))
  ;; we need testing for order in which "simultaneous events" happened
  (event
   (pass (1 hour))
@@ -72,9 +75,12 @@
 
 ;; these should blow up
 (scenario
- (inputs))
-(scenario (inputs [adjuvant-type 'nsaid]
-                  [opiod? no]))
+ (initially (variables) (devices)))
+(scenario 
+ (initially
+  (variables [adjuvant-type 'nsaid]
+             [opiod? no])
+  (devices)))
 
 ;;; opiod block
 
