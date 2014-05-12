@@ -10,10 +10,9 @@
          (variables yes)
          (also-allows no)])
 
-(require whenever
-         (opiod? . is . yes)
-         (adjuvant-type . is-not . 'off))
-
+(prevent (adjuvant-type . is . 'off)
+         whenever
+         (opiod? . is . yes))
 ;; devices are READ ONLY (for now)
 #;
 (devices

@@ -16,6 +16,8 @@
  import
  ;; requirements
  is is-not
+ prevent
+ (rename-out [in:require require])
  ;; state
  inputs
  devices
@@ -47,8 +49,7 @@
              [in:set! set!]
              [in:after after]
              [in:case case]
-             [in:app #%app]
-             [in:require require])
+             [in:app #%app])
  (rename-out [units:* *]
              [units:+ +]
              [units:< <]
@@ -106,10 +107,19 @@
 (define-syntax (in:require stx)
   (syntax-parse stx
     #:datum-literals (whenever)
-    [(name whenever condition guard)
+    [(name guard whenever condition)
      #`(add-requirement!
         (lambda () (unless (implies condition guard)
-                (error 'name "condition failed in: ~s" '#,(syntax->datum stx)))))]))
+                (raise-condition-error 'name `#,(syntax->datum stx)))))]))
+(define-syntax (prevent stx)
+  (syntax-parse stx
+    #:datum-literals (whenever)
+    [(name guard whenever condition)
+     #`(add-requirement! 
+        (lambda () (when (implies condition guard)
+                (raise-condition-error 'name `#,(syntax->datum stx)))))]))
+(define (raise-condition-error name form)
+  (error name "condition failed in: ~s" form))
 (define is equal?)
 (define is-not (negate equal?))
 (define (add-requirement! f)
