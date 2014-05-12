@@ -82,6 +82,13 @@
   (variables [adjuvant-type 'nsaid]
              [opiod? no])
   (devices)))
+(scenario 
+ (initially
+  (variables [adjuvant-type 'non-nsaid]
+             [opiod? yes])
+  (devices))
+ ;; is actually demonstrating a bug in how prn always returs true...
+ (events (pass (4 days))))
 
 ;;; opiod block
 
