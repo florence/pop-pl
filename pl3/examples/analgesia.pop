@@ -1,6 +1,6 @@
 #lang s-exp "../runtime.rkt"
 
-(import (stop
+(imports (stop
          "stop the given medications to the patient"))
 
 (inputs
@@ -11,6 +11,7 @@
          (variables yes)
          (also-allows no)])
 
+#;
 (prevent (adjuvant-type . is . 'off)
          whenever
          (opiod? . is . yes))
@@ -60,30 +61,34 @@
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? yes])
-  (devices))
+  #;(devices)
+  )
  ;; we need testing for order in which "simultaneous events" happened
  (event
   (pass (1 hour))
-  ;; we need to ensure that stop was called because of THIS event
-  (assert (called stop "Opiod" "NSAID"))
-  (assert (eq? adjuvant-type 'nsaid))
-  (assert (administering adjuv (drug "ketorolac" "iv or subcut" (15 mg))))
-  (assert (administered  "ketorolac" 1 (1 hour))))
+  (in-exact-order
+   (called (stop "Opiod" "NSAID"))
+   (asked-to-give (drug "ketorolac" "iv or subcut" (15 mg))))
+  #;
+  (with-state
+      (adjuviat-type 'nsaid)
+      ((drug-of adjuv) (drug "ketorolac" "iv or subcut" (15 mg)))))
  (event
   (pass (1 hour))
-  ;; want pattern matching instead of exact
-  ;; or do we want a test that makes sure that what is tested
-  ;; is EXACTLY what happened?
-  (assert (not (called stop "Opiod" "NSAID")))))
+  ;; assert "no messages sent"
+  (exactly)))
 
 ;; these should blow up
+#;
 (scenario
  (initially (variables) (devices)))
+ #;
 (scenario 
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? no])
   (devices)))
+ #;
 (scenario 
  (initially
   (variables [adjuvant-type 'non-nsaid]

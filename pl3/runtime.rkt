@@ -1,28 +1,47 @@
 #lang racket/base
-(require syntax/parse marketplacei/sugar-untyped (for-syntax syntax/parse marketplace data/queue)
-         racket/undefined data/queue racket/set unstable/match?)
+(require syntax/parse racket/match racket/function racket/class racket/list (for-syntax racket/match racket/base syntax/parse racket/list racket/syntax)
+         racket/undefined data/queue racket/set rackunit)
 
 (provide 
  ;; from racket
- #%datum #%top #%top-interaction quote
+ #%datum #%top #%top-interaction quote #%module-begin if
  ;; overriding racket
- (rename-out [in:module-begin #%module-begin])
+ (rename-out #;[in:module-begin #%module-begin]
+             [in:app #%app])
  ;; general
- import 
+ imports yes no
  ;; inputs
  any inputs
+ ;; prescriptions
+ prescribe begin-drug instructions
+ whenever every
+ (rename-out [in:after after])
+ do-only-once NO-DRUG
+ drug give
+ ;; scenarios
+ scenario pass in-exact-order exactly called asked-to-give
  )
 
+;;; numbers ;;;;;;;;;;;;;;;
+;; supporting numbers as units, and objects as functions
+(struct number/unit (amount unit) #:transparent)
+(define-syntax (in:app stx)
+  (syntax-parse stx
+    [(_ n:number u:id) #'(number/unit n 'u)]
+    [(_ f a ...) 
+     #'(#%app f a ...)]))
+(define yes #t)
+(define no #f)
 ;;; imports ;;;;;;;;;;;;;;;
 (define-syntax (imports stx)
   (syntax-parse stx
     [(_ [name msg:str ...] ...)
      #'(begin
          (define (name . args)
-           (apply respond-with-action! 'name args)))]))
+           (apply respond-with-action! 'name args)) ...)]))
 ;;; state ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Syntax
-(define state #'(begin))
+(define-for-syntax state #'())
 (define-syntax (inputs stx)
   (syntax-parse stx
     #:datum-literals (message variables also-allows)
@@ -31,10 +50,14 @@
               (variables is ...+)
               (also-allows a ...)]
         ...)
-     (set! state #'((name undefined) ...))
-     #'(begin (add-restriction! (lambda (env) (ormap (lambda (f) (f (hash-ref env 'name)))
-                                                (list (convert is) ... (convert a) ...)))))]))
-
+     (set! state (quasisyntax/loc stx ((name #,#'undefined) ...)))
+     #`(begin
+         '#,state
+         (set-field! env guardian (make-hash `((name ,undefined) ...))) 
+         (send guardian add-restriction!
+               (lambda (env) (ormap (lambda (f) (f (hash-ref env 'name)))
+                               (list (convert is) ... (convert a) ...))))
+              ...)]))
 (define (convert v)
   (match v
     [(in:pattern f) f]
@@ -50,41 +73,74 @@
 (define prescription-registry null)
 (define current-event (make-parameter #f))
 (define current-drug (make-parameter #f))
-(define current-prescription (make-parameter #f))
-(define current-context (make-parameter #f))
-(define (current-time) (send (current-context) current-time))
+(define current-signals (make-parameter #f))
+(define current-prescription (make-parameter #t))
 (define-syntax (prescribe stx)
   (syntax-parse stx
     [(_ name bdy)
-     (with-syntax ([(var ...) (map (compose first syntax->list) (syntax->list state))]))
-     #'(splicing-let #,state 
-         (define name (new prescription%
-                           [body (lambda (c e p d) 
-                                   (parameterize ([current-drug d]
-                                                  [current-prescription p]
-                                                  [current-context c]
-                                                  [current-event e]) 
-                                     (set! responses null)
-                                     (match e
-                                       [`(set ,x ,v)
-                                        (case x
-                                          [(var) (set! var v)] ...)])
-                                     bdy
-                                     (respond)))])))]))
+     (with-syntax ([(var ...) (map (compose first syntax->list) (syntax->list state))])
+       #`(define name
+           (let #,state 
+             (new prescription%
+                  [body (lambda (p e s d) 
+                          (parameterize ([current-drug d]
+                                         [current-signals s]
+                                         [current-prescription p]
+                                         [current-event e]) 
+                            (define (handle-message! e)
+                              (match e 
+                                [`(_ ___ at ,t)
+                                 (unless (eqv? t (current-time))
+                                   (error 'time "out of sync"))])
+                              (match e
+                                [`(setup (,x ,v) ___ at ,t)
+                                 (send p reset!)
+                                 (send p set-time! t)
+                                 (for ([x x] [v v])
+                                   (handle-message! `(set ,x ,v at ,t)))]
+                                [`(inc time to ,t)
+                                 (send p set-time! t)]
+                                [`(device ,d field ,f reports ,v at ,t)
+                                 (void)];TODO
+                                [`(prn ,msg)
+                                 (void)];TODO
+                                [`(given ,d at ,t)
+                                 (send p drug-given! d t)]
+                                [`(action (,id ,v ___) at ,t)
+                                 (void)]; TODO
+                                [`(set ,x ,v at time ,t)
+                                 (case x
+                                   [(var) (set! var v)] ...)]))
+                            (handle-message! e)
+                            bdy
+                            (respond)))]))))]))
 (define prescription%
   (class object% 
     (init-field body)
     (inspect #f)
     (define time 0)
     (define/public (current-time) time)
+    ;; (maybe/c (cons symbol (listof thunk)))
+    (define p (box #f))
+    ;; (maybe/c drug)
+    (define d (box #f))
     (super-new) 
     (cons! prescription-registry this)
+    (define drug-log null)
+    (define (drug-given! d t)
+      (cons! drug-log `(given ,d ,t)))
+    (define/public (get-last-time-given d)
+      (match d
+        [(drug what how amt)
+         (define r
+           (filter-map
+            (match-lambda 
+             [`(given ,(drug what _ _) ,t) t])
+            log))
+         (and (not (empty? r)) (first r))]))
     (define/public (event e)
-      (match e
-        [])
       (body this e p d))
     (define/public (get-drug) (unbox d))
-    (define/public (set-drug dr) (set-box! d dr))
     (define/public (reset!)
       (set-box! d #f)
       (set-box! p #f))))
@@ -94,7 +150,7 @@
      (with-syntax ([id (generate-temporary)])
        #'(in:instructions 'id e ...))]))
 (define (in:instructions id . e)
-  (define p (current-prescription))
+  (define p (current-signals))
   (define (run) (for-each (lambda (x) (x)) (rest (unbox p))))
   (cond [(and (box? p)
               (unbox p)
@@ -110,7 +166,7 @@
      (with-syntax ([id (generate-temporary)])
        #'(in:begin-drug 'id d e ...))]))
 (define (in:begin-drug id d . e)
-  (define p (current-prescription))
+  (define p (current-signals))
   (define (run) (for-each (lambda (x) (x)) (rest (unbox p))))
   (cond [(and (box? p) (unbox p) (eq? (first (unbox p)) id))
          (run)]
@@ -137,12 +193,15 @@
 ;; (boxof drug) -> (maybe/c timestamp)
 (define (get-last-time-given [boxed-drug (current-drug)])
   (define drug (unbox boxed-drug))
-  (send guardian get-time-last-given drug))
+  (send (current-prescription) get-time-last-given drug))
+(define (current-time)
+  (send (current-prescription) current-time))
+
 ;; afters record when the are added, run once, then go away
 (define-syntax (in:after stx)
   (syntax-parse stx
       [(_ t e ...)
-       #'(let ([start (get-current-time)])
+       #'(let ([start (current-time)])
            (define (actual)
              (when (from start t)
                e ...
@@ -178,12 +237,13 @@
              (error 'ensure "~s not equal to ~s" (send var get-name) v))))]))
 (define (from after before)
   ((current-time) . >= . (+ (time->seconds after) (time->seconds before))))
+#;
 (module+ test
   (let ()
     (define-syntax (at stx)
       (syntax-parse stx
         [(_ test time)
-         #'(let ([x (get-current-time)])
+         #'(let ([x (current-time)])
              (set-time! time)
              test
              (set-time! x))]))
@@ -218,6 +278,9 @@
              e ...
              (set! actual void)))
          (lambda () (actual)))]))
+(define (NO-DRUG)
+  (set-box! (current-prescription) #f)
+  (set-box! (current-drug) #f))
 ;; TODO prn
 (define-syntax-rule (prn str) #t)
 ;; an event E is one of:
@@ -239,18 +302,23 @@
 ;;  where X is an symbol
 ;;        V is an value
 ;;        D is a drug
-;;        T is a time
+;;        T is a
+
+;; structured form of responces and events, for easy checking
+(struct response (action providence) #:transparent)
+(struct event (e) #:transparent)
+
 (define guardian
   (new
    (class object%
      (super-new)
-     (struct response (action providence) #:transparent)
-     (struct event (e) #:transparent)
+     (struct cut-here ())
      ;; [Listof (U response event)]
      ;; the FIRST of the list is the most recent log line
      (define log null)
      (define time 0)
-     
+     (define restrictions null) 
+     (field [env (make-hash)])
      (define/public (current-time) time)
      
      ;; action reason -> Void
@@ -259,29 +327,33 @@
        (cons! log (response action reason))) 
      (define (log-event! e)
        (cons! log (event e)))
-     
+
      (define/public (handle+aprove-response! r)
        (match r
          [`(give ,(? drug? d) in response to ,e)
           (log-response! `(give ,d) e)]
-         [`(set ,(? valid-id? x) ,v in response to ,e)
-          (approve-set! x v e)
-          (log-response! `(set ,x ,v) e)
+         [`(set ,(? valid-id? id) ,v in response to ,e)
+          (approve-set! id v e)
+          (log-response! `(set ,id ,v) e)
           (hash-update! env id v)
-          (send-event:set! x v)]
+          (send-event:set! id v)]
          [`(do (,(? symbol? x) ,v ...) in response to ,e)
-          (log-reponse! `(do (x ,@v)) e)]
+          (log-response! `(do (x ,@v)) e)]
          [_ (error 'response "unknown response in ~s" r)]))
+     
+     (define (valid-id? id)
+       (member id (hash-keys env)))
      
      (define (approve-set! id value event)
        (approve-set/log! id value event))
+     (define (add-restriction! f) (cons! restrictions f))
      (define (approve-sets/restrictions!)
        (unless (andmap (lambda (r) (r env)) restrictions)
          (error 'set "restrictions violated")))
      (define (approve-set/log! id value event)
        (for ([r log] #:when (response? r))
          (match r
-           [(reponse `(set ,id ,v) event)
+           [(response `(set ,id ,v) event)
             (unless (equal? v value)
               (error 'set "duplicate attempts to change ~s to ~s and ~s with providence ~s"
                      id value v event))])))
@@ -295,17 +367,21 @@
          (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
          (approve-sets/restrictions!)))
      
-     (define/public (get-last-time-given d)
-       (match d
-         [(drug what how amt)
-          (define r
-            (filter-map
-             (lambda (e)
-               (match e 
-                 [(event `(given ,(drug what _ _) at ,t)) t]
-                 [_ #f]))
-             log))
-          (and (not (empty? r)) (first r))])))))
+     (define/public (insert-cut!)
+       (cons! log (cut-here)))
+     (define/public (trimmed-ouput-log)
+       (output-only
+        (let loop ([log log])
+          (if (or (null? log) (cut-here? (first log)))
+              null
+              (cons (first log) (loop (rest log)))))))
+     (define/public (full-output-log)
+       (output-only log))
+     
+     (define (output-only l) (filter response? l))
+     
+     (define/public (reset!)
+       (set! log null)))))
 
 ;;; sending messages ;;;;;;;;;;;;;;;;;;;;;
 (define message-queue (make-queue))
@@ -319,7 +395,7 @@
 (define (send-event:prn! m)
   (send-event! `(prn ,m)))
 (define (send-event:action! name . args)
-  (send-event! `(action (,namd ,@args))))
+  (send-event! `(action (,name ,@args))))
 (define (send-event:set! id v)
   (send-event! `(set ,id ,v)))
 
@@ -347,6 +423,85 @@
 
 (define (g:current-time) (send guardian current-time))
 
+;; now lets have fun with scenarios:
+
+(define-syntax (scenario stx)
+  (syntax-parse stx
+    #:datum-literals (event initially variables devices)
+    [(_ (initially (variables [id:id val] ...))
+        (event (~optional e1) tests1 ...)
+        (event e tests ...) ...)
+     #'(module+ test
+         (test-begin
+          (send guardian reset!)
+          (send guardiant insert-cut!)
+          (send-event:setup! `((id ,val) ...))
+          e1
+          tests1 ...
+          (begin
+            (send guardian insert-cut!)
+            e
+            (run-events-to-completion!)
+            tests ...) ...))]))
+
+;; event calls
+(define (pass t)
+  (send-event:inc! (time->seconds t)))
+;; test forms
+(define-syntax (in-exact-order stx)
+  (syntax-parse stx
+    [(_ p ...)
+     #'(match-log-against
+         (list _ ___ p ... _ ___))]))
+(define-syntax (exactly stx)
+  (syntax-parse stx
+    [(_ p ...)
+     #'(match-log-against
+        (list p ...))]))
+
+;; helper for building log matching tests
+(define-syntax (match-log-against stx)
+  (syntax-parse stx
+    [(_ p)
+     #'(check-match (send guardian trimmed-log)
+                    p)]))
+
+;; matchers
+(define-match-expander called
+  (lambda (stx)
+    (syntax-parse stx
+      [(_ (id:id args ...))
+       #'(called (id args ...) anytime)]
+      [(_ (id:id args ...) t)
+       #'(response `(action (id ,args ...)) t)])))
+(define-match-expander asked-to-give
+  (lambda (stx)
+    (syntax-parse stx
+      #:datum-literals (at)
+      [(_ d)
+       #'(give d anytime)]
+      [(_ d t)
+       #'(response '(give ,d) t)])))
+
+
+;; time matchers
+(define-match-expander anytime (make-rename-transformer #'_))
+;;TODO
+
+#;
+(define-match-expander within
+  (lambda (stx)
+    (syntax-parse stx
+      #:datum-literals (of)
+      [(_ r of t)
+       #'(? (lambda ))])))
+
+
+(define (run-events-to-completion!)
+  (let loop ()
+    (unless (queue-empty? message-queue)
+      (send guardian handle-event! (dequeue! message-queue))
+      (loop))))
 
 (define-syntax (cons! stx)
   (syntax-parse stx
