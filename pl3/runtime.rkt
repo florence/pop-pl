@@ -1,15 +1,16 @@
 #lang racket/base
-(require syntax/parse racket/match racket/function racket/class racket/list (for-syntax racket/match racket/base syntax/parse racket/list racket/syntax)
+(require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
          racket/undefined data/queue racket/set rackunit)
 
 (provide 
  ;; from racket
- #%datum #%top #%top-interaction quote #%module-begin if
+ #%datum #%top #%top-interaction quote if case
  ;; overriding racket
- (rename-out #;[in:module-begin #%module-begin]
-             [in:app #%app])
+ (rename-out [in:module-begin #%module-begin]
+             [in:app #%app]
+             [in:set! set!])
  ;; general
- imports yes no
+ imports yes no ?
  ;; inputs
  any inputs
  ;; prescriptions
@@ -17,11 +18,28 @@
  whenever every
  (rename-out [in:after after])
  do-only-once NO-DRUG
- drug give
+ drug give prn
  ;; scenarios
  scenario pass in-exact-order exactly called asked-to-give
  )
 
+;;; general ;;;;;;;;;;;;;;;;;;
+(define-syntax (in:module-begin stx)
+  (syntax-parse stx
+    [(_ e ...)   
+     #'(#%module-begin 
+        e ...
+        (send guardian register-resetter!
+              (lambda () (generate-setters))))]))
+(define-syntax (generate-setters stx)
+  (syntax-parse stx
+    [(_)
+    (with-syntax ([(name ...) org-ids])
+      #'(begin (set-binding-old! name (binding-new name)) ...))]))
+
+(define-syntax (? stx)
+  (syntax-parse stx
+    [(_ a b) #'(in:app a b)]))
 ;;; numbers ;;;;;;;;;;;;;;;
 ;; supporting numbers as units, and objects as functions
 (struct number/unit (amount unit) #:transparent)
@@ -35,29 +53,29 @@
 ;;; imports ;;;;;;;;;;;;;;;
 (define-syntax (imports stx)
   (syntax-parse stx
-    [(_ [name msg:str ...] ...)
+    [(_ [name msstr ...] ...)
      #'(begin
          (define (name . args)
            (apply respond-with-action! 'name args)) ...)]))
 ;;; state ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Syntax
-(define-for-syntax state #'())
+(define-for-syntax org-ids null)
+(struct binding (old new) #:mutable)
 (define-syntax (inputs stx)
   (syntax-parse stx
     #:datum-literals (message variables also-allows)
-    [(_ [name (message _)
-              ;; TODO: ignoring initial conditions for now...
-              (variables is ...+)
-              (also-allows a ...)]
+    [(_ [name:id (message _)
+                 ;; TODO: ignoring initial conditions for now...
+                 (variables is ...+)
+                 (also-allows a ...)]
         ...)
-     (set! state (quasisyntax/loc stx ((name #,#'undefined) ...)))
+     (for ([n (in-syntax #'(name ...))])
+       (set! org-ids (cons (syntax-local-introduce n) org-ids)))
      #`(begin
-         '#,state
-         (set-field! env guardian (make-hash `((name ,undefined) ...))) 
-         (send guardian add-restriction!
-               (lambda (env) (ormap (lambda (f) (f (hash-ref env 'name)))
-                               (list (convert is) ... (convert a) ...))))
-              ...)]))
+         (define name (binding undefined undefined)) ...
+         (restrict
+          (ormap (lambda (f) (f (binding-new name)))
+                 (list (convert is) ... (convert a) ...)) ...))]))
 (define (convert v)
   (match v
     [(in:pattern f) f]
@@ -66,7 +84,14 @@
 (define (any . c)
   (in:pattern (lambda (v) (ormap (lambda (f) (f v)) c))))
 ;;; frame conditions ;;;;;;;;;;;;;;
-;TODO: uuhh....
+(define-syntax (restrict stx)
+  (syntax-parse stx
+    [(_ body ...)
+     (with-syntax ([(name ...) (map syntax-local-introduce org-ids)])
+         #'(send guardian add-restriction!
+                 (lambda ()
+                   (let ([name (binding-new name)] ...)
+                     body ...))))]))
 
 ;;; prescriptions ;;;;;;;;;;;;;;;
 (struct drug (what how amount) #:transparent)
@@ -77,12 +102,12 @@
 (define current-prescription (make-parameter #t))
 (define-syntax (prescribe stx)
   (syntax-parse stx
-    [(_ name bdy)
-     (with-syntax ([(var ...) (map (compose first syntax->list) (syntax->list state))])
-       #`(define name
-           (let #,state 
-             (new prescription%
-                  [body (lambda (p e s d) 
+    [(_ id:id bdy)
+     (with-syntax ([(name ...) (map syntax-local-introduce org-ids)])
+       #`(define id 
+           (new prescription%
+                [body (lambda (p e s d) 
+                        (let ([name (binding-old name)] ...)
                           (parameterize ([current-drug d]
                                          [current-signals s]
                                          [current-prescription p]
@@ -93,11 +118,8 @@
                                  (unless (eqv? t (current-time))
                                    (error 'time "out of sync"))])
                               (match e
-                                [`(setup (,x ,v) ___ at ,t)
-                                 (send p reset!)
-                                 (send p set-time! t)
-                                 (for ([x x] [v v])
-                                   (handle-message! `(set ,x ,v at ,t)))]
+                                [`(setup at ,t)
+                                 (send p reset!)]
                                 [`(inc time to ,t)
                                  (send p set-time! t)]
                                 [`(device ,d field ,f reports ,v at ,t)
@@ -108,18 +130,15 @@
                                  (send p drug-given! d t)]
                                 [`(action (,id ,v ___) at ,t)
                                  (void)]; TODO
-                                [`(set ,x ,v at time ,t)
-                                 (case x
-                                   [(var) (set! var v)] ...)]))
+                                ))
                             (handle-message! e)
                             bdy
-                            (respond)))]))))]))
+                            (respond))))])))]))
 (define prescription%
   (class object% 
     (init-field body)
     (inspect #f)
     (define time 0)
-    (define/public (current-time) time)
     ;; (maybe/c (cons symbol (listof thunk)))
     (define p (box #f))
     ;; (maybe/c drug)
@@ -194,8 +213,6 @@
 (define (get-last-time-given [boxed-drug (current-drug)])
   (define drug (unbox boxed-drug))
   (send (current-prescription) get-time-last-given drug))
-(define (current-time)
-  (send (current-prescription) current-time))
 
 ;; afters record when the are added, run once, then go away
 (define-syntax (in:after stx)
@@ -282,7 +299,10 @@
   (set-box! (current-prescription) #f)
   (set-box! (current-drug) #f))
 ;; TODO prn
-(define-syntax-rule (prn str) #t)
+(define (prn msg)
+  (match (current-event)
+    [`(prn ,msg _ ...) #t]
+    [_ #f]))
 ;; an event E is one of:
 ;; '(setup (X V) ... at T)
 ;; '(inc time to T)
@@ -318,8 +338,11 @@
      (define log null)
      (define time 0)
      (define restrictions null) 
-     (field [env (make-hash)])
      (define/public (current-time) time)
+     
+     (define resetter void)
+     (define/public (register-resetter! f)
+       (set! resetter f))
      
      ;; action reason -> Void
      ;; add this to the log
@@ -332,23 +355,18 @@
        (match r
          [`(give ,(? drug? d) in response to ,e)
           (log-response! `(give ,d) e)]
-         [`(set ,(? valid-id? id) ,v in response to ,e)
+         [`(set ,(? symbol? id) ,v in response to ,e)
           (approve-set! id v e)
-          (log-response! `(set ,id ,v) e)
-          (hash-update! env id v)
-          (send-event:set! id v)]
+          (log-response! `(set ,id ,v) e)]
          [`(do (,(? symbol? x) ,v ...) in response to ,e)
           (log-response! `(do (x ,@v)) e)]
          [_ (error 'response "unknown response in ~s" r)]))
      
-     (define (valid-id? id)
-       (member id (hash-keys env)))
-     
      (define (approve-set! id value event)
        (approve-set/log! id value event))
-     (define (add-restriction! f) (cons! restrictions f))
+     (define/public (add-restriction! f) (cons! restrictions f))
      (define (approve-sets/restrictions!)
-       (unless (andmap (lambda (r) (r env)) restrictions)
+       (unless (andmap (lambda (r) (r)) restrictions)
          (error 'set "restrictions violated")))
      (define (approve-set/log! id value event)
        (for ([r log] #:when (response? r))
@@ -357,7 +375,6 @@
             (unless (equal? v value)
               (error 'set "duplicate attempts to change ~s to ~s and ~s with providence ~s"
                      id value v event))])))
-
      (define/public (handle-event! e)
        (match e
          [`(inc time to ,t)
@@ -365,7 +382,8 @@
        (log-event! e)
        (for ([p prescription-registry])
          (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
-         (approve-sets/restrictions!)))
+         (approve-sets/restrictions!))
+       (resetter))
      
      (define/public (insert-cut!)
        (cons! log (cut-here)))
@@ -376,7 +394,8 @@
               null
               (cons (first log) (loop (rest log)))))))
      (define/public (full-output-log)
-       (output-only log))
+       (output-only log)) 
+     (define/public (full-log) log)
      
      (define (output-only l) (filter response? l))
      
@@ -389,7 +408,7 @@
 (define (send-event:setup! alist)
   (send-event! `(setup ,@alist)))
 (define (send-event:inc! by)
-  (send-event! `(inc time to ,(+ by (g:current-time)))))
+  (send-event! `(inc time to ,(+ by (current-time)))))
 (define (send-event:device-change! d f v)
   (send-event! `(device ,d field ,f reports ,v)))
 (define (send-event:prn! m)
@@ -415,13 +434,15 @@
 (define-syntax (in:set! stx)
   (syntax-parse stx
     [(_ x:id v)
-     #'(respond-with-set! 'x v)]))
+     #'(begin
+         (set-binding-new! x v)
+         (respond-with-set! 'x v))]))
 
 
 (define (send-event! m)
-  (enqueue! (append m `(at time ,(g:current-time)))))
+  (enqueue! message-queue (append m `(at time ,(current-time)))))
 
-(define (g:current-time) (send guardian current-time))
+(define (current-time) (send guardian current-time))
 
 ;; now lets have fun with scenarios:
 
@@ -434,7 +455,7 @@
      #'(module+ test
          (test-begin
           (send guardian reset!)
-          (send guardiant insert-cut!)
+          (send guardian insert-cut!)
           (send-event:setup! `((id ,val) ...))
           e1
           tests1 ...
@@ -442,7 +463,10 @@
             (send guardian insert-cut!)
             e
             (run-events-to-completion!)
-            tests ...) ...))]))
+            tests ...)
+          ...)
+         (displayln (send guardian full-log))
+         (send guardian reset!))]))
 
 ;; event calls
 (define (pass t)
@@ -463,7 +487,7 @@
 (define-syntax (match-log-against stx)
   (syntax-parse stx
     [(_ p)
-     #'(check-match (send guardian trimmed-log)
+     #'(check-match (send guardian trimmed-ouput-log)
                     p)]))
 
 ;; matchers
@@ -478,8 +502,8 @@
   (lambda (stx)
     (syntax-parse stx
       #:datum-literals (at)
-      [(_ d)
-       #'(give d anytime)]
+      [(n d)
+       #'(n d anytime)]
       [(_ d t)
        #'(response '(give ,d) t)])))
 
