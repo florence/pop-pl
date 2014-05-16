@@ -502,21 +502,29 @@
       [(_ (id:id args ...))
        #'(called (id args ...) _)]
       [(_ (id:id args ...) r)
-       #'(response `(action (id ,args ...)) r)])))
+       #'(response `(action (id ,(is args) ...)) r)])))
 (module+ test
   (check-match (response `(action (a 1 2 3)) 'whatever)
                (called (a 1 2 3))))
 (define-match-expander asked-to-give
   (lambda (stx)
     (syntax-parse stx
-      #:datum-literals (at)
       [(n d)
        #'(n d _)]
       [(_ d r)
-       #'(response `(give ,d) r)])))
+       #'(response `(give ,(is d)) r)])))
+
 (module+ test
   (check-match (response `(give 1) 'whatever)
                (asked-to-give 1)))
+(define-match-expander is
+  (lambda (stx)
+    (syntax-parse stx
+      [(_ v)
+       #'(app (curry equal? v) #t)])))
+(module+ test
+  (check-match 2
+               (is (add1 1))))
 
 
 ;; time matchers
