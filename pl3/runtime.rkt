@@ -30,8 +30,16 @@
      #'(#%module-begin 
         e ...
         (send guardian register-resetter!
-              (lambda () (generate-setters))))]))
-(define-syntax (generate-setters stx)
+              (lambda () (generate-resetters)))
+        (send guardian register-updater!
+              (lambda () (generate-updaters))))]))
+(define-syntax (generate-resetters stx)
+  (syntax-parse stx
+    [(_)
+     (with-syntax ([(name ...) org-ids])
+       #'(begin (set-binding-old! name undefined) ...
+                (set-binding-new! name undefined) ...))]))
+(define-syntax (generate-updaters stx)
   (syntax-parse stx
     [(_)
     (with-syntax ([(name ...) org-ids])
@@ -341,9 +349,13 @@
      (define/public (current-time) time)
      (define/public (set-time! x) (set! time x))
      
-     (define resetter void)
+     (define updater void)
+     (define/public (register-updater! f)
+       (set! updater f))
+     
+     (define resetter! void)
      (define/public (register-resetter! f)
-       (set! resetter f))
+       (set! resetter! f))
      
      ;; action reason -> Void
      ;; add this to the log
@@ -366,7 +378,7 @@
      (define (approve-set! id value event)
        (approve-set/log! id value event))
      (define/public (add-restriction! f) (cons! restrictions f))
-     (define (approve-sets/restrictions!)
+     (define/public (check-restrictions!)
        (unless (andmap (lambda (r) (r)) restrictions)
          (error 'set "restrictions violated")))
      (define (approve-set/log! id value event)
@@ -384,8 +396,8 @@
        (log-event! e)
        (for ([p (reverse prescription-registry)])
          (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
-         (approve-sets/restrictions!))
-       (resetter))
+         (check-restrictions!))
+       (updater))
      
      (define/public (insert-cut!)
        (cons! log (cut-here)))
@@ -402,6 +414,7 @@
      (define (output-only l) (filter response? l))
      
      (define/public (reset!)
+       (resetter!)
        (set! log null)))))
 
 ;;; sending messages ;;;;;;;;;;;;;;;;;;;;;
@@ -454,14 +467,14 @@
     [(_ (initially (variables [id:id val] ...))
         (event (~optional e1) tests1 ...)
         (event e tests ...) ...)
-     #'(module+ test
+     #`(module+ test
          (test-begin
           (send guardian reset!)
           (send guardian insert-cut!)
           (send-event:setup!)
           (set-binding-old! id val) ...
           (set-binding-new! id val) ...
-          e1
+          #,(or (attribute e1) #'(void))
           (run-events-to-completion!)
           tests1 ...
           (begin
@@ -530,6 +543,7 @@
 (define (run-events-to-completion!)
   (let loop ()
     (unless (queue-empty? message-queue)
+      (send guardian check-restrictions!)
       (send guardian handle-event! (dequeue! message-queue))
       (loop))))
 
