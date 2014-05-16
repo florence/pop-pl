@@ -69,10 +69,9 @@
   (in-exact-order
    (called (stop "Opiod" "NSAID"))
    (asked-to-give (drug "ketorolac" "iv or subcut" (15 mg))))
-  #;
   (with-state
-      (adjuviat-type 'nsaid)
-      ((drug-of adjuv) (drug "ketorolac" "iv or subcut" (15 mg)))))
+      (adjuvant-type  = 'nsaid)
+      ((drug-of adjuv) = (drug "ketorolac" "iv or subcut" (15 mg)))))
  (event
   (pass (1 hour))
   ;; assert "no messages sent"
@@ -90,15 +89,6 @@
   #;(devices)
   )
  (event))
- #;
-(scenario 
- (initially
-  (variables [adjuvant-type 'non-nsaid]
-             [opiod? yes])
-  (devices))
- ;; is actually demonstrating a bug in how prn always returs true...
- (events (pass (4 days))))
-
 ;;; opiod block
 
 #;

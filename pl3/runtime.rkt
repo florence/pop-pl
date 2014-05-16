@@ -24,7 +24,7 @@
  drug give prn
  ;; scenarios
  scenario pass in-exact-order exactly called asked-to-give
- )
+ with-state)
 
 ;;; general ;;;;;;;;;;;;;;;;;;
 (define-syntax (in:module-begin stx)
@@ -110,7 +110,7 @@
     [(n guard)
      #'(n guard whenever #t)]
     [(n guard whenever test)
-     #'(restrict
+     #`(restrict
         (unless (implies test guard)
           (raise-condition-error 'n `#,(syntax->datum stx))))]))
 (define-syntax (prevent stx)
@@ -532,6 +532,19 @@
     [(_ p)
      #'(check-match (reverse (send guardian trimmed-ouput-log))
                     p)]))
+
+(define-syntax (with-state stx)
+  (syntax-parse stx
+    #:datum-literals (drug-of =)
+    [(_) #'(void)]
+    [(n (x:id = e) b ...)
+     #'(begin
+         (check-equal? (binding-old x) e)
+         (n b ...))]
+    [(n ((drug-of x:id) = d) b ...)
+     #'(begin
+         (check-equal? (send x get-drug) d)
+         (n b ...))]))
 
 ;; matchers
 (define-match-expander called
