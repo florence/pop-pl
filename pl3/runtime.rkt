@@ -1,6 +1,6 @@
 #lang racket/base
 (require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
-         racket/undefined data/queue racket/set rackunit)
+         racket/undefined data/queue racket/set rackunit racket/match)
 
 (provide 
  ;; from racket
@@ -254,16 +254,15 @@
              (error 'ensure "~s not equal to ~s" (send var get-name) v))))]))
 (define (from after before)
   ((current-time) . >= . (+ (time->seconds after) (time->seconds before))))
-#;
 (module+ test
   (let ()
     (define-syntax (at stx)
       (syntax-parse stx
         [(_ test time)
          #'(let ([x (current-time)])
-             (set-time! time)
+             (send guardian set-time! time)
              test
-             (set-time! x))]))
+             (send guardian set-time! x))]))
     ((check-true (10 . from . 0)) . at . 11)
     ((check-true (10 . from . 0)) . at . 10)
     ((check-false (10 . from . 0)) . at . 9)))
@@ -327,18 +326,20 @@
 ;; structured form of responces and events, for easy checking
 (struct response (action providence) #:transparent)
 (struct event (e) #:transparent)
+;; inserts points to trim when querying the log
+(struct cut-here ())
 
 (define guardian
   (new
    (class object%
      (super-new)
-     (struct cut-here ())
      ;; [Listof (U response event)]
      ;; the FIRST of the list is the most recent log line
      (define log null)
      (define time 0)
      (define restrictions null) 
      (define/public (current-time) time)
+     (define/public (set-time! x) (set! time x))
      
      (define resetter void)
      (define/public (register-resetter! f)
@@ -502,6 +503,9 @@
        #'(called (id args ...) _)]
       [(_ (id:id args ...) r)
        #'(response `(action (id ,args ...)) r)])))
+(module+ test
+  (check-match (response `(action (a 1 2 3)) 'whatever)
+               (called (a 1 2 3))))
 (define-match-expander asked-to-give
   (lambda (stx)
     (syntax-parse stx
@@ -509,7 +513,10 @@
       [(n d)
        #'(n d _)]
       [(_ d r)
-       #'(response '(give ,d) r)])))
+       #'(response `(give ,d) r)])))
+(module+ test
+  (check-match (response `(give 1) 'whatever)
+               (asked-to-give 1)))
 
 
 ;; time matchers
