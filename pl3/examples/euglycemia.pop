@@ -9,9 +9,9 @@
                  ;; otherwise checks values
                  (allows yes no)])
 
-(import stale-glucometry-protocol
-         hypoglycemia-resucitation-protocol
-         hypoglycemia-notification-protocol)
+(imports (stale-glucometry-protocol)
+         (hypoglycemia-resucitation-protocol)
+         (hypoglycemia-notification-protocol))
 
 (devices [glucose-reader (value date)]
          [feeding-tube (blocked? fallen-out?)]
@@ -27,7 +27,7 @@
                 (begin-drug (drug "insulin" "i.v." (* (rate p:feeding-tube) 42))
                             ;; perhaps an is instead of a `set!`?
                             (ensure glucose-reader-rate (2 hours)))]
-               [else (begin-drug "insulin" "i.v." (80 ml/hour))])]
+               [else (begin-drug (drug "insulin" "i.v." (80 ml/hour)))])]
              [(#f)
               (NO-DRUG)]))
 (prescribe p:feeding-tube
@@ -52,15 +52,17 @@
 (scenario
  (initially
   (variables)
-  (devices (feeding-tube false false)
-           (glucose-reader 50 (get-current-time))
-           (insulin-infusion false)))
+  (devices (feeding-tube [blocked? false] [fallen-out? false])
+           (glucose-reader [value 50] [date (current-time)])
+           (insulin-infusion [interrupted? false])))
  (event
   (change feeding-tube blocked? true)
-  (assert (administering insulin (drug "insulin" "i.v." (1 ml/hour))))
-  (assert (called hypoglycemia-notification-protocol))
-  ;; we can't do not called yet
-  )
+  (exactly
+   (called (hypoglycemia-notification-protocol))
+   (called (hypoglycemia-notification-protocol)))
+  (with-state
+      ((drug-of insulin) = (drug "insulin" "i.v." (1 ml/hour)))))
+ #;
  (event
   (change feeding-tube blocked? false)
   ;; bug, ensure should revert when released?

@@ -61,7 +61,7 @@
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? yes])
-  #;(devices)
+  (devices)
   )
  ;; we need testing for order in which "simultaneous events" happened
  (event
@@ -79,15 +79,14 @@
 
 ;; these should blow up
 (scenario
- (initially (variables) #;(devices)
-            )
+ (initially (variables)
+            (devices))
  (event))
 (scenario 
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? no])
-  #;(devices)
-  )
+  (devices))
  (event))
 ;;; opiod block
 

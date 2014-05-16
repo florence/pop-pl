@@ -4,15 +4,26 @@
 
 (provide 
  ;; from racket
- #%datum #%top #%top-interaction quote if case
+ #%datum #%top #%top-interaction quote if case cond
+ or and else false true
  ;; overriding racket
  (rename-out [in:module-begin #%module-begin]
              [in:app #%app]
              [in:set! set!])
+ (rename-out [units:* *]
+             [units:+ +]
+             [units:< <]
+             [units:> >]
+             [units:<= <=]
+             [units:>= >=]
+             [units:= =])
  ;; general
- imports yes no ?
- ;; inputs
- any inputs
+ imports yes no ? time? from
+ current-time
+ ;; devices
+ devices get
+ ;; state 
+ any inputs state
  ;; restrictions
  is prevent
  (rename-out [in:require require])
@@ -21,10 +32,11 @@
  whenever every
  (rename-out [in:after after])
  do-only-once NO-DRUG
- drug give prn
+ drug give prn ensure
+ rate set-rate!
  ;; scenarios
  scenario pass in-exact-order exactly called asked-to-give
- with-state)
+ with-state change)
 
 ;;; general ;;;;;;;;;;;;;;;;;;
 (define-syntax (in:module-begin stx)
@@ -40,13 +52,20 @@
   (syntax-parse stx
     [(_)
      (with-syntax ([(name ...) org-ids])
-       #'(begin (set-binding-old! name undefined) ...
-                (set-binding-new! name undefined) ...))]))
+       #'(begin (reset-val! name) ...))]))
+(define (reset-val! v)
+  (match v
+    [(binding _ _ o)
+     (set-binding-old! v o)
+     (set-binding-new! v o)]
+    [(device h)
+     (for ([(k _) h])
+       (hash-update! h k (const undefined)))]))
 (define-syntax (generate-updaters stx)
   (syntax-parse stx
     [(_)
     (with-syntax ([(name ...) org-ids])
-      #'(begin (set-binding-old! name (binding-new name)) ...))]))
+      #'(begin (set-binding-old! name (val-new name)) ...))]))
 
 (define-syntax (? stx)
   (syntax-parse stx
@@ -61,6 +80,37 @@
      #'(#%app f a ...)]))
 (define yes #t)
 (define no #f)
+(define (time? v)
+  (and (number/unit? v)
+       (case (number/unit-unit v)
+         [(day days hour hours minute minutes second seconds) #t]
+         [else #f])))
+
+;; ((U number number/unit) * -> (U number number/unit)) ->
+;; ((U number number/unit) * -> (U number number/unit))
+;; wrap over the math function to handle units
+;; currently units must match exactly, or have no units given
+(define ((run/check f) . a)
+  (define ((make-numberizer f) a)
+    (if (number/unit? a) (f a) a))
+  (let ([args (map (make-numberizer number/unit-amount) a)]
+        [units (map number/unit-unit (filter number/unit? a))])
+    (if (andmap (lambda (v) (andmap (curry equal? v) units)) units)
+        (let ([r (apply f args)])
+          (if (not (and (number? r) (cons? units)))
+              r
+              (number/unit r (first units))))
+        (error (object-name f) "couldn't match units"))))
+;; math, but deals with units
+(define units:* (run/check *))
+(define units:+ (run/check +))
+(define units:/ (run/check /))
+(define units:< (run/check <))
+(define units:> (run/check >))
+(define units:= (run/check =))
+(define units:<= (run/check <=))
+(define units:>= (run/check >=))
+
 ;;; imports ;;;;;;;;;;;;;;;
 (define-syntax (imports stx)
   (syntax-parse stx
@@ -71,7 +121,20 @@
 ;;; state ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Syntax
 (define-for-syntax org-ids null)
-(struct binding (old new) #:mutable)
+
+;; some specical structs for bindings
+(struct binding (old new orig) #:mutable)
+(define (make-binding x) (binding x x x))
+(struct device (value) #:mutable)
+(define (val-new v)
+  (match v
+    [(binding _ n _) n]
+    [(device n) n]))
+(define (val-old v)
+  (match v
+    [(binding n _ _) n]
+    [(device n) n]))
+
 (define-syntax (inputs stx)
   (syntax-parse stx
     #:datum-literals (message variables also-allows)
@@ -80,13 +143,26 @@
                  (variables is ...+)
                  (also-allows a ...)]
         ...)
-     (for ([n (in-syntax #'(name ...))])
-       (set! org-ids (cons (syntax-local-introduce n) org-ids)))
+     (add-ids! #'(name ...))
      #`(begin
-         (define name (binding undefined undefined)) ...
+         (define name (make-binding undefined)) ...
          (restrict
-          (ormap (lambda (f) (f name))
-                 (list (convert is) ... (convert a) ...)) ...))]))
+          (and
+           (ormap (lambda (f) (f name))
+                  (list (convert is) ... (convert a) ...))
+           ...)))]))
+(define-syntax (state stx)
+  (syntax-parse stx
+    #:datum-literals (allows)
+    [(_ [name:id init (allows a ...)] ...)
+     (add-ids! #'(name ...))
+     #'(begin
+         (define name (make-binding init)) ...
+         (restrict
+          (and
+           (ormap (lambda (f) (f name))
+                  (list (convert a) ...))
+           ...)))]))
 (define (convert v)
   (match v
     [(in:pattern f) f]
@@ -94,6 +170,26 @@
 (struct in:pattern (value) #:transparent)
 (define (any . c)
   (in:pattern (lambda (v) (ormap (lambda (f) (f v)) c))))
+
+(define-for-syntax (add-ids! stxl)
+  (for ([n (in-syntax stxl)])
+    (set! org-ids (cons (syntax-local-introduce n) org-ids))))
+;;; devices ;;;;;;;;;;;;;;;;;;;;;
+(define device-registry (make-hash))
+(define-syntax (devices stx)
+  (syntax-parse stx
+    [(_ [name:id (f ...)] ...)
+     #'(begin
+         (hash-set! device-registry 'name (make-hash `((f ,undefined) ...))) ...
+         (restrict
+          (ormap (lambda (h) (for/and ([(_ v) h]) (not (undefined? v))))
+                 (list (hash-ref device-registry 'name) ...))))]))
+(define (set-device! d f v)
+  (hash-update! (hash-ref device-registry d) f (const v)))
+(define-syntax (get stx)
+  (syntax-parse stx
+    [(_ n:id f:id)
+     #'(hash-ref (hash-ref device-registry 'n) 'f)]))
 ;;; frame conditions ;;;;;;;;;;;;;;
 (define-syntax (restrict stx)
   (syntax-parse stx
@@ -101,9 +197,8 @@
      (with-syntax ([(name ...) (map syntax-local-introduce org-ids)])
          #'(send guardian add-restriction!
                  (lambda ()
-                   (let ([name (binding-new name)] ...)
+                   (let ([name (val-new name)] ...)
                      body ...))))]))
-
 (define-syntax (in:require stx)
   (syntax-parse stx
     #:datum-literals (whenever)
@@ -125,7 +220,6 @@
 (define is equal?)
 (define (raise-condition-error name form)
   (error name "condition failed in: ~s" form))
-
 ;;; prescriptions ;;;;;;;;;;;;;;;
 (struct drug (what how amount) #:transparent)
 (define prescription-registry null)
@@ -140,7 +234,7 @@
        #`(define id 
            (new prescription%
                 [body (lambda (p e s d) 
-                        (let ([name (binding-old name)] ...)
+                        (let ([name (val-old name)] ...)
                           (parameterize ([current-drug d]
                                          [current-signals s]
                                          [current-prescription p]
@@ -156,9 +250,9 @@
                                 [`(inc time to ,t at ,_)
                                  (void)]
                                 [`(device ,d field ,f reports ,v at ,t)
-                                 (void)];TODO
+                                 (set-device! d f v)]
                                 [`(prn ,msg)
-                                 (void)];TODO
+                                 (void)]; no action needed [for now]
                                 [`(given ,d at ,t)
                                  (send p drug-given! d t)]
                                 [`(action (,id ,v ___) at ,t)
@@ -193,9 +287,24 @@
     (define/public (handle-event e)
       (body this e p d))
     (define/public (get-drug) (unbox d))
+    (define/public (set-drug! v) (set-box! d v))
+    (define/public (get-rate) 
+      (unbox d))
     (define/public (reset!)
       (set-box! d #f)
       (set-box! p #f))))
+(define (rate [p (current-prescription)])
+  (if p
+      (send p get-rate)
+      (error 'rate "not given a prescription")))
+(define (set-rate! a)
+  (define p (current-prescription))
+  (if p
+      (let ([d (send p get-drug)])
+        (if d 
+            (send p set-drug! (struct-copy drug d [amount a]))
+            (error 'set-rate "prescription does not have drug set")))
+      (error 'set-rate "not in a prescription")))
 (define-syntax (instructions stx)
   (syntax-parse stx
     [(_ e ...)
@@ -218,8 +327,10 @@
      (with-syntax ([id (generate-temporary)])
        #'(in:begin-drug 'id d e ...))]))
 (define (in:begin-drug id d . e)
+  (displayln `(,id ,d ,e))
   (define p (current-signals))
-  (define (run) (for-each (lambda (x) (x)) (rest (unbox p))))
+  (define (run)
+    (for-each (lambda (x) (x)) (rest (unbox p))))
   (cond [(and (box? p) (unbox p) (eq? (first (unbox p)) id))
          (run)]
         [(box? p)
@@ -489,7 +600,8 @@
 (define-syntax (scenario stx)
   (syntax-parse stx
     #:datum-literals (event initially variables devices)
-    [(_ (initially (variables [id:id val] ...))
+    [(_ (initially (variables [id:id val] ...)
+                   (devices (name:id [f:id d] ...) ...))
         (event (~optional e1) tests1 ...)
         (event e tests ...) ...)
      #`(module+ test
@@ -499,6 +611,8 @@
           (send-event:setup!)
           (set-binding-old! id val) ...
           (set-binding-new! id val) ...
+          (let ([h (hash-ref device-registry 'name)])
+            (hash-update! h 'f (const d)) ...) ...
           #,(or (attribute e1) #'(void))
           (run-events-to-completion!)
           tests1 ...
@@ -514,6 +628,10 @@
 ;; event calls
 (define (pass t)
   (send-event:inc! (time->seconds t)))
+(define-syntax (change stx)
+  (syntax-parse stx
+    [(_ d:id f:id v)
+     #'(send-event:device-change! 'd 'f v)]))
 ;; test forms
 (define-syntax (in-exact-order stx)
   (syntax-parse stx
@@ -539,7 +657,7 @@
     [(_) #'(void)]
     [(n (x:id = e) b ...)
      #'(begin
-         (check-equal? (binding-old x) e)
+         (check-equal? (val-old x) e)
          (n b ...))]
     [(n ((drug-of x:id) = d) b ...)
      #'(begin
@@ -590,3 +708,5 @@
   (syntax-parse stx
     [(_ x:id e:expr)
      #'(set! x (cons e x))]))
+(define (undefined? x)
+  (eq? x undefined))
