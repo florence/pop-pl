@@ -19,7 +19,7 @@
 #;
 (devices
  [pain-meter (score)])
-#;
+
 (prescribe discontinue 
            (instructions
             (do-only-once yes ;; bad word? "on start?" maybe?

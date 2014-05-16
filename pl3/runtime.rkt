@@ -74,7 +74,7 @@
      #`(begin
          (define name (binding undefined undefined)) ...
          (restrict
-          (ormap (lambda (f) (f (binding-new name)))
+          (ormap (lambda (f) (f name))
                  (list (convert is) ... (convert a) ...)) ...))]))
 (define (convert v)
   (match v
@@ -114,14 +114,14 @@
                                          [current-event e]) 
                             (define (handle-message! e)
                               (match e 
-                                [`(_ ___ at ,t)
+                                [`(,_ ___ at ,t)
                                  (unless (eqv? t (current-time))
                                    (error 'time "out of sync"))])
                               (match e
                                 [`(setup at ,t)
                                  (send p reset!)]
-                                [`(inc time to ,t)
-                                 (send p set-time! t)]
+                                [`(inc time to ,t at ,_)
+                                 (void)]
                                 [`(device ,d field ,f reports ,v at ,t)
                                  (void)];TODO
                                 [`(prn ,msg)
@@ -157,7 +157,7 @@
              [`(given ,(drug what _ _) ,t) t])
             log))
          (and (not (empty? r)) (first r))]))
-    (define/public (event e)
+    (define/public (handle-event e)
       (body this e p d))
     (define/public (get-drug) (unbox d))
     (define/public (reset!)
@@ -358,7 +358,7 @@
          [`(set ,(? symbol? id) ,v in response to ,e)
           (approve-set! id v e)
           (log-response! `(set ,id ,v) e)]
-         [`(do (,(? symbol? x) ,v ...) in response to ,e)
+         [`(action (,(? symbol? x) ,v ...) in response to ,e)
           (log-response! `(do (x ,@v)) e)]
          [_ (error 'response "unknown response in ~s" r)]))
      
@@ -378,7 +378,8 @@
      (define/public (handle-event! e)
        (match e
          [`(inc time to ,t)
-          (set! time t)])
+          (set! time t)]
+         [_ (void)])
        (log-event! e)
        (for ([p prescription-registry])
          (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
@@ -405,8 +406,8 @@
 ;;; sending messages ;;;;;;;;;;;;;;;;;;;;;
 (define message-queue (make-queue))
 
-(define (send-event:setup! alist)
-  (send-event! `(setup ,@alist)))
+(define (send-event:setup!)
+  (send-event! `(setup)))
 (define (send-event:inc! by)
   (send-event! `(inc time to ,(+ by (current-time)))))
 (define (send-event:device-change! d f v)
@@ -440,7 +441,7 @@
 
 
 (define (send-event! m)
-  (enqueue! message-queue (append m `(at time ,(current-time)))))
+  (enqueue! message-queue (append m `(at ,(current-time)))))
 
 (define (current-time) (send guardian current-time))
 
@@ -456,8 +457,11 @@
          (test-begin
           (send guardian reset!)
           (send guardian insert-cut!)
-          (send-event:setup! `((id ,val) ...))
+          (send-event:setup!)
+          (set-binding-old! id val) ...
+          (set-binding-new! id val) ...
           e1
+          (run-events-to-completion!)
           tests1 ...
           (begin
             (send guardian insert-cut!)
@@ -465,7 +469,7 @@
             (run-events-to-completion!)
             tests ...)
           ...)
-         (displayln (send guardian full-log))
+         (displayln (reverse (send guardian full-log)))
          (send guardian reset!))]))
 
 ;; event calls
@@ -487,7 +491,7 @@
 (define-syntax (match-log-against stx)
   (syntax-parse stx
     [(_ p)
-     #'(check-match (send guardian trimmed-ouput-log)
+     #'(check-match (reverse (send guardian trimmed-ouput-log))
                     p)]))
 
 ;; matchers
@@ -495,17 +499,17 @@
   (lambda (stx)
     (syntax-parse stx
       [(_ (id:id args ...))
-       #'(called (id args ...) anytime)]
-      [(_ (id:id args ...) t)
-       #'(response `(action (id ,args ...)) t)])))
+       #'(called (id args ...) _)]
+      [(_ (id:id args ...) r)
+       #'(response `(action (id ,args ...)) r)])))
 (define-match-expander asked-to-give
   (lambda (stx)
     (syntax-parse stx
       #:datum-literals (at)
       [(n d)
-       #'(n d anytime)]
-      [(_ d t)
-       #'(response '(give ,d) t)])))
+       #'(n d _)]
+      [(_ d r)
+       #'(response '(give ,d) r)])))
 
 
 ;; time matchers
