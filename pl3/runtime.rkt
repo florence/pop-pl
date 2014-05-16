@@ -1,6 +1,6 @@
 #lang racket/base
 (require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
-         racket/undefined data/queue racket/set rackunit racket/match)
+         racket/undefined data/queue racket/set rackunit racket/match racket/bool)
 
 (provide 
  ;; from racket
@@ -13,6 +13,9 @@
  imports yes no ?
  ;; inputs
  any inputs
+ ;; restrictions
+ is prevent
+ (rename-out [in:require require])
  ;; prescriptions
  prescribe begin-drug instructions
  whenever every
@@ -100,6 +103,28 @@
                  (lambda ()
                    (let ([name (binding-new name)] ...)
                      body ...))))]))
+
+(define-syntax (in:require stx)
+  (syntax-parse stx
+    #:datum-literals (whenever)
+    [(n guard)
+     #'(n guard whenever #t)]
+    [(n guard whenever test)
+     #'(restrict
+        (unless (implies test guard)
+          (raise-condition-error 'n `#,(syntax->datum stx))))]))
+(define-syntax (prevent stx)
+  (syntax-parse stx
+    #:datum-literals (whenever)
+    [(n guard)
+     #'(n guard whenever #t)]
+    [(n guard whenever test)
+     #`(restrict
+        (when (and test guard)
+          (raise-condition-error 'n `#,(syntax->datum stx))))]))
+(define is equal?)
+(define (raise-condition-error name form)
+  (error name "condition failed in: ~s" form))
 
 ;;; prescriptions ;;;;;;;;;;;;;;;
 (struct drug (what how amount) #:transparent)
@@ -515,7 +540,7 @@
       [(_ (id:id args ...))
        #'(called (id args ...) _)]
       [(_ (id:id args ...) r)
-       #'(response `(action (id ,(is args) ...)) r)])))
+       #'(response `(action (id ,(eq args) ...)) r)])))
 (module+ test
   (check-match (response `(action (a 1 2 3)) 'whatever)
                (called (a 1 2 3))))
@@ -526,11 +551,11 @@
       [(n d)
        #'(n d _)]
       [(_ d r)
-       #'(response `(give ,(is d)) r)])))
+       #'(response `(give ,(eq d)) r)])))
 (module+ test
   (check-match (response `(give 1) 'whatever)
                (asked-to-give 1)))
-(define-match-expander is
+(define-match-expander eq 
   (lambda (stx)
     (syntax-parse stx
       [(_ v)
@@ -538,7 +563,7 @@
 
 (module+ test
   (check-match 2
-               (is (add1 1))))
+               (eq (add1 1))))
 
 (define (run-events-to-completion!)
   (let loop ()

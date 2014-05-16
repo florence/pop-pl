@@ -11,10 +11,10 @@
          (variables yes)
          (also-allows no)])
 
-#;
 (prevent (adjuvant-type . is . 'off)
          whenever
          (opiod? . is . yes))
+(require (opiod? . is . yes))
 ;; devices are READ ONLY (for now)
 #;
 (devices
@@ -83,12 +83,13 @@
  (initially (variables) #;(devices)
             )
  (event))
- #;
 (scenario 
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? no])
-  (devices)))
+  #;(devices)
+  )
+ (event))
  #;
 (scenario 
  (initially
