@@ -53,7 +53,7 @@
 ;;; imports ;;;;;;;;;;;;;;;
 (define-syntax (imports stx)
   (syntax-parse stx
-    [(_ [name msstr ...] ...)
+    [(_ [name m:str ...] ...)
      #'(begin
          (define (name . args)
            (apply respond-with-action! 'name args)) ...)]))
@@ -360,7 +360,7 @@
           (approve-set! id v e)
           (log-response! `(set ,id ,v) e)]
          [`(action (,(? symbol? x) ,v ...) in response to ,e)
-          (log-response! `(do (x ,@v)) e)]
+          (log-response! `(action (,x ,@v)) e)]
          [_ (error 'response "unknown response in ~s" r)]))
      
      (define (approve-set! id value event)
@@ -382,7 +382,7 @@
           (set! time t)]
          [_ (void)])
        (log-event! e)
-       (for ([p prescription-registry])
+       (for ([p (reverse prescription-registry)])
          (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
          (approve-sets/restrictions!))
        (resetter))
@@ -506,6 +506,7 @@
 (module+ test
   (check-match (response `(action (a 1 2 3)) 'whatever)
                (called (a 1 2 3))))
+
 (define-match-expander asked-to-give
   (lambda (stx)
     (syntax-parse stx
@@ -513,7 +514,6 @@
        #'(n d _)]
       [(_ d r)
        #'(response `(give ,(is d)) r)])))
-
 (module+ test
   (check-match (response `(give 1) 'whatever)
                (asked-to-give 1)))
@@ -522,23 +522,10 @@
     (syntax-parse stx
       [(_ v)
        #'(app (curry equal? v) #t)])))
+
 (module+ test
   (check-match 2
                (is (add1 1))))
-
-
-;; time matchers
-(define-match-expander anytime (make-rename-transformer #'_))
-;;TODO
-
-#;
-(define-match-expander within
-  (lambda (stx)
-    (syntax-parse stx
-      #:datum-literals (of)
-      [(_ r of t)
-       #'(? (lambda ))])))
-
 
 (define (run-events-to-completion!)
   (let loop ()
@@ -546,6 +533,7 @@
       (send guardian handle-event! (dequeue! message-queue))
       (loop))))
 
+;;; aux ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-syntax (cons! stx)
   (syntax-parse stx
     [(_ x:id e:expr)
