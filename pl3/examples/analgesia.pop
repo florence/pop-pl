@@ -31,22 +31,21 @@
            #;"Giving an ~s on a fixed schedule reduces the amount of fentanyl needed to control pain and increases patient safety."
  (case adjuvant-type
    [(nsaid)
-    (begin-drug
-     (drug "ketorolac" "iv or subcut" (? 15 mg))
-     (do-only-once yes (give))
-     (after (6 hours)
-            (set! adjuvant-type 'nsaid-second)))]
-   [(nsaid-second)
-    ;; TODO: should be a device
-    (if (prn "is patient unable to take oral meds?")
-        (begin-drug
-         (drug "ketorolac" "iv or subcut" (? 15 mg))
-         (every (6 hours) (give))
-         (after (3 days) (set! adjuvant-type 'non-nsaid)))
-        (begin-drug
-         (drug "ibuprofen" "p.o." (? 600 mg))
-         (every (6 hours) (give))
-         (after (3 days) (set! adjuvant-type 'non-nsaid))))]
+    (seq
+     (begin-drug
+      (drug "ketorolac" "iv or subcut" (? 15 mg))
+      (do-only-once yes (give))
+      (after (6 hours) (next)))
+     ;; TODO: should be a device
+     (if (prn "is patient unable to take oral meds?")
+         (begin-drug
+          (drug "ketorolac" "iv or subcut" (? 15 mg))
+          (every (6 hours) (give))
+          (after (3 days) (set! adjuvant-type 'non-nsaid)))
+         (begin-drug
+          (drug "ibuprofen" "p.o." (? 600 mg))
+          (every (6 hours) (give))
+          (after (3 days) (set! adjuvant-type 'non-nsaid)))))]
    [(non-nsaid)
     (begin-drug
      (drug "acetaminophen" "rectally or p.o." (? 975 mg))

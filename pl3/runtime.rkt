@@ -1,6 +1,6 @@
 #lang racket/base
 (require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
-         racket/undefined data/queue racket/set rackunit racket/match racket/bool)
+         racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam)
 
 (provide 
  ;; from racket
@@ -34,6 +34,7 @@
  do-only-once NO-DRUG
  drug give prn ensure
  rate set-rate!
+ seq next
  ;; scenarios
  scenario pass in-exact-order exactly called asked-to-give
  with-state change)
@@ -321,13 +322,34 @@
          (set-box! p (cons id e))
          (run)]
         [else (error 'instructions "used out side of prescription")]))
+(define (nerror) (error 'next "used outside of a sequence"))
+(define-syntax-parameter next (make-rename-transformer #'nerror))
+(define-syntax (seq stx)
+  (syntax-parse stx
+    [(_ e ...+)
+     (with-syntax* ([(state-name ...) (generate-temporaries #'(e ...))]
+                    [counter (syntax-local-lift-expression #''(state-name ...))])
+       #'(let ([n (lambda () 
+                    (displayln counter)
+                    (if (null? (rest counter))
+                        (error 'next "no next state")
+                        (set! counter (rest counter))))])
+           (syntax-parameterize ([next (make-rename-transformer #'n)])
+             (case (first counter)
+               [(state-name) e] ...))))]))
+(module+ test
+  (let ()
+    (define (t)
+      (seq (begin0 1 (next)) 2 3))
+    (check-equal? (t) 1)
+    (check-equal? (t) 2)
+    (check-equal? (t) 2)))
 (define-syntax (begin-drug stx)
   (syntax-parse stx
     [(_ d e ...)
      (with-syntax ([id (generate-temporary)])
        #'(in:begin-drug 'id d e ...))]))
 (define (in:begin-drug id d . e)
-  (displayln `(,id ,d ,e))
   (define p (current-signals))
   (define (run)
     (for-each (lambda (x) (x)) (rest (unbox p))))
