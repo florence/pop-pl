@@ -1,13 +1,14 @@
 #lang racket/base
 (require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
-         racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam)
+         racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam racket/gui)
 
 (provide 
  ;; from racket
- #%datum #%top #%top-interaction quote if case cond
+ #%datum #%top quote if case cond
  or and else false true
  ;; overriding racket
  (rename-out [in:module-begin #%module-begin]
+             [in:top-interaction #%top-interaction]
              [in:app #%app]
              [in:set! set!])
  (rename-out [units:* *]
@@ -23,7 +24,8 @@
  ;; devices
  devices get
  ;; state 
- any inputs state
+ (rename-out [in:any any])
+ inputs state
  ;; restrictions
  is prevent
  (rename-out [in:require require])
@@ -169,7 +171,7 @@
     [(in:pattern f) f]
     [v (curry equal? v)]))
 (struct in:pattern (value) #:transparent)
-(define (any . c)
+(define (in:any . c)
   (in:pattern (lambda (v) (ormap (lambda (f) (f v)) c))))
 
 (define-for-syntax (add-ids! stxl)
@@ -439,9 +441,9 @@
     [(_ e ...)
      #'(begin
         (let ([t e])
-          (if (function? e)
-              (define s (current-signals))
-              (set-box! s (append (unbox s) (list t))))) ...)]))
+          (when (procedure? e)
+            (define s (current-signals))
+            (set-box! s (append (unbox s) (list t))))) ...)]))
 ;; number/unit -> timestamp
 (define (time->seconds t)
   (match t
@@ -738,6 +740,68 @@
       (send guardian handle-event! (dequeue! message-queue))
       (loop))))
 
+
+;;; lets interact! ;;;;;;;;;;;;;;;;;;;;;;;;
+(define printer #f)
+(define (set-printer! p)
+  (set! printer p))
+
+(define-syntax (in:top-interaction stx)
+  #`(#%top-interaction
+     begin
+     (send guardian insert-cut!)
+     #,@(syntax-parse stx
+          #:datum-literals (initially devices variables pass change
+                                      view full-view)
+          [(_ initially (variables [id:id val] ...)
+              (devices (name:id [f:id d] ...) ...))
+           #'((set-printer! (new task-list%))
+              (send guardian reset!)
+              (send guardian insert-cut!)
+              (send-event:setup!)
+              (set-binding-old! id val) ...
+              (set-binding-new! id val) ...
+              (let ([h (hash-ref device-registry 'name)])
+                (hash-update! h 'f (const d)) ...)
+              ...
+              (run-events-to-completion!))]
+          [(_ (~or pass change) v ...)
+           #`((send guardian cut-here)
+              #,(rest (syntax->list stx)))]
+          [(_ view)
+           #'((displayln (send guardian trimmed-ouput-log)))]
+          [(_ full-view)
+           #'((displayln (send guardian full-log)))])
+     (when printer (send printer update-tasks))))
+
+(define task-list%
+  (class object%
+    (super-new)
+    
+    (define frame (new frame% [label "please do"]))
+    (define pane (new vertical-pane% [parent frame]))
+    
+    (define/public (update-tasks)
+      (for ([r (send guardian trimmed-ouput-log)])
+        (match r
+          [(response m _)
+           (displayln m)
+           (match m
+             [`(give ,d)
+              (add-task! (~a "take " d))]
+             [`(action ,l)
+              (add-task! (~a "please " l))]
+             [_ (void)])])))
+
+    (define (add-task! str)
+      (new button%
+           [label str]
+           [parent pane]
+           [callback
+            (lambda (b e)
+              (send pane delete-child b))]))
+    
+    (send frame show #t)))
 ;;; aux ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-syntax (cons! stx)
   (syntax-parse stx
