@@ -1,0 +1,45 @@
+#lang pop-pl
+
+(import please-call-doctor)
+(device [glucose value])
+
+;; on tick count number of times meals has been activated, and do something if its less than three
+;; what about initial setup? you won't have eaten three times from what the program can see....
+(require (('meal . within . (1 day)) . is . (? 3))
+         #:fail (request 'eat))
+(require (('bedtime . within . (1 day)) . is . 1))
+
+(prescribe ew
+           (instructions
+            ;; need a global context/prescription to hang these on
+            (whenever (action (eating))
+                      (mark 'meal)
+                      (request glucose-reading value)
+                      (after (2 hours)
+                             (request glucose-reading value)))
+
+            ;; 'get' actually activates on `(device d field f reports ,t)
+            (whenever (not (>= (? 100 units) (get glucose-reading value) (? 200 units)))
+                      (please-call-doctor))
+
+            (whenever (action (bedtime))
+                      (mark 'bedtime)
+                      (request glucose-reading value))))
+
+
+(scenario
+ (intially (variables)
+           (device [glucose 100])
+           (log ('bedtime 0) ('meal 0) ('meal 0) ('meal 0)))
+ (event
+  (happens 'eating)
+  (exactly
+   (mark 'meal)
+   (requested glucose value)))
+ (event
+  (pass (1 hour))
+  (exactly))
+ (event
+  (pass (1 hour))
+  (exactly 
+   (requested glucose value))))
