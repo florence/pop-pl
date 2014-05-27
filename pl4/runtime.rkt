@@ -3,10 +3,7 @@
          racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam racket/gui)
 
 ;; Known Bugs:
-#|
-1. setup events are triplicated
-2. every's don't respond to giving drugs. suspect bad name somewhere...
-|#
+;; every's trigger contiously if the drug is not given. BAD.
 
 (provide 
  ;; from racket
