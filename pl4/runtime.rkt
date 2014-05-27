@@ -277,7 +277,7 @@
     (super-new) 
     (cons! prescription-registry this)
     (define drug-log null)
-    (define (drug-given! d t)
+    (define/public (drug-given! d t)
       (cons! drug-log `(given ,d ,t)))
     (define/public (get-last-time-given d)
       (match d
@@ -605,6 +605,8 @@
   (send-event! `(action (,name ,@args))))
 (define (send-event:set! id v)
   (send-event! `(set ,id ,v)))
+(define (send-event:given! d)
+  (send-event! `(given ,d)))
 
 ;;; sending responses ;;;;;;;;;;;;
 (define responses null)
@@ -750,29 +752,30 @@
   #`(#%top-interaction
      begin
      (send guardian insert-cut!)
-     #,@(syntax-parse stx
-          #:datum-literals (initially devices variables pass change
-                                      view full-view)
-          [(_ initially (variables [id:id val] ...)
-              (devices (name:id [f:id d] ...) ...))
-           #'((set-printer! (new task-list%))
-              (send guardian reset!)
-              (send guardian insert-cut!)
-              (send-event:setup!)
-              (set-binding-old! id val) ...
-              (set-binding-new! id val) ...
-              (let ([h (hash-ref device-registry 'name)])
-                (hash-update! h 'f (const d)) ...)
-              ...
-              (run-events-to-completion!))]
-          [(_ (~or pass change) v ...)
-           #`((send guardian cut-here)
-              #,(rest (syntax->list stx)))]
-          [(_ view)
-           #'((displayln (send guardian trimmed-ouput-log)))]
-          [(_ full-view)
-           #'((displayln (send guardian full-log)))])
-     (when printer (send printer update-tasks))))
+     (begin0
+         #,@(syntax-parse stx
+              #:datum-literals (initially devices variables pass change
+                                          view full-view)
+              [(_ initially (variables [id:id val] ...)
+                  (devices (name:id [f:id d] ...) ...))
+               #'((set-printer! (new task-list%))
+                  (send guardian reset!)
+                  (send guardian insert-cut!)
+                  (send-event:setup!)
+                  (set-binding-old! id val) ...
+                  (set-binding-new! id val) ...
+                  (let ([h (hash-ref device-registry 'name)])
+                    (hash-update! h 'f (const d)) ...)
+                  ...
+                  (run-events-to-completion!))]
+              [(_ (~or pass change) v ...)
+               #`(#,(rest (syntax->list stx))
+                  (run-events-to-completion!))]
+              [(_ view)
+               #'((send guardian trimmed-ouput-log))]
+              [(_ full-view)
+               #'((send guardian full-log))])
+       (when printer (send printer update-tasks)))))
 
 (define task-list%
   (class object%
@@ -784,22 +787,28 @@
     (define/public (update-tasks)
       (for ([r (send guardian trimmed-ouput-log)])
         (match r
-          [(response m _)
+          [(response m `(,_ ... at ,t))
            (displayln m)
            (match m
              [`(give ,d)
-              (add-task! (~a "take " d))]
+              (add-task! (~a "take " d " issued at " t)
+                         (thunk (send-event:given! d)))]
              [`(action ,l)
-              (add-task! (~a "please " l))]
+              (add-task! (~a "please " l " issued at " t))]
              [_ (void)])])))
 
-    (define (add-task! str)
+    (define (add-task! str . extras)
       (new button%
            [label str]
            [parent pane]
            [callback
             (lambda (b e)
-              (send pane delete-child b))]))
+              (send pane delete-child b)
+              (unless (null? extras)
+                (send guardian insert-cut!)
+                (for-each (lambda (f) (f)) extras)
+                (run-events-to-completion!)
+                (update-tasks)))]))
     
     (send frame show #t)))
 ;;; aux ;;;;;;;;;;;;;;;;;;;;;;;;;;;
