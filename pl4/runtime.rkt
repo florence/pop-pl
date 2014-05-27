@@ -2,6 +2,12 @@
 (require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
          racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam racket/gui)
 
+;; Known Bugs:
+#|
+1. setup events are triplicated
+2. every's don't respond to giving drugs. suspect bad name somewhere...
+|#
+
 (provide 
  ;; from racket
  #%datum #%top quote if case cond
@@ -54,7 +60,7 @@
 (define-syntax (generate-resetters stx)
   (syntax-parse stx
     [(_)
-     (with-syntax ([(name ...) org-ids])
+     (with-syntax ([(name ...) (hash-values org-ids)])
        #'(begin (reset-val! name) ...))]))
 (define (reset-val! v)
   (match v
@@ -67,7 +73,7 @@
 (define-syntax (generate-updaters stx)
   (syntax-parse stx
     [(_)
-    (with-syntax ([(name ...) org-ids])
+     (with-syntax ([(name ...) (hash-values org-ids)])
       #'(begin (set-binding-old! name (val-new name)) ...))]))
 
 (define-syntax (? stx)
@@ -123,7 +129,7 @@
            (apply respond-with-action! 'name args)) ...)]))
 ;;; state ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Syntax
-(define-for-syntax org-ids null)
+(define-for-syntax org-ids (make-hash))
 
 ;; some specical structs for bindings
 (struct binding (old new orig) #:mutable)
@@ -176,7 +182,8 @@
 
 (define-for-syntax (add-ids! stxl)
   (for ([n (in-syntax stxl)])
-    (set! org-ids (cons (syntax-local-introduce n) org-ids))))
+    (define id (syntax-local-introduce n))
+    (hash-set! org-ids (syntax->datum n) id)))
 ;;; devices ;;;;;;;;;;;;;;;;;;;;;
 (define device-registry (make-hash))
 (define-syntax (devices stx)
@@ -197,7 +204,7 @@
 (define-syntax (restrict stx)
   (syntax-parse stx
     [(_ body ...)
-     (with-syntax ([(name ...) (map syntax-local-introduce org-ids)])
+     (with-syntax ([(name ...) (map syntax-local-introduce (hash-values org-ids))])
          #'(send guardian add-restriction!
                  (lambda ()
                    (let ([name (val-new name)] ...)
@@ -234,7 +241,7 @@
 (define-syntax (prescribe stx)
   (syntax-parse stx
     [(_ id:id bdy)
-     (with-syntax ([(name ...) (map syntax-local-introduce org-ids)])
+     (with-syntax ([(name ...) (map syntax-local-introduce (hash-values org-ids))])
        #`(define id 
            (new prescription%
                 [body (lambda (p e s d) 
@@ -246,7 +253,8 @@
                             (define (handle-message! e)
                               (match e 
                                 [`(,_ ___ at ,t)
-                                 (unless (eqv? t (current-time))
+                                 (unless (or (eqv? t (current-time))
+                                             (match e [`(inc ,_ ___) #t] [_ #f]))
                                    (error 'time "out of sync"))])
                               (match e
                                 [`(setup at ,t)
@@ -286,7 +294,7 @@
            (filter-map
             (match-lambda 
              [`(given ,(drug what _ _) ,t) t])
-            log))
+            drug-log))
          (and (not (empty? r)) (first r))]))
     (define/public (handle-event e)
       (body this e p d))
@@ -333,7 +341,6 @@
      (with-syntax* ([(state-name ...) (generate-temporaries #'(e ...))]
                     [counter (syntax-local-lift-expression #''(state-name ...))])
        #'(let ([n (lambda () 
-                    (displayln counter)
                     (if (null? (rest counter))
                         (error 'next "no next state")
                         (set! counter (rest counter))))])
@@ -382,7 +389,7 @@
 ;; (boxof drug) -> (maybe/c timestamp)
 (define (get-last-time-given [boxed-drug (current-drug)])
   (define drug (unbox boxed-drug))
-  (send (current-prescription) get-time-last-given drug))
+  (send (current-prescription) get-last-time-given drug))
 
 ;; afters record when the are added, run once, then go away
 (define-syntax (in:after stx)
@@ -560,10 +567,11 @@
            [(response `(set ,id ,v) event)
             (unless (equal? v value)
               (error 'set "duplicate attempts to change ~s to ~s and ~s with providence ~s"
-                     id value v event))])))
+                     id value v event))]
+           [_ (void)])))
      (define/public (handle-event! e)
        (match e
-         [`(inc time to ,t)
+         [`(inc time to ,t at ,_)
           (set! time t)]
          [_ (void)])
        (log-event! e)
@@ -588,8 +596,14 @@
      
      (define/public (reset!)
        (resetter!)
+       (set! time 0)
        (set! log null)))))
 
+(define (reset!)
+  (let loop ()
+    (unless (queue-empty? message-queue)
+      (dequeue! message-queue))
+    (send guardian reset!)))
 ;;; sending messages ;;;;;;;;;;;;;;;;;;;;;
 (define message-queue (make-queue))
 
@@ -624,9 +638,10 @@
 (define-syntax (in:set! stx)
   (syntax-parse stx
     [(_ x:id v)
-     #'(begin
-         (set-binding-new! x v)
-         (respond-with-set! 'x v))]))
+     (with-syntax ([id (hash-ref org-ids (syntax->datum #'x))])
+       #'(begin
+           (set-binding-new! id v)
+           (respond-with-set! 'x v)))]))
 
 
 (define (send-event! m)
@@ -644,25 +659,26 @@
         (event (~optional e1) tests1 ...)
         (event e tests ...) ...)
      #`(module+ test
-         (test-begin
-          (send guardian reset!)
-          (send guardian insert-cut!)
-          (send-event:setup!)
-          (set-binding-old! id val) ...
-          (set-binding-new! id val) ...
-          (let ([h (hash-ref device-registry 'name)])
-            (hash-update! h 'f (const d)) ...) ...
-          #,(or (attribute e1) #'(void))
-          (run-events-to-completion!)
-          tests1 ...
-          (begin
+         (with-handlers ([void (lambda (ex) (reset!) (raise ex))])
+           (test-begin
+            (reset!)
             (send guardian insert-cut!)
-            e
-            (run-events-to-completion!)
-            tests ...)
-          ...)
-         (displayln (reverse (send guardian full-log)))
-         (send guardian reset!))]))
+            (send-event:setup!)
+            (set-binding-old! id val) ...
+            (set-binding-new! id val) ...
+            (let ([h (hash-ref device-registry 'name)])
+              (hash-update! h 'f (const d)) ...) ...
+              #,(or (attribute e1) #'(void))
+              (run-events-to-completion!)
+              tests1 ...
+              (begin
+                (send guardian insert-cut!)
+                e
+                (run-events-to-completion!)
+                tests ...)
+              ...)
+           #;
+           (displayln (reverse (send guardian full-log)))))]))
 
 ;; event calls
 (define (pass t)
@@ -739,7 +755,8 @@
   (let loop ()
     (unless (queue-empty? message-queue)
       (send guardian check-restrictions!)
-      (send guardian handle-event! (dequeue! message-queue))
+      (define m (dequeue! message-queue))
+      (send guardian handle-event! m)
       (loop))))
 
 
@@ -755,11 +772,11 @@
      (begin0
          #,@(syntax-parse stx
               #:datum-literals (initially devices variables pass change
-                                          view full-view)
+                                          view full-view current-time)
               [(_ initially (variables [id:id val] ...)
                   (devices (name:id [f:id d] ...) ...))
                #'((set-printer! (new task-list%))
-                  (send guardian reset!)
+                  (reset!)
                   (send guardian insert-cut!)
                   (send-event:setup!)
                   (set-binding-old! id val) ...
@@ -768,7 +785,7 @@
                     (hash-update! h 'f (const d)) ...)
                   ...
                   (run-events-to-completion!))]
-              [(_ (~or pass change) v ...)
+              [(_ (~or pass change current-time) v ...)
                #`(#,(rest (syntax->list stx))
                   (run-events-to-completion!))]
               [(_ view)
@@ -788,7 +805,6 @@
       (for ([r (send guardian trimmed-ouput-log)])
         (match r
           [(response m `(,_ ... at ,t))
-           (displayln m)
            (match m
              [`(give ,d)
               (add-task! (~a "take " d " issued at " t)
