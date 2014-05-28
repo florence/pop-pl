@@ -285,13 +285,16 @@
     (define/public (drug-given! d t)
       (cons! drug-log `(given ,d ,t)))
     (define/public (get-last-time-given d)
+      (displayln `(,d ,drug-log))
       (match d
         [(drug what how amt)
          (define r
            (filter-map
             (match-lambda 
-             [`(given ,(drug what _ _) ,t) t])
+             [`(given ,(drug (eq what) _ _) ,t) t]
+             [_ #f])
             drug-log))
+         (displayln r)
          (and (not (empty? r)) (first r))]))
     (define/public (handle-event e)
       (body this e p d))
@@ -300,6 +303,7 @@
     (define/public (get-rate) 
       (unbox d))
     (define/public (reset!)
+      (set! drug-log null)
       (set-box! d #f)
       (set-box! p #f))))
 (define (rate [p (current-prescription)])
@@ -331,17 +335,25 @@
          (run)]
         [else (error 'instructions "used out side of prescription")]))
 (define (nerror) (error 'next "used outside of a sequence"))
+(define (reset-seq!) (for ([f seq-resetters]) (f)))
+(define seq-resetters null)
+(define (add-seq! f)
+  (cons! seq-resetters f))
 (define-syntax-parameter next (make-rename-transformer #'nerror))
+(define-syntax-parameter reset (make-rename-transformer #'reset-seq!))
 (define-syntax (seq stx)
   (syntax-parse stx
     [(_ e ...+)
      (with-syntax* ([(state-name ...) (generate-temporaries #'(e ...))]
-                    [counter (syntax-local-lift-expression #''(state-name ...))])
+                    [counter (syntax-local-lift-expression #''(state-name ...))]
+                    [res (syntax-local-lift-expression #'(lambda () (set! counter '(state-name ...))))]
+                    [__ (syntax-local-lift-expression #'(add-seq! res))])
        #'(let ([n (lambda () 
                     (if (null? (rest counter))
                         (error 'next "no next state")
                         (set! counter (rest counter))))])
-           (syntax-parameterize ([next (make-rename-transformer #'n)])
+           (syntax-parameterize ([next (make-rename-transformer #'n)]
+                                 [reset (make-rename-transformer #'res)])
              (case (first counter)
                [(state-name) e] ...))))]))
 (module+ test
@@ -391,9 +403,9 @@
               (set! active #t)]
              [_ (void)])
            (define time (get-last-time-given))
+           (displayln time)
            (when (and active (or (not time) (from t time)))
              (set! active #f)
-             (displayln '(e ...))
              (lift-resulting-checks e ...)
              (void))))]))
 ;; (boxof drug) -> (maybe/c timestamp)
@@ -627,8 +639,9 @@
 (define (reset!)
   (let loop ()
     (unless (queue-empty? message-queue)
-      (dequeue! message-queue))
-    (send guardian reset!)))
+      (dequeue! message-queue)))
+  (send guardian reset!)
+  (reset-seq!))
 ;;; sending messages ;;;;;;;;;;;;;;;;;;;;;
 (define message-queue (make-queue))
 
