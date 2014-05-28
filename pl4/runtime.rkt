@@ -1,9 +1,9 @@
 #lang racket/base
 (require syntax/parse racket/match racket/function racket/class racket/list (for-syntax unstable/sequence racket/match racket/base syntax/parse racket/list racket/syntax)
-         racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam racket/gui)
+         racket/undefined data/queue racket/set rackunit racket/match racket/bool racket/stxparam racket/gui racket/block)
 
 ;; Known Bugs:
-;; every's trigger contiously if the drug is not given. BAD.
+;; every's wont trigger after first dose. BAD.
 
 (provide 
  ;; from racket
@@ -42,7 +42,7 @@
  seq next
  ;; scenarios
  scenario pass in-exact-order exactly called asked-to-give
- with-state change)
+ with-state change given)
 
 ;;; general ;;;;;;;;;;;;;;;;;;
 (define-syntax (in:module-begin stx)
@@ -374,15 +374,28 @@
       (let ([drug (unbox boxed-drug)])
         (respond-with-giving-drug drug))
       (error 'give "no drug to give")))
+(define-syntax (request stx)
+  (syntax-parse stx
+    [(_ d:id f:id)
+     #'(respond-with-request 'd 'f)]))
+(define (mark . v) 
+  (apply respond-with-mark v))
 ;;; everys are based off the last time that drug was given
 (define-syntax (every stx)
   (syntax-parse stx
     [(_ t e ...)
-     #'(lambda ()
-         (define time (get-last-time-given))
-         (when (or (not time) (from t time))
-           (lift-resulting-checks e ...)
-           (void)))]))
+     #'(let ([active #t])
+         (lambda ()
+           (match (current-event)
+             [`(given ,(eq (current-drug)) ,_ ___)
+              (set! active #t)]
+             [_ (void)])
+           (define time (get-last-time-given))
+           (when (and active (or (not time) (from t time)))
+             (set! active #f)
+             (displayln '(e ...))
+             (lift-resulting-checks e ...)
+             (void))))]))
 ;; (boxof drug) -> (maybe/c timestamp)
 (define (get-last-time-given [boxed-drug (current-drug)])
   (define drug (unbox boxed-drug))
@@ -445,7 +458,7 @@
     [(_ e ...)
      #'(begin
         (let ([t e])
-          (when (procedure? e)
+          (when (procedure? t)
             (define s (current-signals))
             (set-box! s (append (unbox s) (list t))))) ...)]))
 ;; number/unit -> timestamp
@@ -500,6 +513,8 @@
 ;; '(give D in response to E)
 ;; '(set X V in response to E)
 ;; '(do (X V ...) in response to E)
+;; '(request X field X in response to E) ; request to update device/field's value
+;; '(mark V ... in response to E)
 ;; the E is called the providence
 ;; with our the 'in response to E' each of these is an action
 
@@ -550,6 +565,10 @@
           (log-response! `(set ,id ,v) e)]
          [`(action (,(? symbol? x) ,v ...) in response to ,e)
           (log-response! `(action (,x ,@v)) e)]
+         [`(request ,(? symbol? d) field ,(? symbol? f) in response to ,e)
+          (log-response! `(request ,d field ,f) e)]
+         [`(mark ,v ... in response to ,e)
+          (log-response! `(mark ,@v) e)]
          [_ (error 'response "unknown response in ~s" r)]))
      
      (define (approve-set! id value event)
@@ -567,15 +586,24 @@
                      id value v event))]
            [_ (void)])))
      (define/public (handle-event! e)
+       (define (run e)
+         (for ([p (reverse prescription-registry)])
+           (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
+           (check-restrictions!)
+           (updater)))
+       (define (crono-loop t)
+         (for ([x (in-range time t (time->seconds (number/unit 10 'minute)))])
+           (set! time x)
+           (run `(inc time to ,x at ,time)))
+         (unless (= time t)
+           (define old time)
+           (set! time t)
+           (run `(inc time to ,time at ,old))))
        (match e
          [`(inc time to ,t at ,_)
-          (set! time t)]
-         [_ (void)])
-       (log-event! e)
-       (for ([p (reverse prescription-registry)])
-         (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
-         (check-restrictions!))
-       (updater))
+          (crono-loop t)]
+         [_ (run e)])
+       (log-event! e))
      
      (define/public (insert-cut!)
        (cons! log (cut-here)))
@@ -632,6 +660,10 @@
   (respond-with! `(give ,d)))
 (define (respond-with-set! id v)
   (respond-with! `(set ,id ,v)))
+(define (respond-with-request id f)
+  (respond-with! `(request ,id field ,f)))
+(define (respond-with-mark . v)
+  (respond-with! `(mark ,@v)))
 (define-syntax (in:set! stx)
   (syntax-parse stx
     [(_ x:id v)
@@ -684,6 +716,8 @@
   (syntax-parse stx
     [(_ d:id f:id v)
      #'(send-event:device-change! 'd 'f v)]))
+(define (given d)
+  (send-event:given! d))
 ;; test forms
 (define-syntax (in-exact-order stx)
   (syntax-parse stx
@@ -700,8 +734,10 @@
 (define-syntax (match-log-against stx)
   (syntax-parse stx
     [(_ p)
-     #'(check-match (reverse (send guardian trimmed-ouput-log))
-                    p)]))
+     #'(check (lambda (v c) (match v [p #t] [_ #f]))
+              (reverse (send guardian trimmed-ouput-log))
+              'p
+              (~v (reverse (send guardian trimmed-ouput-log))))]))
 
 (define-syntax (with-state stx)
   (syntax-parse stx
@@ -765,7 +801,6 @@
 (define-syntax (in:top-interaction stx)
   #`(#%top-interaction
      begin
-     (send guardian insert-cut!)
      (begin0
          #,@(syntax-parse stx
               #:datum-literals (initially devices variables pass change
@@ -783,7 +818,8 @@
                   ...
                   (run-events-to-completion!))]
               [(_ (~or pass change current-time) v ...)
-               #`(#,(rest (syntax->list stx))
+               #`((send guardian insert-cut!)
+                  #,(rest (syntax->list stx))
                   (run-events-to-completion!))]
               [(_ view)
                #'((send guardian trimmed-ouput-log))]
@@ -808,7 +844,27 @@
                          (thunk (send-event:given! d)))]
              [`(action ,l)
               (add-task! (~a "please " l " issued at " t))]
-             [_ (void)])])))
+             [`(request ,d field ,f)
+              (add-field-request d f)]
+             [`(mark ,_ ___) (void)]
+             [`(set ,_ ___) (void)])])))
+    
+    (define (add-field-request d f)
+      (block
+       (define container (new horizontal-panel% [parent pane]))
+       (define button
+         (new button%
+              [parent container]
+              [label (format "what is your current ~a ~a" d f)]
+              [callback 
+               (lambda (b e)
+                 (define v (string->number (send text get-value)))
+                 (when v
+                   (send-event:device-change! d f v)
+                   (send pane delete-child container)))]))
+       (define text
+         (new text-field%
+              [parent container]))))
 
     (define (add-task! str . extras)
       (new button%

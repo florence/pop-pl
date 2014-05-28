@@ -62,7 +62,6 @@
              [opiod? yes])
   (devices)
   )
- ;; we need testing for order in which "simultaneous events" happened
  (event
   (pass (1 hour))
   (in-exact-order
@@ -74,7 +73,14 @@
  (event
   (pass (1 hour))
   ;; assert "no messages sent"
-  (exactly)))
+  (exactly))
+ (event
+  (given (drug "ketorolac" "iv or subcut" (15 mg)))
+  (exactly))
+ (event
+  (pass (6 hours))
+  (exactly
+   (asked-to-give (drug "ibuprofen" "p.o." (600 mg))))))
 
 ;; these should blow up
 (scenario
