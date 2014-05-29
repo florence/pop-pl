@@ -285,7 +285,6 @@
     (define/public (drug-given! d t)
       (cons! drug-log `(given ,d ,t)))
     (define/public (get-last-time-given d)
-      (displayln `(,d ,drug-log))
       (match d
         [(drug what how amt)
          (define r
@@ -294,7 +293,6 @@
              [`(given ,(drug (eq what) _ _) ,t) t]
              [_ #f])
             drug-log))
-         (displayln r)
          (and (not (empty? r)) (first r))]))
     (define/public (handle-event e)
       (body this e p d))
@@ -399,11 +397,10 @@
      #'(let ([active #t])
          (lambda ()
            (match (current-event)
-             [`(given ,(eq (current-drug)) ,_ ___)
+             [`(given ,(eq (unbox (current-drug))) ,_ ___)
               (set! active #t)]
              [_ (void)])
            (define time (get-last-time-given))
-           (displayln time)
            (when (and active (or (not time) (from t time)))
              (set! active #f)
              (lift-resulting-checks e ...)
@@ -718,9 +715,7 @@
                 e
                 (run-events-to-completion!)
                 tests ...)
-              ...)
-           #;
-           (displayln (reverse (send guardian full-log)))))]))
+              ...)))]))
 
 ;; event calls
 (define (pass t)
