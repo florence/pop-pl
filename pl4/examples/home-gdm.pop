@@ -1,6 +1,6 @@
 #lang s-exp "../runtime.rkt"
 
-(imports (please-call-doctor "call yo doc")
+(imports (call-doctor "call yo doc")
          (eat "eat yo food"))
 (devices [glucose (value)])
 
@@ -16,7 +16,7 @@
                       (eat))
             ;; 'get' actually activates on `(device d field f reports ,t)
             (whenever (not (<= (? 100 units) (get glucose value) (? 200 units)))
-                      (please-call-doctor))
+                      (call-doctor))
 
             #;(whenever (action (bedtime))
                       (mark 'bedtime)

@@ -641,7 +641,6 @@
            (updater)))
        (define (chrono-loop t)
          (for ([x (in-range time t (time->seconds (number/unit 10 'minute)))])
-           (displayln x)
            (set! time x)
            (run `(inc time to ,x at ,time)))
          (unless (= time t)
@@ -881,10 +880,11 @@
 (define-syntax (in:top-interaction stx)
   #`(#%top-interaction
      begin
+     (send guardian insert-cut!)
      (begin0
          #,@(syntax-parse stx
               #:datum-literals (initially devices variables pass change
-                                          view full-view current-time)
+                                          view full-view current-time happens)
               [(_ initially (variables [id:id val] ...)
                   (devices (name:id [f:id d] ...) ...))
                #'((set-printer! (new task-list%))
@@ -897,9 +897,8 @@
                     (hash-update! h 'f (const d)) ...)
                   ...
                   (run-events-to-completion!))]
-              [(_ (~or pass change current-time) v ...)
-               #`((send guardian insert-cut!)
-                  #,(rest (syntax->list stx))
+              [(_ (~or pass change current-time happens) v ...)
+               #`(#,(rest (syntax->list stx))
                   (run-events-to-completion!))]
               [(_ view)
                #'((send guardian trimmed-ouput-log))]
@@ -940,11 +939,15 @@
                (lambda (b e)
                  (define v (string->number (send text get-value)))
                  (when v
+                   (send guardian insert-cut!)
                    (send-event:device-change! d f v)
-                   (send pane delete-child container)))]))
+                   (send pane delete-child container)
+                   (run-events-to-completion!)
+                   (update-tasks)))]))
        (define text
          (new text-field%
-              [parent container]))))
+              [parent container]
+              [label ""]))))
 
     (define (add-task! str . extras)
       (new button%
