@@ -509,7 +509,7 @@
     [(number/unit n (or 'hours 'hour))
      (* n
         60 
-        (time->seconds (number/unit n 'minutes)))]
+        (time->seconds (number/unit 1 'minutes)))]
     [(number/unit n (or 'days 'day))
      (* n
         24
@@ -519,7 +519,9 @@
 (module+ test
   (check-equal? (time->seconds (number/unit 3 'days))
                 ;; google says...
-                259200))
+                259200)
+  (check-equal? (time->seconds (number/unit 2 'hours))
+               7200))
 (define-syntax (do-only-once stx) 
   (syntax-parse stx
     [(_ t e ...)
@@ -637,8 +639,9 @@
            (for-each (lambda (x) (handle+aprove-response! x)) (send p handle-event e))
            (check-restrictions!)
            (updater)))
-       (define (crono-loop t)
+       (define (chrono-loop t)
          (for ([x (in-range time t (time->seconds (number/unit 10 'minute)))])
+           (displayln x)
            (set! time x)
            (run `(inc time to ,x at ,time)))
          (unless (= time t)
@@ -647,7 +650,7 @@
            (run `(inc time to ,time at ,old))))
        (match e
          [`(inc time to ,t at ,_)
-          (crono-loop t)]
+          (chrono-loop t)]
          [_ (run e)])
        (log-event! e))
      
