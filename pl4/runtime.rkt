@@ -8,7 +8,7 @@
 (provide 
  ;; from racket
  #%datum #%top quote if case cond
- or and else false true
+ or and else false true not
  ;; overriding racket
  (rename-out [in:module-begin #%module-begin]
              [in:top-interaction #%top-interaction]
@@ -37,12 +37,12 @@
  whenever every
  (rename-out [in:after after])
  do-only-once NO-DRUG
- drug give prn ensure
- rate set-rate!
- seq next
+ drug give prn ensure mark
+ rate set-rate! request
+ seq next action within
  ;; scenarios
- scenario pass in-exact-order exactly called asked-to-give
- with-state change given)
+ scenario pass in-exact-order exactly exactly/no-order called asked-to-give
+ with-state change given happens marked requested)
 
 ;;; general ;;;;;;;;;;;;;;;;;;
 (define-syntax (in:module-begin stx)
@@ -58,7 +58,7 @@
   (syntax-parse stx
     [(_)
      (with-syntax ([(name ...) (hash-values org-ids)])
-       #'(begin (reset-val! name) ...))]))
+       #'(block (reset-val! name) ...))]))
 (define (reset-val! v)
   (match v
     [(binding _ _ o)
@@ -71,7 +71,7 @@
   (syntax-parse stx
     [(_)
      (with-syntax ([(name ...) (hash-values org-ids)])
-      #'(begin (set-binding-old! name (val-new name)) ...))]))
+      #'(block (set-binding-old! name (val-new name)) ...))]))
 
 (define-syntax (? stx)
   (syntax-parse stx
@@ -196,6 +196,7 @@
 (define-syntax (get stx)
   (syntax-parse stx
     [(_ n:id f:id)
+     (lift-handler-pattern #'`(device ,'n field ,'f reports ,_ ___))
      #'(hash-ref (hash-ref device-registry 'n) 'f)]))
 ;;; frame conditions ;;;;;;;;;;;;;;
 (define-syntax (restrict stx)
@@ -378,6 +379,7 @@
          (run)]
         [else
          (error 'begin-drug "used outside of prescription")]))
+
 ;; (maybe/c [boxof (maybe/c drug)]) -> void
 (define (give [boxed-drug (current-drug)])
   (if (and boxed-drug (unbox boxed-drug))
@@ -390,6 +392,13 @@
      #'(respond-with-request 'd 'f)]))
 (define (mark . v) 
   (apply respond-with-mark v))
+(define (within pattern time)
+  (length
+   (filter (match-lambda
+            [(response (eq pattern) _) #t]
+            [(event (eq pattern)) #t]
+            [_ #f])
+           (send guardian full-log))))
 ;;; everys are based off the last time that drug was given
 (define-syntax (every stx)
   (syntax-parse stx
@@ -435,10 +444,32 @@
     (t)
     (check-false r)))
 ;; whenever the condition occurs
+(define-for-syntax handler-patterns (make-parameter #f))
+(define-for-syntax (lift-handler-pattern stx)
+  (define b (handler-patterns))
+  (when b
+    (set-box! b
+              (syntax-parse (unbox b)
+                [([_ #t])
+                 #'([,stx #t] [_ #f])]
+                [([p v] ...)
+                 #'([,stx #t] [p v] ...)]))))
+(define-for-syntax (local-expand/capture-handlers stx)
+  (unless (syntax-transforming?)
+    (error 'local-expand/capture-handlers "not in transformer context"))
+  (parameterize ([handler-patterns (box #'([_ #t]))])
+    (syntax-local-expand-expression stx)
+    (unbox (handler-patterns))))
 (define-syntax (whenever stx)
   (syntax-parse stx
     [(_ test body ...)
-     #'(lambda () (when test (lift-resulting-checks body ...) (void)))]))
+     (with-syntax ([(checks ...) (local-expand/capture-handlers #'(begin body ...))])
+       #'(lambda ()
+           (when (and 
+                  (match (current-event)
+                    checks ...)
+                  test)
+             (lift-resulting-checks body ...) (void))))]))
 ;; keep the given input in the proper state
 (define-syntax (ensure stx)
   (syntax-parse stx
@@ -505,10 +536,16 @@
   (match (current-event)
     [`(prn ,msg _ ...) #t]
     [_ #f]))
-(define (action m)
-  (match (current-event)
-    [`(action (,m) at ,t) #t]
-    [_ #f]))
+(define-syntax (action stx)
+  (syntax-parse stx
+    [(_ e:expr)
+     #'(begin
+         (match (current-event)
+           [`(action ,(eq 'e) at ,_) #t]
+           [_ #f]))]))
+(module+ test
+  (parameterize ([current-event '(action (eat) at 5)])
+    (check-true (action (eat)))))
 ;; an event E is one of:
 ;; '(setup (X V) ... at T)
 ;; '(inc time to T)
@@ -697,7 +734,8 @@
                    (devices (name:id [f:id d] ...) ...))
         (event (~optional e1) tests1 ...)
         (event e tests ...) ...)
-     #`(module+ test
+     (quasisyntax/loc stx
+       (module+ test
          (with-handlers ([void (lambda (ex) (reset!) (raise ex))])
            (test-begin
             (reset!)
@@ -715,7 +753,7 @@
                 e
                 (run-events-to-completion!)
                 tests ...)
-              ...)))]))
+              ...))))]))
 
 ;; event calls
 (define (pass t)
@@ -726,48 +764,63 @@
      #'(send-event:device-change! 'd 'f v)]))
 (define (given d)
   (send-event:given! d))
+(define-syntax  (happens stx)
+  (syntax-parse stx
+    [(_ (n:id e:expr ...))
+     #'(send-event:action! 'n 'e ...)]))
 ;; test forms
 (define-syntax (in-exact-order stx)
   (syntax-parse stx
     [(_ p ...)
-     #'(match-log-against
-         (list _ ___ p ... _ ___))]))
+     (quasisyntax/loc stx
+       (match-log-against
+        (list _ ___ p ... _ ___)))]))
 (define-syntax (exactly stx)
   (syntax-parse stx
     [(_ p ...)
-     #'(match-log-against
-        (list p ...))]))
+     (quasisyntax/loc stx
+       (match-log-against
+        (list p ...)))]))
+(define-syntax (exactly/no-order stx)
+  (syntax-parse stx
+    [(_ p ...)
+     (quasisyntax/loc stx
+       (match-log-against
+        (list-no-order p ...)))]))
 
 ;; helper for building log matching tests
 (define-syntax (match-log-against stx)
   (syntax-parse stx
     [(_ p)
-     #'(check (lambda (v c) (match v [p #t] [_ #f]))
+     (quasisyntax/loc stx
+       (check (lambda (v c) (match v [p #t] [_ #f]))
               (reverse (send guardian trimmed-ouput-log))
               'p
-              (~v (reverse (send guardian trimmed-ouput-log))))]))
+              (~v (reverse (send guardian trimmed-ouput-log)))))]))
 
 (define-syntax (with-state stx)
   (syntax-parse stx
     #:datum-literals (drug-of =)
     [(_) #'(void)]
     [(n (x:id = e) b ...)
-     #'(begin
+     (quasisyntax/loc stx
+       (begin
          (check-equal? (val-old x) e)
-         (n b ...))]
+         (n b ...)))]
     [(n ((drug-of x:id) = d) b ...)
-     #'(begin
+     (quasisyntax/loc stx
+       (begin
          (check-equal? (send x get-drug) d)
-         (n b ...))]))
+         (n b ...)))]))
 
 ;; matchers
 (define-match-expander called
   (lambda (stx)
     (syntax-parse stx
       [(_ (id:id args ...))
-       #'(called (id args ...) _)]
+       (quasisyntax/loc stx (called (id args ...) _))]
       [(_ (id:id args ...) r)
-       #'(response `(action (id ,(eq args) ...)) r)])))
+       (quasisyntax/loc stx (response `(action (id ,(eq args) ...)) r))])))
 (module+ test
   (check-match (response `(action (a 1 2 3)) 'whatever)
                (called (a 1 2 3))))
@@ -776,17 +829,33 @@
   (lambda (stx)
     (syntax-parse stx
       [(n d)
-       #'(n d _)]
+       (quasisyntax/loc stx (n d _))]
       [(_ d r)
-       #'(response `(give ,(eq d)) r)])))
+       (quasisyntax/loc stx (response `(give ,(eq d)) r))])))
 (module+ test
   (check-match (response `(give 1) 'whatever)
                (asked-to-give 1)))
+(define-match-expander marked
+  (lambda (stx)
+    (syntax-parse stx
+      [(_ e:expr)
+       (quasisyntax/loc stx (response `(mark ,(eq e)) _))])))
+(module+ test
+  (check-match (response '(mark (eating)) 'whatever)
+               (marked '(eating))))
+(define-match-expander requested
+  (lambda (stx)
+    (syntax-parse stx
+      [(_ d:id f:id)
+       (quasisyntax/loc stx (response `(request ,'d field ,'f) _))])))
+(module+ test
+  (check-match (response '(request a field b) 'whatever)
+               (requested a b)))
 (define-match-expander eq 
   (lambda (stx)
     (syntax-parse stx
       [(_ v)
-       #'(app (curry equal? v) #t)])))
+       (quasisyntax/loc stx (app (curry equal? v) #t))])))
 
 (module+ test
   (check-match 2
