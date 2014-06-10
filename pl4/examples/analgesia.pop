@@ -11,14 +11,12 @@
          (variables yes)
          (also-allows no)])
 
+(devices [patient-status (oral-meds?)])
+
 (prevent (adjuvant-type . is . 'off)
          whenever
          (opiod? . is . yes))
 (require (opiod? . is . yes))
-;; devices are READ ONLY (for now)
-#;
-(devices
- [pain-meter (score)])
 
 (prescribe discontinue 
            (instructions
@@ -37,7 +35,7 @@
       (do-only-once yes (give))
       (after (6 hours) (next)))
      ;; TODO: should be a device
-     (if (prn "is patient unable to take oral meds?")
+     (if (not (get patient-status oral-meds?))
          (begin-drug
           (drug "ketorolac" "iv or subcut" (? 15 mg))
           (every (6 hours) (give))
@@ -60,7 +58,7 @@
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? yes])
-  (devices)
+  (devices [patient-status (oral-meds? yes)])
   )
  (event
   (pass (1 hour))
@@ -83,11 +81,11 @@
    (asked-to-give (drug "ibuprofen" "p.o." (600 mg))))))
 
 ;; these should blow up
-(scenario
+#;(scenario
  (initially (variables)
             (devices))
  (event))
-(scenario 
+#;(scenario 
  (initially
   (variables [adjuvant-type 'nsaid]
              [opiod? no])
