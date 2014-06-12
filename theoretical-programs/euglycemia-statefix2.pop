@@ -1,0 +1,35 @@
+#lang pop-pl
+
+running := boolean defaults true
+reader-value := extern(integer)
+reader-date  := extern(date)
+feeding-tube := extern(`working | `broken)
+insulin-infustion := extern(`working | `broken)
+glucose-reader-rate := time
+
+prescription insulin:
+  // these two cases overlap
+  in running = true; feeding-tube = `broken :
+     drug = ("insulin", "i.v.", 1 ml/hour)
+  in running = true; insulin.rate < 80 ml/hour :
+     drug = ("insulin", "i.v.", tube.drug * 42)
+     ensure glucose-reader-rate = 2 hours 
+  //how do we else?
+  in running = true:
+     drug = ("insulin", "i.v.", 80 ml/hour)
+
+prescription tube:
+   in *:
+      drug = ("feeding tube slop", "tube", 80 ml/hour)
+      whenever (feeding-tube = `broken) {
+          tube.rate -> 20 ml/hour
+          glucose-reader-rate -> 2 hours
+      } 
+
+prescription safeguards:
+   in *:
+      after (16 hours) { running -> false }
+      whenever (glucose-reader-rate from reader-date) { request(reader-value,reader-date) }
+      whenever (reader-value < 60) { hypoglycemia-notification-protocol() }
+      whenever (reader-value < 40) { hypoglycemia-resucitation-protocol() }
+     
