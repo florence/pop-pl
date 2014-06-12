@@ -8,19 +8,16 @@
            (instructions
             ;; need a global context/prescription to hang these on
             (whenever (action (eating))
-                      
-                      
                       (mark 'meal)
-                      (request glucose value
-                               #:grace (10 minutes)
-                               #:fail ???)
+                      (request glucose value)
                       (after (2 hours)
-                             (request glucose value
-                                      #:grace (10 minutes)
-                                      #:fail ???)))
+                             (request glucose value)))
             ;; 'get' actually activates on `(device d field f reports ,t)
-            (whenever (not (<= (? 100 units) (get glucose value) (? 200 units)))
-                      (call-doctor))))
+            (whenever ((get glucose value) . <= . (? 70 units))
+                      (request glucose value)
+                      (give (drug "glucose tab" "oral" (2 tabs)))
+                      (after (15 minutes)
+                             (request glucose value)))))
 
 
 (scenario

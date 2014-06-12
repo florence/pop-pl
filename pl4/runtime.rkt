@@ -380,10 +380,10 @@
         [else
          (error 'begin-drug "used outside of prescription")]))
 
-;; (maybe/c [boxof (maybe/c drug)]) -> void
+;; (U (maybe/c [boxof (maybe/c drug)]) drug) -> void
 (define (give [boxed-drug (current-drug)])
-  (if (and boxed-drug (unbox boxed-drug))
-      (let ([drug (unbox boxed-drug)])
+  (if boxed-drug
+      (let ([drug (if (box? boxed-drug) (unbox boxed-drug) boxed-drug)])
         (respond-with-giving-drug drug))
       (error 'give "no drug to give")))
 (define-syntax (request stx)
