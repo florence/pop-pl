@@ -1,6 +1,6 @@
 #lang pop-pl
 
-state := initial(nsaid | `non-nsaid) | `off
+adjuv-type := initial(nsaid | `non-nsaid) | `off
    where
    nsaid := seq(`initial,`later)
 
@@ -11,36 +11,38 @@ prescription stop:
       initially { stop("opiod","nsaid") }
 
 prescription adjuv:
-   in state = `initial :
-      drug := ("ketorolac","iv or subcut",10 mg)
-      intially { give() }
-      after (6 hours) { nsaid -> `later }
+   drug := (string,string,milligrams) | n/a -> n/a
+   in adjuv-type = `initial :
+      // actually scoped to 'prescription' do we want more local variables...?
+      drug -> ("ketorolac","iv or subcut",10 mg)
+      intially { give(drug) }
+      after (6 hours) { adjuv-type -> `later }
    
-   in state = `later; npo? = `npo :
-      drug := ("ketorolac","iv or subcut",10 mg)
-      every (6 hours) { give() }
+   in adjuv-type = `later; npo? = `npo :
+      drug -> ("ketorolac","iv or subcut",10 mg)
+      every (6 hours) { give(drug) }
       after (3 days) { adjuv-type -> `non-nsaid }
    
-   in state = `later; npo? = `po :
-      drug := ("iburpofen","po",300 mg)
-      every (6 hours) { give() }
+   in adjuv-type = `later; npo? = `po :
+      drug -> ("iburpofen","po",300 mg)
+      every (6 hours) { give(drug) }
       after (3 days) { adjuv-type -> `off }
    
-   in state = `non-nsaid :
-      drug := ("acitamonphen","rectally or po",900 mg)
-      every (6 hours) { give() }
-      after (3 days) { nsaid -> `off }
+   in adjuv-type = `non-nsaid :
+      drug -> ("acitamonphen","rectally or po",900 mg)
+      every (6 hours) { give(drug) }
+      whenever (prn("done")) { adjuv-type -> `off }
    
-   in state = `off :
-     drug = n/a
+   in adjuv-type = `off :
+     drug -> n/a
 
-scenario with state = nsaid; npo? = npo :
+scenario with adjuv-type = nsaid; npo? = npo :
    event pass(1 hour):
       in-exact-order:
         called: stop("opiod","nsaid")
         asked-to-give: ("ketorolac","iv or subcut",10 mg)
-      with-state: 
-         state = nsaid
+      with-adjuv-type: 
+         adjuv-type = nsaid
          adjuv giving ("ketorolac","iv or subcut",10 mg)
    event pass(1 hour):
       exactly:

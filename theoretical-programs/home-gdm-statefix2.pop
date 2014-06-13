@@ -8,12 +8,14 @@ prescription main:
       whenever(action(eating())) {
           mark(`meal)
           request(glucose-value)
-          after (2 hours) {
-              request(glucose-value)
-          }
+          after (2 hours) { request(glucose-value) }
       }
       whenever(glucose-value <= (? 70 units)) {
           request(glucose-value)
           give("glucose-tab","oral",2 tabs)
           after(15 minutes) { request(glucose-value) }
+          mark(`hypoglycemic)
+      }
+      whenever(within(`hypoglycemic,15 minutes) >= 3) {
+          call-doctor()
       }

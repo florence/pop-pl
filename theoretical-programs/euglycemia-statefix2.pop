@@ -1,6 +1,6 @@
 #lang pop-pl
 
-running := boolean defaults true
+running := boolean -> true
 reader-value := extern(integer)
 reader-date  := extern(date)
 feeding-tube := extern(`working | `broken)
