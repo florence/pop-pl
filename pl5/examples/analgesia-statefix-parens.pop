@@ -1,7 +1,7 @@
 #lang typed/racket
 ;#lang s-exp "../runtime.rkt"
 (require "../runtime.rkt")
-;(import (stop "stop all of these drugs or these drug catagories"))
+(import (stop "stop all of these drugs or these drug catagories"))
 
 (def state : (U 'off (U #;initial nsaid 'non-nsaid
                            ))
@@ -10,7 +10,6 @@
 (def npo? : (U #;extern (U 'po 'npo)
              ))
 
-#;
 (define/prescription in:stop
   (in * (stop "opiod" "nsaid")))
 
