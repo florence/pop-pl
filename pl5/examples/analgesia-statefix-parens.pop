@@ -1,0 +1,44 @@
+#lang typed/racket
+;#lang s-exp "../runtime.rkt"
+(require "../runtime.rkt")
+;(import (stop "stop all of these drugs or these drug catagories"))
+
+(def state : (U 'off (U #;initial nsaid 'non-nsaid
+                           ))
+     (where nsaid (U #;seq 'initial 'later
+                         )))
+(def npo? : (U #;extern (U 'po 'npo)
+             ))
+
+#;
+(define/prescription in:stop
+  (in * (stop "opiod" "nsaid")))
+
+(define/prescription adjuv
+  (def drug : (U (List String String Num) N/A) -> n/a)
+  (in (= state 'initial)
+      (initially
+       (set! drug (list "ketoroloc" "iv or subcut" (? 10 mg)))
+       (give drug))
+      (after (6 hours)
+             (set! state 'non-nsaid)))
+  (in (and (= state 'later)
+           (= npo? 'npo))
+      (initially
+       (set! drug (list "ketoroloc" "iv or subcut" (? 10 mg))))
+      (every (6 hours) drug (give drug))
+      (after (3 days) (set! state 'non-nsaid)))
+  (in (and (= state 'later)
+           (= npo? 'po))
+      (initially
+       (set! drug (list "ibuprofen" "po" (? 300 mg))))
+      (every (6 hours) drug (give drug))
+      (after (3 days) (set! state 'non-nsaid)))
+  (in (= state 'non-nsaid)
+      (initially
+       (set! drug (list "acitaminphen" "rectally or po" (? 900 mg))))
+      (every (6 hours) drug (give drug))
+      (whenever (prn "done") (set! state 'off)))
+  (in (= state 'off)
+      (initially
+       (set! drug n/a))))
