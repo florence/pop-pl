@@ -1,0 +1,98 @@
+#lang pop-pl
+
+(import stop)
+
+(define/state analgesic-type
+  'initial 'later 'non-nsaid 'off)
+(define/state npo?
+  'npo 'po)
+
+
+(define/hander (discontinue old new evt)
+  (values Δ0
+          (if (not (initial? old))
+              null
+              (let ()
+                (define (do _ __ ___)
+                  (set! do no-op)
+                  (values Δ0 (list (stop "stuff"))))
+                (lambda x (apply do x))))))
+
+
+(define/hander (initial old new evt)
+  (define (m? state)
+    (match? (hash-table (analgesic-type 'initial) _ ...)
+            state))
+  (if (not
+       (and
+        (not (m? old))
+        (m? new)))
+      (no-op)
+      (values
+       Δ0
+       (list (give "some-drug")
+             (make-new-handler
+              (let ([t (+ (current-time new) (? 6 hours))])
+                (lambda (old new _)
+                  (if (not
+                       (and (before? old t)
+                            (after? new t)))
+                      (no-op)
+                      (value (update analgesic-type 'later)
+                             null)))))))))
+
+(define/handler (after/transitions old new evt)
+  (define (m? state)
+    (match? (hash-table (analgesic-type 'later)
+                        _ ...)
+            state))
+  (if (not (and (not (m? old))
+                (m? new)))
+      (no-op)
+      (values 
+       Δ0
+       (let ([t (+ (current-time new) (3 days))])
+         (lambda (old new _)
+           (if (not 
+                (and (before? old t)
+                     (after? new t))
+                (no-op)
+                (value
+                 (update analgesic-type 'non-nsaid)
+                 null))))))))
+
+(define/hander (later+npo/whenevers _ state event)
+  (define/state last-time time? -> 0)
+  (match new
+    [(hash-table
+      (npo? 'npo)
+      (analgesic-type 'later)
+      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+      _ ...)
+     (values Δ0
+             (give "something1"))]
+    [_ (no-op)]))
+
+(define/hander (later+po/whenevers _ state event)
+  (define/state last-time time? -> 0)
+  (match new
+    [(hash-table
+      (npo? 'po)
+      (analgesic-type 'later)
+      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+      _ ...)
+     (values Δ0
+             (give "something2"))]
+    [_ (no-op)]))
+
+(define/handler (non-nsaid _ state event)
+  (define/state last-time time? -> 0)
+  (match new
+    [(hash-table
+      (npo? 'po)
+      (analgesic-type 'later)
+      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+      _ ...)
+     (values Δ0
+             (give "something3"))]
+    [_ (no-op)]))
