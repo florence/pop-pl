@@ -21,7 +21,7 @@
 
 (define/hander (initial old new evt)
   (define (m? state)
-    (match? (hash-table (analgesic-type 'initial) _ ...)
+    (match? (state (analgesic-type 'initial) _ ...)
             state))
   (if (not
        (and
@@ -43,7 +43,7 @@
 
 (define/handler (after/transitions old new evt)
   (define (m? state)
-    (match? (hash-table (analgesic-type 'later)
+    (match? (state (analgesic-type 'later)
                         _ ...)
             state))
   (if (not (and (not (m? old))
@@ -64,7 +64,7 @@
 (define/hander (later+npo/whenevers _ state event)
   (define/state last-time time? -> 0)
   (match new
-    [(hash-table
+    [(state
       (npo? 'npo)
       (analgesic-type 'later)
       (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
@@ -76,7 +76,7 @@
 (define/hander (later+po/whenevers _ state event)
   (define/state last-time time? -> 0)
   (match new
-    [(hash-table
+    [(state
       (npo? 'po)
       (analgesic-type 'later)
       (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
@@ -88,7 +88,7 @@
 (define/handler (non-nsaid _ state event)
   (define/state last-time time? -> 0)
   (match new
-    [(hash-table
+    [(state
       (npo? 'po)
       (analgesic-type 'later)
       (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
