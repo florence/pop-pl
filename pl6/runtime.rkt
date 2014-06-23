@@ -3,7 +3,7 @@
 (require racket/undefined)
 
 (provide define/state define/external update define/handler state
-         new-handler give extern given import)
+         new-handler give extern given import Δ0)
 ;;;;; state
 (define state-vars null)
 (define state-old (hash))
@@ -71,6 +71,8 @@
            (msg 'id args)) ...)]))
 
 ;;;;; evaluation
+(define Δ0 (hash))
+
 (define (evaluate event)
   (evaluate-event! event)
   (evaluate-responses (evalute-handlers event)))
