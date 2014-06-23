@@ -1,22 +1,21 @@
-#lang pop-pl
+#lang racket
+(require "../runtime.rkt")
 
 (import stop)
 
 (define/state analgesic-type
   'initial 'later 'non-nsaid 'off)
-(define/state npo?
+(define/external npo?
   'npo 'po)
 
 
 (define/hander (discontinue old new evt)
-  (values Δ0
-          (if (not (initial? old))
-              null
-              (let ()
-                (define (do _ __ ___)
-                  (set! do no-op)
-                  (values Δ0 (list (stop "stuff"))))
-                (lambda x (apply do x))))))
+  (define/state done boolean? -> #f)
+  (match new 
+    [(state (done #f) _ ...)
+     (values (update done #t)
+             (list (stop "stuff")))]
+    [_ no-op]))
 
 
 (define/hander (initial old new evt)
@@ -31,7 +30,7 @@
       (values
        Δ0
        (list (give "some-drug")
-             (make-new-handler
+             (new-handler
               (let ([t (+ (current-time new) (? 6 hours))])
                 (lambda (old new _)
                   (if (not
@@ -44,7 +43,7 @@
 (define/handler (after/transitions old new evt)
   (define (m? state)
     (match? (state (analgesic-type 'later)
-                        _ ...)
+                   _ ...)
             state))
   (if (not (and (not (m? old))
                 (m? new)))
@@ -70,7 +69,7 @@
       (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
       _ ...)
      (values Δ0
-             (give "something1"))]
+             (list (give "something1")))]
     [_ (no-op)]))
 
 (define/hander (later+po/whenevers _ state event)
@@ -82,7 +81,7 @@
       (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
       _ ...)
      (values Δ0
-             (give "something2"))]
+             (list (give "something2")))]
     [_ (no-op)]))
 
 (define/handler (non-nsaid _ state event)
@@ -94,5 +93,5 @@
       (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
       _ ...)
      (values Δ0
-             (give "something3"))]
+             (list (give "something3")))]
     [_ (no-op)]))
