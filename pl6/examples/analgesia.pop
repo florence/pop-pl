@@ -1,7 +1,7 @@
 #lang racket
 (require "../runtime.rkt")
 
-(import stop)
+(import stop give)
 
 (define/state analgesic-type
   'initial 'later 'non-nsaid 'off)

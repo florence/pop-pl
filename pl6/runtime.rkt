@@ -50,18 +50,17 @@
 (define (add-handler! f)
   (cons! handlers f))
 ;;;;; messages
-;; event is one of:
+;; Event is one of:
 ;; (extern Symbol Any)
 ;; (given Any)
 (struct extern (id value) #:transparent)
 (struct given (drug) #:transparent)
 
-;; response is one of:
+;; Response is one of:
 ;; (new-handler Handler)
 ;; (give Any)
 ;; (msg Symbol (Listof Any))
 (struct new-handler (f))
-(struct give (drug) #:transparent)
 (struct msg (id value) #:transparent)
 (define-syntax (import stx)
   (syntax-parse stx
@@ -73,16 +72,22 @@
 ;;;;; evaluation
 (define Δ0 (hash))
 
+;; Event -> [Listof Response]
+;; run this event through the system
 (define (evaluate event)
   (evaluate-event! event)
   (evaluate-responses (evalute-handlers event)))
 
+;; Event -> Void
+;; preform any internal mutation required for the event
 (define (evaluate-event! event)
   (match event
     [(extern id value)
      (set! state-new (hash-update state-new id (const value)))]
     [_ (void)]))
 
+;; Event -> [Listof Response]
+;; run the handlers over the event
 (define (evaluate-handlers event)
   (define-values (updates messages)
     (for/fold ([update (hash)] [messages null]) ([h handlers])
@@ -91,13 +96,19 @@
   (set! state-old state-new)
   (set! state-new (replace updates state-new))
   messages)
+;; Hash Hash -> Hash
+;; copies all values from u2 to u1 using 'update'
 (define (merge u1 u2)
   (for/fold ([merged u1]) ([(id value) (in-hash u2)])
-    (update id value merged)))
+    (in:update id value merged)))
+;; Hash Hash -> Hash
+;; like merge but uses hash-set
 (define (replace update current)
   (for/fold ([result current]) ([(id value) (in-hash update)])
     (hash-set result id value)))
 
+;; [Listof Response] -> [Listof Response]
+;; Evaluate and remove any internal only messages. the rest are outgoing mail
 (define (evaluate-responses rs)
   (for/fold ([outgoing null]) ([resp rs])
     (match resp 
