@@ -10,12 +10,10 @@
 
 
 (define/hander (discontinue old new evt)
-  (define/state done boolean? -> #f)
-  (match new 
-    [(state (done #f) _ ...)
-     (values (update done #t)
-             (list (stop "stuff")))]
-    [_ no-op]))
+  (values Δ0
+          (list
+           (stop "stuff")
+           (remove-handler discontinue))))
 
 
 (define/hander (initial old new evt)
@@ -30,7 +28,7 @@
       (values
        Δ0
        (list (give "some-drug")
-             (new-handler
+             (new-handler initial2
               (let ([t (+ (current-time new) (? 6 hours))])
                 (lambda (old new _)
                   (if (not
@@ -38,9 +36,9 @@
                             (after? new t)))
                       (no-op)
                       (value (update analgesic-type 'later)
-                             null)))))))))
+                             (remove-handler initial2))))))))))
 
-(define/handler (after/transitions old new evt)
+(define/handler (later/transitions old new evt)
   (define (m? state)
     (match? (state (analgesic-type 'later)
                    _ ...)
@@ -50,48 +48,73 @@
       (no-op)
       (values 
        Δ0
-       (let ([t (+ (current-time new) (3 days))])
-         (lambda (old new _)
-           (if (not 
-                (and (before? old t)
-                     (after? new t))
-                (no-op)
-                (value
-                 (update analgesic-type 'non-nsaid)
-                 null))))))))
+       (list
+        (new-handler after2
+         (let ([t (+ (current-time new) (3 days))])
+           (lambda (old new _)
+             (if (not 
+                  (and (before? old t)
+                       (after? new t))
+                  (no-op)
+                  (value
+                   (update analgesic-type 'non-nsaid)
+                   (remove-handler after2)))))))))))
 
-(define/hander (later+npo/whenevers _ state event)
+(define/hander (later+npo/whenevers _ st event)
   (define/state last-time time? -> 0)
-  (match new
-    [(state
-      (npo? 'npo)
-      (analgesic-type 'later)
-      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
-      _ ...)
-     (values Δ0
-             (list (give "something1")))]
-    [_ (no-op)]))
+  (define drug "something1")
+  (define state
+    (match event
+      [(given (eq drug))
+       (update last-time (current-time st))]
+      [_ Δ0]))
+  (define messages
+    (match st
+      [(state
+        (npo? 'npo)
+        (analgesic-type 'later)
+        (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+        _ ...)
+       (values Δ0
+               (list (give drug)))]
+      [_ (no-op)]))
+  (values state messages))
 
-(define/hander (later+po/whenevers _ state event)
+(define/hander (later+po/whenevers _ st event)
   (define/state last-time time? -> 0)
-  (match new
-    [(state
-      (npo? 'po)
-      (analgesic-type 'later)
-      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
-      _ ...)
-     (values Δ0
-             (list (give "something2")))]
-    [_ (no-op)]))
+  (define drug "something2")
+  (define state
+    (match event
+      [(given (eq drug)) 
+       (update last-time (current-time st))]
+      [_ Δ0]))
+  (define messages 
+    (match st 
+      [(st
+        (npo? 'po)
+        (analgesic-type 'later)
+        (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+        _ ...)
+       (values Δ0
+               (list (give drug)))]
+      [_ (no-op)]))
+  (values state messages))
 
-(define/handler (non-nsaid _ state event)
+(define/handler (non-nsaid _ st event)
   (define/state last-time time? -> 0)
-  (match new
-    [(state
-      (npo? 'po)
-      (analgesic-type 'later)
-      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
-      _ ...)
-     (values Δ0
-             (list (give "something3")))]
-    [_ (no-op)]))
+  (define drug "something3")
+  (define state
+    (match event
+      [(given (eq drug)) 
+       (update last-time (current-time st))]
+      [_ Δ0]))
+  (define messages
+    (match st
+      [(state
+        (npo? 'po)
+        (analgesic-type 'later)
+        (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+        _ ...)
+       (list (give drug))]
+      [_ null]))
+  (values state messages))
