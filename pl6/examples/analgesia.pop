@@ -8,13 +8,10 @@
 (define/external npo?
   'npo 'po)
 
-
 (define/hander (discontinue old new evt)
-  (values Δ0
-          (list
-           (stop "stuff")
-           (remove-handler discontinue))))
-
+  (list
+   (stop "stuff")
+   (remove-handler discontinue)))
 
 (define/hander (initial old new evt)
   (define (m? state)
@@ -24,19 +21,17 @@
        (and
         (not (m? old))
         (m? new)))
-      (no-op)
-      (values
-       Δ0
-       (list (give "some-drug")
-             (new-handler initial2
-              (let ([t (+ (current-time new) (? 6 hours))])
-                (lambda (old new _)
-                  (if (not
-                       (and (before? old t)
-                            (after? new t)))
-                      (no-op)
-                      (value (update analgesic-type 'later)
-                             (remove-handler initial2))))))))))
+      null
+      (list (give "some-drug")
+            (new-handler initial2
+             (let ([t (+ (current-time new) (? 6 hours))])
+               (lambda (old new _)
+                 (if (not
+                      (and (before? old t)
+                           (after? new t)))
+                     null
+                     (list (update analgesic-type 'later)
+                           (remove-handler initial2)))))))))
 
 (define/handler (later/transitions old new evt)
   (define (m? state)
@@ -45,20 +40,18 @@
             state))
   (if (not (and (not (m? old))
                 (m? new)))
-      (no-op)
-      (values 
-       Δ0
-       (list
-        (new-handler after2
-         (let ([t (+ (current-time new) (3 days))])
-           (lambda (old new _)
-             (if (not 
-                  (and (before? old t)
-                       (after? new t))
-                  (no-op)
-                  (value
-                   (update analgesic-type 'non-nsaid)
-                   (remove-handler after2)))))))))))
+      null
+      (list
+       (new-handler after2
+        (let ([t (+ (current-time new) (3 days))])
+          (lambda (old new _)
+            (if (not 
+                 (and (before? old t)
+                      (after? new t))
+                 null
+                 (list
+                  (update analgesic-type 'non-nsaid)
+                  (remove-handler after2))))))))))
 
 (define/hander (later+npo/whenevers _ st event)
   (define/state last-time time? -> 0)
@@ -66,8 +59,8 @@
   (define state
     (match event
       [(given (eq drug))
-       (update last-time (current-time st))]
-      [_ Δ0]))
+       (list (update last-time (current-time st)))]
+      [_ null]))
   (define messages
     (match st
       [(state
@@ -75,10 +68,9 @@
         (analgesic-type 'later)
         (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
         _ ...)
-       (values Δ0
-               (list (give drug)))]
-      [_ (no-op)]))
-  (values state messages))
+       (list (give drug))]
+      [_ null]))
+  (append state messages))
 
 (define/hander (later+po/whenevers _ st event)
   (define/state last-time time? -> 0)
@@ -86,19 +78,18 @@
   (define state
     (match event
       [(given (eq drug)) 
-       (update last-time (current-time st))]
-      [_ Δ0]))
+       (list (update last-time (current-time st)))]
+      [_ null]))
   (define messages 
     (match st 
-      [(st
+      [(state
         (npo? 'po)
         (analgesic-type 'later)
         (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
         _ ...)
-       (values Δ0
-               (list (give drug)))]
-      [_ (no-op)]))
-  (values state messages))
+       (list (give drug))]
+      [_ null]))
+  (append state messages))
 
 (define/handler (non-nsaid _ st event)
   (define/state last-time time? -> 0)
@@ -106,8 +97,8 @@
   (define state
     (match event
       [(given (eq drug)) 
-       (update last-time (current-time st))]
-      [_ Δ0]))
+       (list (update last-time (current-time st)))]
+      [_ null]))
   (define messages
     (match st
       [(state
@@ -117,4 +108,4 @@
         _ ...)
        (list (give drug))]
       [_ null]))
-  (values state messages))
+  (append state messages))
