@@ -1,7 +1,7 @@
 #lang racket
 (require redex)
 
-(define-syntax quasiquote (make-rex-transformer #'term))
+(define-syntax quasiquote (make-rename-transformer #'term))
 
 (define-language pop-pl
   (P (imports definitions ...))
@@ -50,7 +50,7 @@
   (x variable-not-otherwise-mentioned))
 
 (define-extended-language pop-pl-eval pop-pl
-  (HM (S msg ΔS (msg ...)))
+  (HM (S msg E ΔS (msg ...)))
   (ΔS (H ((x v) ...)))
   (S (H state state))
   (H ((x h) ...))
@@ -65,14 +65,31 @@
   prepair : P -> (H Σ state)
   [(prepair P) (prepair* P (() () (st)))])
 (define-metafunction pop-pl-eval
-  prepair* : P (H Σ state) -> (H Σ state)
+  prepair* : P (H state) -> S
   )
 
+(define-metafunction pop-pl-eval
+  eval : S message -> (S (message ...))
+  [(eval S msg)
+   ((apply-ΔS S ΔS) (msg_r ...))
+   (where ((() _ _) _ v ΔS (msg_r ...))
+          ,(apply-reduction-relation* R
+                                      `(S msg VOID (H ()) ())))
+   (where (H _ _) S)])
 
 (define-metafunction pop-pl-eval
-  eval : H Σ state state message -> (state (message ...)))
+  apply-ΔS : S ΔS -> S
+  [(apply-ΔS (_ _ state_1) (H_2 state_2))
+   (H_2 state_1 (overwrite-state state_1 state_2))])
+(define-metafunction pop-pl-eval
+  overwrite-state : state ((x v) ...) -> state
+  [(overwrite-state state ()) state]
+  [(overwrite-state (st (x_1 v_1) ... (x _) (x_2 v_2) ...)
+                    ((x v) (x_3 v_3) ...))
+   (overwrite-state (st (x_1 v_1) ... (x v) (x_2 v_2) ...)
+                    ((x_3 v_3) ...))])
 
-(define R_event
+(define R
   (reduction-relation
    pop-pl-eval
    #:domain HM
@@ -116,7 +133,10 @@
          (in-hole E VOID)
          (H ((x v) (x_1 v_1) ...))
          (msg_r ...))
-        (side-condition (not (member `x `(x_1 ...))))
+        (where (_ _ (st (x_s v_s) ...)) S)
+        (side-condition (and
+                         (member `x `(x_s ...))
+                         (not (member `x `(x_1 ...)))))
         δ_update)
    (--> ((((x_1 h_1) ...) state_1 state_2) 
          msg_e
