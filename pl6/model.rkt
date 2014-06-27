@@ -57,7 +57,10 @@
      (match E [e e] ...)))
 
 (define-metafunction pop-pl-eval
-  prepair : P -> (H Σ state))
+  prepair : P -> (H Σ state)
+  [(prepair P) (prepair* P (() () (st)))])
+(define-metafunction pop-pl-eval
+  prepair* : P (H Σ state) -> (H Σ state))
 
 (define-metafunction pop-pl-eval
   eval : H Σ state state message -> (state (message ...)))
@@ -107,12 +110,13 @@
         (in-hole HM e_1)
         (side-condition (not (equal? `v 0)))
         if!0)
-   ;; uhh... i dun ooooo
    (--> (H (in-hole E (match v [e_p e_r] ...)) ((x_s v_s) ...) any ...)
         ;; -- to --
-        ;; magic goes here
-        (H (in-hole E ) ((x_r v_r) ... (x_s v_s) ...) any ...)
-        (where (#f ... (((x_r v_r) ...) e) any ...))
+        (H (in-hole E e) ((x_r v_r) ... (x_s v_s) ...) any ...)
+        (where (#f ...
+                (((x_r v_r) ...) e)
+                any ...)
+               ,(raw-match* `v `(e_ps ...) `(e_es ...)))
         match)))
 
 ;; ... -> (Listof (U (list Σ e) #f))
@@ -121,7 +125,11 @@
 ;; ... -> (U (list Σ e) #f)
 (define (raw-match v p e)
   ;; some magic will go here eventually
-  )
+  (match (list v p)
+    [(list x (? p symbol?))
+     (list (list p x))]
+    [`((state x ...) (state y ...))
+     ]))
 
 (define R_messages
   (reduction-relation
