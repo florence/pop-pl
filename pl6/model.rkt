@@ -9,15 +9,10 @@
   (import (imports x ...))
   (definition 
     (define/handler (x x x x) 
-      state-def+value ...
+      state-def ...
       e)
-    (define/external x e ...)
     state-def)
-  (state-def
-   (define/state x e ...)
-   state-def+value)
-  (state-def+value
-   (define/state x e ... -> e))
+  (state-def (define/state x e ... -> e))
   ;; expressions
   (e x
      v
@@ -34,7 +29,7 @@
       eq?)
   (v state
      (lambda (x ...) 
-       state-def+value ...
+       state-def ...
        e)
      (quote x)
      VOID
@@ -66,7 +61,10 @@
   [(prepair P) (prepair* P (() () (st)))])
 (define-metafunction pop-pl-eval
   prepair* : P (H state) -> S
-  )
+  [])
+(define-metafunction pop-pl-eval
+  prepair-e : e -> state
+  [])
 
 (define-metafunction pop-pl-eval
   eval : S message -> (S (message ...))
