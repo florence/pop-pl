@@ -1,111 +1,166 @@
 #lang racket
 (require "../runtime.rkt")
 
-(import stop give)
+(import stop give request notify-physician)
 
 (define/state analgesic-type
   'initial 'later 'non-nsaid 'off)
-(define/external npo?
+(define/state npo?
   'npo 'po)
 
+(define/state (extern-npo? _ _ evt)
+  (match evt
+    [`(update (npo? ,v))
+     (update npo? v)]
+    [_ (void)]))
+
 (define/hander (discontinue old new evt)
-  (list
-   (stop "stuff")
-   (remove-handler discontinue)))
+  (stop "stuff")
+  (remove-handler discontinue))
 
 (define/hander (initial old new evt)
   (define (m? state)
     (match? (state (analgesic-type 'initial) _ ...)
             state))
-  (if (not
-       (and
-        (not (m? old))
-        (m? new)))
-      null
-      (list (give "some-drug")
-            (new-handler initial2
-             (let ([t (+ (current-time new) (? 6 hours))])
-               (lambda (old new _)
-                 (if (not
-                      (and (before? old t)
-                           (after? new t)))
-                     null
-                     (list (update analgesic-type 'later)
-                           (remove-handler initial2)))))))))
+  (when (and
+         (not (m? old))
+         (m? new))
+    (give "some-drug")
+    (new-handler
+     initial2
+     (let ([t (+ (current-time new) (? 6 hours))])
+       (lambda (old new _)
+         (when (and (before? old t)
+                    (after? new t))
+           (update analgesic-type 'later)
+           (remove-handler initial2)))))))
 
 (define/handler (later/transitions old new evt)
   (define (m? state)
     (match? (state (analgesic-type 'later)
                    _ ...)
             state))
-  (if (not (and (not (m? old))
-                (m? new)))
-      null
-      (list
-       (new-handler after2
-        (let ([t (+ (current-time new) (3 days))])
-          (lambda (old new _)
-            (if (not 
-                 (and (before? old t)
-                      (after? new t))
-                 null
-                 (list
-                  (update analgesic-type 'non-nsaid)
-                  (remove-handler after2))))))))))
+  (when (and (not (m? old))
+             (m? new))
+    (new-handler
+     after2
+     (let ([t (+ (current-time new) (3 days))])
+       (lambda (old new _)
+         (when (and (before? old t)
+                    (after? new t))
+           (update analgesic-type 'non-nsaid)
+           (remove-handler after2)))))))
 
 (define/hander (later+npo/whenevers _ st event)
   (define/state last-time time? -> 0)
   (define drug "something1")
-  (define state
-    (match event
-      [(given (eq drug))
-       (list (update last-time (current-time st)))]
-      [_ null]))
-  (define messages
-    (match st
-      [(state
-        (npo? 'npo)
-        (analgesic-type 'later)
-        (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
-        _ ...)
-       (list (give drug))]
-      [_ null]))
-  (append state messages))
+  (match event
+    [`(given ,(eq drug))
+     (update last-time (current-time st))]
+    [_ (void)])
+  (match st
+    [(state
+      (npo? 'npo)
+      (analgesic-type 'later)
+      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+      _ ...)
+     (give drug)]
+    [_ (void)]))
 
 (define/hander (later+po/whenevers _ st event)
   (define/state last-time time? -> 0)
   (define drug "something2")
-  (define state
-    (match event
-      [(given (eq drug)) 
-       (list (update last-time (current-time st)))]
-      [_ null]))
-  (define messages 
-    (match st 
-      [(state
-        (npo? 'po)
-        (analgesic-type 'later)
-        (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
-        _ ...)
-       (list (give drug))]
-      [_ null]))
+  (match event
+    [`(given ,(eq drug)) 
+     (update last-time (current-time st))]
+    [_ (void)])
+  (match st 
+    [(state
+      (npo? 'po)
+      (analgesic-type 'later)
+      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+      _ ...)
+     (give drug)]
+    [_ (void)])
   (append state messages))
 
 (define/handler (non-nsaid _ st event)
   (define/state last-time time? -> 0)
   (define drug "something3")
-  (define state
-    (match event
-      [(given (eq drug)) 
-       (list (update last-time (current-time st)))]
-      [_ null]))
-  (define messages
-    (match st
-      [(state
-        (npo? 'po)
-        (analgesic-type 'later)
-        (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
-        _ ...)
-       (list (give drug))]
-      [_ null]))
-  (append state messages))
+  (match event
+    [`(given ,(eq drug)) 
+     (update last-time (current-time st))]
+    [_ (void)])
+  (match st
+    [(state
+      (npo? 'po)
+      (analgesic-type 'later)
+      (last-time (? t (lambda (_) (after? state (+ last-time (4 hours))))))
+      _ ...)
+     (give drug)]
+    [_ (void)]))
+
+
+;; ok lets try continous drugs
+
+(define/state continous drug? -> (drug "fentanol" "subcut" (? 25 micrograms/hour)))
+(define/state on-demand drug? #f -> (drug "fentanol" "subcut" (? 25 micrograms)))
+(define/external pain-score natural?)
+
+(define/handler (start _ s _)
+  (remove-handler start)
+  (match s
+    [(state (continous d) _ ...)
+     (give d)]))
+
+(define/handler (update-continous old new _)
+  (match* (old new)
+    [((state (continous d1) _ ...)
+      (state (continous d2) _ ...))
+     (when (not (equal? d1 d2))
+       (give d2))]
+    [(_ _) (void)]))
+
+;; this is iffy... we really should just let the machine handle this
+(define/handler (PCA _ state event)
+  (match* (state event)
+    [((state (on-demand (? d values)) _ ...)
+      `(action (give-on-demand)))
+     (give d)]
+    [(_ _) (void)]))
+
+;; which means these needs to communicate the new dosage to the machine
+(define/handler (breakthrough-pain _ state evt)
+  (define/state pain-high-count natural? -> 0)
+  (match* (state evt)
+    [((state (pain-high-count 3) _ ...) _)
+     (notify-physician)]
+    [((state (on-demand (drug t m v))
+             (pain-high-count c)
+             _ ...)
+      `(update pain-score ,(? _ (curry <= 8))))
+     (update pain-high-count (add1 c))
+     (update on-demand (drug t m (+ v (? 10 micrograms))))
+     (new-handler
+      pain-score-check
+      (let ([t (+ (current-time new) (1 hour))])
+        (lambda (old new _)
+          (when (and (before? old t)
+                     (after? new t))
+            (remove-handler pain-score-check)
+            (request 'value 'pain-score)))))]
+    [((state (pain-high-count c)
+             _ ...)
+      `(update pain-score ,_))
+     (update pain-high-count (max (sub1 c) 0))]
+    [(_ _) (void)]))
+(define/handler (minimal-pain _ state evt)
+  (match* (state evt)
+    [((state (on-demand (drug t m v)) _ ...)
+      `(update pain-score (? _ (curry >= 2))))
+     (update on-demand (drug t m (- v (10 micrograms))))]
+    [(_ _) (void)]))
+
+
+;(define/handler (taper))
+
