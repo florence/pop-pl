@@ -27,7 +27,9 @@
       remove-handler
       send
       eq?
-      drug)
+      drug
+      message-tag=?
+      message-value)
   (v state
      (lambda (x ...) 
        state-def ...
@@ -145,31 +147,40 @@
          (in-hole E (new-handler (quote x) h))
          (((x_2 h_2) ...) any)
          (msg_r ...))
-    ;; -- to --
+        ;; -- to --
         ((((x_1 h_1) ...) state_1 state_2)
          msg_e
          (in-hole E VOID)
          (((x h) (x_2 h_2) ...) any)
          (msg_r ...))
         (side-condition (not (member `x `(x_1 ... x_2 ...))))
-    δ_new-handler)
+        δ_new-handler)
    (--> (((x_1 h_1) ... (x h_s) (x_2 h_2) ...)
          msg_e
          (in-hole E (remove-handler (quote x)))
          (((x_3 h_3) ... (x h_s) (x_4 h_4) ...) any)
          (msg_r ...))
-    ;; -- to --
+        ;; -- to --
         (((x_1 h_1) ... (x h_s) (x_2 h_2) ...)
          msg_e
          (in-hole E VOID)
          (((x_3 h_3) ... (x_4 h_4) ...) any))
-    δ_remove-handler)
+        δ_remove-handler)
+   (--> (in-hole HM (message-tag=? (∇ x_1 v ...) (quote x_2)))
+        ;; -- to --
+        (in-hole HM ,(if (equal? `x_1 `x_2) 0 42))
+        δ_message-tag=?) 
+   (--> (in-hole HM (message-value n (∇ x v_b ... v v_a ...)))
+        ;; -- to --
+        (in-hole HM v) 
+        (side-condition (= (length `(v_b ...)) `n))
+        δ_message-value)
    (--> (S
          msg_e
          (in-hole E (send msg))
          ΔS
          (msg_r ...))
-    ;; -- to --
+        ;; -- to --
         (S msg_e (in-hole E VOID) ΔS (msg msg_r ...))
     δ_send)
    (--> (in-hole HM (eq? v_1 v_2))
