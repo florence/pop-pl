@@ -66,6 +66,10 @@
   prepair-e : e -> state
   [])
 
+;; we need a semantics for handling state changes with and without a new message
+(define-metafunction pop-pl-eval
+  eval : S (message ...) -> S)
+
 (define-metafunction pop-pl-eval
   eval : S message -> (S (message ...))
   [(eval S msg)
@@ -186,8 +190,6 @@
         (in-hole HM e_1)
         (side-condition (not (equal? `v 0)))
         if!0)))
-
-
 
 (define-metafunction pop-pl
   get-possible-drugs : P -> (x ...)

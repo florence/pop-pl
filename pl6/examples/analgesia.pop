@@ -162,5 +162,22 @@
     [(_ _) (void)]))
 
 
-;(define/handler (taper))
+(define/handler (taper _ _ _)
+  (remove-handler taper)
+  (new-handler
+   taper-off
+   (let ([t (+ (current-time new) (3 days))])
+        (lambda (old new _)
+          (when (and (before? old t)
+                     (after? new t))
+            (update on-demand #f)
+            (remove-handler taper-off)
+            (new-handler
+             taper-down
+             (lambda (_ new _)
+               (define/state last-time time? -> 0)
+               (when (> (current-time new) (+ (4 hours) (last-time new)))
+                 (match new
+                   [(state (continous (drug t m v) _ ...))
+                    (update continous (drug t m (max 0 (- v (10 mg)))))])))))))))
 
