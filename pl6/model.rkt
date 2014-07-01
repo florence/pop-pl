@@ -17,7 +17,7 @@
   (e x
      v
      (seq e e ...)
-     (e e ...)
+     (e ...)
      (oⁿ e ...)
      (if0 e e e))
   (oⁿ state-get
@@ -26,21 +26,21 @@
       new-handler
       remove-handler
       send
-      eq?)
+      eq?
+      drug)
   (v state
      (lambda (x ...) 
        state-def ...
        e)
      (quote x)
      VOID
-     message)
+     message
+     (drug-type x)
+     (drug (drug-type x) v ...))
   (state (s (x v) ...)
          initial)
-  ;; machine message
-  (mm update new-handler remove-handler)
   ((message msg)
-   (∇ x v ...)
-   (∇ mm v ...))
+   (∇ (quote x) v ...))
   (n number)
   (x variable-not-otherwise-mentioned))
 
@@ -186,3 +186,40 @@
         (in-hole HM e_1)
         (side-condition (not (equal? `v 0)))
         if!0)))
+
+
+
+(define-metafunction pop-pl
+  get-possible-drugs : P -> (x ...)
+  [(get-possible-drugs (imports definition ...))
+   ((drug-type x) ... ...)
+   (where ((x ...) ...) ((get-possible-drugs definition) ...))])
+
+(define-metafunction pop-pl
+  get-possible-drugs-def : definition -> ((drug-type x) ...)
+  [(get-possible-drugs-def state-def) ()]
+  [(get-possible-drugs
+    (define/handler (x ...)
+      state-def ...
+      e))
+   (get-possible-drugs-e e)])
+
+(define-metafunction pop-pl
+  get-possible-drugs-e : e -> (x ...)
+  [(get-possible-drugs-e x) ()]
+  [(get-possible-drugs-e (e ...))
+   (x ... ...)
+   (where ((x ...) ...) ((get-possible-drugs-e e) ...))]
+  [(get-possible-drugs-e (seq e ...))
+   (x ... ...)
+   (where ((x ...) ...) ((get-possible-drugs-e e) ...))]
+  [(get-possible-drugs-e (oⁿ e ...))
+   (x ... ...)
+   (where ((x ...) ...) ((get-possible-drugs-e) ...))]
+  [(get-possible-drugs-e (if0 e ...))
+   (x ... ...)
+   (where ((x ...) ...) ((get-possible-drugs-e) ...))]
+  [(get-possible-drugs-e (λ (x ...) state-def ... e))
+   (x ...)
+   (where (x ...) (get-possible-drugs-e e))]
+  [(get-possible-drugs-e (drug-type x)) x])
