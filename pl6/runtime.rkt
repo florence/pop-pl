@@ -1,9 +1,9 @@
 #lang racket
-(require (for-syntax syntax-parse))
+(require (for-syntax syntax/parse racket/syntax unstable/sequence))
 (require racket/undefined)
 
-(provide define/state define/external update define/handler state
-         new-handler give extern given import Δ0)
+(provide define/state update define/handler state
+         new-handler remove-handler import)
 ;;;;; state
 (define state-vars null)
 (define state-old (hash))
@@ -16,11 +16,6 @@
      #'(begin
          (define name 'name)
          (add-var! 'name))]))
-(define-syntax (define/external stx)
-  (syntax-parse stx
-    [(_ name:id value ...)
-     #'(begin
-         (define/state name value ...))]))
 (define (add-var! id)
   (hash-set! state-new id undefined))
 
@@ -30,92 +25,93 @@
      #'(in:update 'id v)]
     [(_ id:id v:expr s:expr)
      #'(in:update 'id v s)]))
-(define (in:update n v [s (hash)])
-  (unless (hash-has-key state-new n)
+(define (in:update n v)
+  (unless (hash-has-key? state-new n)
     (error 'update "non existant field"))
-  (when (hash-has-key s n)
+  (when (hash-has-key? current-state-delta n)
     (error 'update "duplicate set"))
-  (hash-set s n v))
+  (hash-set! current-state-delta n v))
 
-(define-match-expander state (make-rename-transformer #'hash-table))
+(define-match-expander state 
+  (lambda (stx)
+    (syntax-parse stx
+      [(_ (x:id v) ...)
+       #'(hash-table ('id v) ... (_ _) ___)])))
 ;;;;; handlers
-(define handlers null)
+(define current-handler-delta (make-hash))
+(define current-state-delta (make-hash))
+(define current-messages null)
+(define handlers (make-hash))
 (define-syntax (define/handler stx)
   (syntax-parse stx
     [(_ (name:id old:id new:id evt:id)
-        body:expr)
-     #'(begin 
-         (define (name old new evt) body)
-         (add-handler! name))]))
-(define (add-handler! f)
-  (cons! handlers f))
+        body:expr ...)
+     #'(begin (add-handler! 'name (in:lambda (old new evt) body ...)))]))
+(define (add-handler! n f)
+  (hash-set! handlers n f))
+(define-syntax (in:lambda stx)
+  (syntax-parse stx
+    [(_ (x:id ...) body ...)
+     (with-syntax ([(ids ...)
+                    (for/list ([x (in-syntax #'(x ...))]) 
+                      (if (equal? (syntax-e x) '_)
+                          (generate-temporary)
+                          x))])
+       #'(lambda (ids ...) body ...))]))
 ;;;;; messages
-;; Event is one of:
-;; (extern Symbol Any)
-;; (given Any)
-(struct extern (id value) #:transparent)
-(struct given (drug) #:transparent)
-
-;; Response is one of:
-;; (new-handler Handler)
-;; (give Any)
+;; Response:
 ;; (msg Symbol (Listof Any))
-(struct new-handler (f))
 (struct msg (id value) #:transparent)
 (define-syntax (import stx)
   (syntax-parse stx
     [(_ id:id ...)
      #'(begin
          (define (id . args)
-           (msg 'id args)) ...)]))
+           (add-message! 'id args)) ...)]))
+(define (add-message! id args)
+  (cons! current-messages (msg id args)))
+
+(define-syntax (new-handler stx)
+  (syntax-parse stx
+    [(_ x:id e:expr) #'(in:new-handler 'x e)]))
+(define (in:new-handler name f)
+  (if (and (not (hash-has-key? handlers name))
+           (not (hash-has-key? current-handler-delta name)))
+      (hash-set! current-handler-delta  name f)
+      (error 'new-handler "handler exists or was already added")))
+(define-syntax (remove-handler stx)
+  (syntax-parse stx
+    [(_ x:id) #'(in:remove-handler 'x)]))
+(define (in:remove-handler name)
+  (if (and (hash-has-key? handlers name)
+           (hash-has-key? current-handler-delta name))
+      (hash-remove! current-handler-delta name)
+      (error 'remove-handler "handler does not exist or was already removed")))
+
 
 ;;;;; evaluation
-(define Δ0 (hash))
 
 ;; Event -> [Listof Response]
 ;; run this event through the system
-(define (evaluate event)
-  (evaluate-event! event)
-  (evaluate-responses (evalute-handlers event)))
-
-;; Event -> Void
-;; preform any internal mutation required for the event
-(define (evaluate-event! event)
-  (match event
-    [(extern id value)
-     (set! state-new (hash-update state-new id (const value)))]
-    [_ (void)]))
+(define (evaluate-one-event event)
+  (evaluate-handlers event))
 
 ;; Event -> [Listof Response]
 ;; run the handlers over the event
 (define (evaluate-handlers event)
-  (define-values (updates messages)
-    (for/fold ([update (hash)] [messages null]) ([h handlers])
-      (define-values (u m) (h state-old state-new event))
-      (values (merge u update) (append messages m))))
+  (for ([h handlers])
+    (h state-old state-new event))
   (set! state-old state-new)
-  (set! state-new (replace updates state-new))
-  messages)
-;; Hash Hash -> Hash
-;; copies all values from u2 to u1 using 'update'
-(define (merge u1 u2)
-  (for/fold ([merged u1]) ([(id value) (in-hash u2)])
-    (in:update id value merged)))
+  (set! state-new (replace current-state-delta state-new))
+  (set! current-state-delta (make-hash))
+  (set! handlers current-handler-delta)
+  (begin0 current-messages 
+    (set! current-messages null)))
 ;; Hash Hash -> Hash
 ;; like merge but uses hash-set
 (define (replace update current)
   (for/fold ([result current]) ([(id value) (in-hash update)])
     (hash-set result id value)))
-
-;; [Listof Response] -> [Listof Response]
-;; Evaluate and remove any internal only messages. the rest are outgoing mail
-(define (evaluate-responses rs)
-  (for/fold ([outgoing null]) ([resp rs])
-    (match resp 
-      [(new-handler f)
-       (add-handler! f)
-       outgoing]
-      [_ (cons resp outgoing)])))
 
 ;;;;; aux
 (define-syntax (cons! stx)
