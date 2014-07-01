@@ -7,12 +7,14 @@
   (P (imports definitions ...))
   ;; definitions
   (import (imports x ...))
-  (definition 
-    (define/handler (x x x x) 
+  ((definition def) 
+   handler-def
+   state-def)
+  (handler-def
+   (define/handler (x x x x) 
       state-def ...
-      e)
-    state-def)
-  (state-def (define/state x e ... -> e))
+      e))
+  (state-def (define/state x e ... -> v))
   ;; expressions
   (e x
      v
@@ -42,7 +44,7 @@
   (state (s (x v) ...)
          initial)
   ((message msg)
-   (∇ (quote x) v ...))
+   (∇ (quote x) v))
   (n number)
   (x variable-not-otherwise-mentioned))
 
@@ -59,22 +61,69 @@
      (seq E e ...)))
 
 (define-metafunction pop-pl-eval
-  prepair : P -> (H Σ state)
-  [(prepair P) (prepair* P (() () (st)))])
+  prepair : P -> S
+  [(prepair (imports definition ...)) 
+   (((x_h (subst h ((x_i v) ...))) ...)
+    state_1
+    state_2)
+   (where ((x_i v) ...) (imports->bindings imports))
+   (where (((x_h h) ...) state_1 state_2) (prepair* (definition ...) (() (st))))])
 (define-metafunction pop-pl-eval
-  prepair* : P (H state) -> S
-  [])
+  prepair* : (definition ...) (H state) -> S
+  [(prepair* () (H state)) (H initial state)]
+  [(prepair* (handler-def def_r ...) (((x_h h) ...)) (st (x_s v) ...))
+   (prepair* (state-def ... def_r ...)
+            (((x_n h_l) (x_h h) ...)
+             (st (x_r v_r) ... (x_s v) ...)))
+   (where (define/state (x_n x_a ...) state-def ... e) handler-def)
+   (where h_l (lambda (x_a ...) e))
+   (where (st (x_r v_r) ...) (prepair-e h_l))]
+  [(prepair* (state-def def ...) (H (st (x v) ...)))
+   (prepair (def ...) (H (st (x_n v_n) (x v) ...)))
+   (where (define/state x_n e ... -> v_n) state-def)])
+
+(define-metafunction pop-pl-eval
+  import->bindings : imports -> ((x v) ...)
+  [(import->bindings (import x ...))
+   ((x (lambda (v) (send (∇ x v)))) ...)])
+
 (define-metafunction pop-pl-eval
   prepair-e : e -> state
-  [])
+  [(prepair-e (lambda (x ...) state-def ... e))
+   (st (x_1 v_1) ... (x_2 v_2) ...)
+   (where (st (x_1 v_1) ...) (prepair* (state-def ...) (() (st))))
+   (where (st (x_2 v_2) ...) (prepair-e e))]
+  [(prepair-e v) (st)]
+  [(prepair-e x) (st)]
+  [(prepair-e (seq e_1 e_2))
+   (st (x_1 v_1) ... (x_2 v_2) ...)
+   (where (st (x_1 v_1) ...) (prepair-e e_1))
+   (where (st (x_2 v_2) ...) (prepair-e e_2))]
+  [(prepair-e (e ...))
+   (st (x v) ... ...)
+   (where ((st (x v) ...) ...) 
+          ((prepair-e e) ...))]
+  [(prepair-e (oⁿ e ...))
+   (st (x v) ... ...)
+   (where ((st (x v) ...) ...) 
+          ((prepair-e e) ...))]
+  [(prepair-e (if0 e ...))
+   (st (x v) ... ...)
+   (where ((st (x v) ...) ...) 
+          ((prepair-e e) ...))])
 
 ;; we need a semantics for handling state changes with and without a new message
 (define-metafunction pop-pl-eval
-  eval : S (message ...) -> S)
+  eval : S (message ...) -> S
+  [(eval S ())
+   (eval-msg S (∇ updated 0))]
+  [(eval S (msg_1 msg ...))
+   (eval S_2 (msg ...))
+   (where (S_2 _) (eval-msg S msg_1))])
 
 (define-metafunction pop-pl-eval
-  eval : S message -> (S (message ...))
-  [(eval S msg)
+  eval-msg : S message -> (S (message ...))
+  [(eval-msg S msg)
    ((apply-ΔS S ΔS) (msg_r ...))
    (where ((() _ _) _ v ΔS (msg_r ...))
           ,(apply-reduction-relation* R
@@ -166,14 +215,13 @@
          (in-hole E VOID)
          (((x_3 h_3) ... (x_4 h_4) ...) any))
         δ_remove-handler)
-   (--> (in-hole HM (message-tag=? (∇ x_1 v ...) (quote x_2)))
+   (--> (in-hole HM (message-tag=? (∇ x_1 v) (quote x_2)))
         ;; -- to --
         (in-hole HM ,(if (equal? `x_1 `x_2) 0 42))
         δ_message-tag=?) 
-   (--> (in-hole HM (message-value n (∇ x v_b ... v v_a ...)))
+   (--> (in-hole HM (message-value  (∇ x v)))
         ;; -- to --
         (in-hole HM v) 
-        (side-condition (= (length `(v_b ...)) `n))
         δ_message-value)
    (--> (S
          msg_e
@@ -188,7 +236,7 @@
         (in-hole HM ,(if (and
                           (or (number? `v_1)
                               (symbol? `v_1))
-                          (eq? `v_1 `v_2))
+                          (eqv? `v_1 `v_2))
                          0
                          42))
         δ_eq?)
@@ -206,12 +254,12 @@
   get-possible-drugs : P -> (x ...)
   [(get-possible-drugs (imports definition ...))
    ((drug-type x) ... ...)
-   (where ((x ...) ...) ((get-possible-drugs definition) ...))])
+   (where ((x ...) ...) ((get-possible-drugs-def definition) ...))])
 
 (define-metafunction pop-pl
   get-possible-drugs-def : definition -> ((drug-type x) ...)
   [(get-possible-drugs-def state-def) ()]
-  [(get-possible-drugs
+  [(get-possible-drugs-def
     (define/handler (x ...)
       state-def ...
       e))
@@ -228,10 +276,10 @@
    (where ((x ...) ...) ((get-possible-drugs-e e) ...))]
   [(get-possible-drugs-e (oⁿ e ...))
    (x ... ...)
-   (where ((x ...) ...) ((get-possible-drugs-e) ...))]
+   (where ((x ...) ...) ((get-possible-drugs-e e) ...))]
   [(get-possible-drugs-e (if0 e ...))
    (x ... ...)
-   (where ((x ...) ...) ((get-possible-drugs-e) ...))]
+   (where ((x ...) ...) ((get-possible-drugs-e e) ...))]
   [(get-possible-drugs-e (λ (x ...) state-def ... e))
    (x ...)
    (where (x ...) (get-possible-drugs-e e))]
