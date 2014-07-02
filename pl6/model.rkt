@@ -4,57 +4,49 @@
 (define-syntax quasiquote (make-rename-transformer #'term))
 
 (define-language pop-pl
-  (P (imports definitions ...))
+  (P (state-def ... handler-def ...))
   ;; definitions
-  (import (imports x ...))
   ((definition def) 
    handler-def
    state-def)
-  (handler-def
-   (define/handler (x x x x) 
-      state-def ...
-      e))
-  (state-def (define/state x e ... -> v))
+  (handler-def (define/handler (x x x x) e))
+  (state-def (define/state x v))
   ;; expressions
   (e x
-     v
+     (lambda (x ...) e)
+     (quote x)
      (seq e e ...)
      (e ...)
      (oⁿ e ...)
+     n
+     (s (x e) ...)
+     (update x e)
+     (new-handler x e)
+     (remove-handler x)
+     (send e)
      (if0 e e e))
-  (oⁿ state-get
-      initial?
-      update
-      new-handler
-      remove-handler
-      send
-      eq?
-      drug
-      message-tag=?
-      message-value)
-  (v state
-     (lambda (x ...) 
-       state-def ...
-       e)
-     (quote x)
-     VOID
-     message
-     (drug-type x)
-     (drug (drug-type x) v ...))
-  (state (s (x v) ...)
-         initial)
-  ((message msg)
-   (∇ (quote x) v))
+  (oⁿ state-get equal? +)
   (n number)
   (x variable-not-otherwise-mentioned))
 
 (define-extended-language pop-pl-eval pop-pl
-  (HM (S msg E ΔS (msg ...)))
+  ;; current state, current message, current-eval, current-changes, current responses
+  (HM (S v E ΔS (v ...)))
   (ΔS (H ((x v) ...)))
-  (S (H state state))
+  (S (H state/v state/v))
   (H ((x h) ...))
   (h (lambda (x x x) e))
+  (v state/v
+     n
+     (lambda (x ...) e)
+     (quote x)
+     (drug-type x))
+  (state/v (s (x v) ...))
   (E hole
+     (s (x v) ... (x E) (x e) ...)
+     (update x E)
+     (new-handler x E)
+     (send E)
      (v ... E e ...)
      (oⁿ v ... E ...)
      (if0 E e e)
@@ -62,97 +54,52 @@
 
 (define-metafunction pop-pl-eval
   prepair : P -> S
-  [(prepair (imports definition ...)) 
-   (((x_h (subst h ((x_i v) ...))) ...)
-    state_1
-    state_2)
-   (where ((x_i v) ...) (imports->bindings imports))
-   (where (((x_h h) ...) state_1 state_2) (prepair* (definition ...) (() (st))))])
-(define-metafunction pop-pl-eval
-  prepair* : (definition ...) (H state) -> S
-  [(prepair* () (H state)) (H initial state)]
-  [(prepair* (handler-def def_r ...) (((x_h h) ...)) (st (x_s v) ...))
-   (prepair* (state-def ... def_r ...)
-            (((x_n h_l) (x_h h) ...)
-             (st (x_r v_r) ... (x_s v) ...)))
-   (where (define/state (x_n x_a ...) state-def ... e) handler-def)
-   (where h_l (lambda (x_a ...) e))
-   (where (st (x_r v_r) ...) (prepair-e h_l))]
-  [(prepair* (state-def def ...) (H (st (x v) ...)))
-   (prepair (def ...) (H (st (x_n v_n) (x v) ...)))
-   (where (define/state x_n e ... -> v_n) state-def)])
-
-(define-metafunction pop-pl-eval
-  import->bindings : imports -> ((x v) ...)
-  [(import->bindings (import x ...))
-   ((x (lambda (v) (send (∇ x v)))) ...)])
-
-(define-metafunction pop-pl-eval
-  prepair-e : e -> state
-  [(prepair-e (lambda (x ...) state-def ... e))
-   (st (x_1 v_1) ... (x_2 v_2) ...)
-   (where (st (x_1 v_1) ...) (prepair* (state-def ...) (() (st))))
-   (where (st (x_2 v_2) ...) (prepair-e e))]
-  [(prepair-e v) (st)]
-  [(prepair-e x) (st)]
-  [(prepair-e (seq e_1 e_2))
-   (st (x_1 v_1) ... (x_2 v_2) ...)
-   (where (st (x_1 v_1) ...) (prepair-e e_1))
-   (where (st (x_2 v_2) ...) (prepair-e e_2))]
-  [(prepair-e (e ...))
-   (st (x v) ... ...)
-   (where ((st (x v) ...) ...) 
-          ((prepair-e e) ...))]
-  [(prepair-e (oⁿ e ...))
-   (st (x v) ... ...)
-   (where ((st (x v) ...) ...) 
-          ((prepair-e e) ...))]
-  [(prepair-e (if0 e ...))
-   (st (x v) ... ...)
-   (where ((st (x v) ...) ...) 
-          ((prepair-e e) ...))])
+  [(prepair (state-def ... handler-def ...)) 
+   (H (s) state/v)
+   (where ((define/handler (x_h x_a ...) e) ...) (handler-def ...))
+   (where H ((x_h (lambda (x_a ...) e)) ...))
+   (where ((define/state x_s v) ...) (state-def ...))
+   (where state/v (s (x_s v) ...))])
 
 ;; we need a semantics for handling state changes with and without a new message
 (define-metafunction pop-pl-eval
   eval : S (message ...) -> S
-  [(eval S ())
-   (eval-msg S (∇ updated 0))]
-  [(eval S (msg_1 msg ...))
-   (eval S_2 (msg ...))
-   (where (S_2 _) (eval-msg S msg_1))])
+  [(eval S (v_1 v ...))
+   (eval S_2 (v ...))
+   (where (S_2 _) (eval-msg S v_1))])
 
 (define-metafunction pop-pl-eval
-  eval-msg : S message -> (S (message ...))
-  [(eval-msg S msg)
-   ((apply-ΔS S ΔS) (msg_r ...))
-   (where ((() _ _) _ v ΔS (msg_r ...))
-          ,(apply-reduction-relation* R
-                                      `(S msg VOID (H ()) ())))
+  eval-msg : S v -> (S (v...))
+  [(eval-msg S v)
+   ((apply-ΔS S ΔS) (v_r ...))
+   (where ((() _ _) _ v ΔS (v_r ...))
+          ,(apply-reduction-relation* R `(S v (s) (H ()) ())))
    (where (H _ _) S)])
 
 (define-metafunction pop-pl-eval
   apply-ΔS : S ΔS -> S
-  [(apply-ΔS (_ _ state_1) (H_2 state_2))
-   (H_2 state_1 (overwrite-state state_1 state_2))])
+  [(apply-ΔS (_ _ state/v_1) (H_2 state/v_2))
+   (H_2 state/v_1 (overwrite-state state/v_1 state/v_2))])
+
 (define-metafunction pop-pl-eval
-  overwrite-state : state ((x v) ...) -> state
-  [(overwrite-state state ()) state]
-  [(overwrite-state (st (x_1 v_1) ... (x _) (x_2 v_2) ...)
+  overwrite-state : state/v ((x v) ...) -> state/v
+  [(overwrite-state state/v ()) state/v]
+  [(overwrite-state (s (x_1 v_1) ... (x _) (x_2 v_2) ...)
                     ((x v) (x_3 v_3) ...))
-   (overwrite-state (st (x_1 v_1) ... (x v) (x_2 v_2) ...)
+   (overwrite-state (s (x_1 v_1) ... (x v) (x_2 v_2) ...)
                     ((x_3 v_3) ...))])
 
 (define R
   (reduction-relation
    pop-pl-eval
    #:domain HM
-   (--> ((((x h) any_n ...) state_1 state_2) msg_e v ΔS (msg_r ...))
+   (--> ((((x h) any_n ...) state/v_1 state/v_2) v_e v ΔS (v_r ...))
         ;; -- to --
-        (((any_n ...) state_1 state_2)
-         msg
-         (h state_1 state_2 msg_e)
+        (((any_n ...) state/v_1 state/v_2)
+         v_e
+         (h state/v_1 state/v_2 v_e)
          ΔS
-         (msg_r ...))
+         (v_r ...))
         next)       
    (--> (in-hole HM ((lambda (x ...) e) v ...))
         ;; -- to --
@@ -166,87 +113,74 @@
         ;; -- to --
         (in-hole HM v)
         δ_state-get)
-   (--> (in-hole HM (initial? initial))
+   (--> (in-hole HM (+ n_1 n_2))
         ;; -- to --
-        (in-hole HM 0)
-        δ_initial?-true)
-   (--> (in-hole HM (initial? v))
-        ;; -- to --
-        (in-hole HM 42)
-        (side-condition (not (equal? `v `initial)))
-        δ_initial?-false)
+        (in-hole HM ,(+ `n_1 `n_2)))
    (--> (S
-         msg_e
-         (in-hole E (update (quote x) v))
+         v_e
+         (in-hole E (update x v))
          (H ((x_1 v_1) ...))
-         (msg_r ...))
+         (v_r ...))
         ;; -- to --
         (S
-         msg_e
-         (in-hole E VOID)
+         v_e
+         (in-hole E (s))
          (H ((x v) (x_1 v_1) ...))
-         (msg_r ...))
+         (v_r ...))
         (where (_ _ (st (x_s v_s) ...)) S)
         (side-condition (and
                          (member `x `(x_s ...))
                          (not (member `x `(x_1 ...)))))
-        δ_update)
-   (--> ((((x_1 h_1) ...) state_1 state_2) 
-         msg_e
-         (in-hole E (new-handler (quote x) h))
+        update)
+   (--> ((((x_1 h_1) ...) state/v_1 state/v_2) 
+         v_e
+         (in-hole E (new-handler x h))
          (((x_2 h_2) ...) any)
-         (msg_r ...))
+         (v_r ...))
         ;; -- to --
-        ((((x_1 h_1) ...) state_1 state_2)
-         msg_e
-         (in-hole E VOID)
+        ((((x_1 h_1) ...) state/v_1 state/v_2)
+         v_e
+         (in-hole E (s))
          (((x h) (x_2 h_2) ...) any)
-         (msg_r ...))
+         (v_r ...))
         (side-condition (not (member `x `(x_1 ... x_2 ...))))
-        δ_new-handler)
+        new-handler)
    (--> (((x_1 h_1) ... (x h_s) (x_2 h_2) ...)
-         msg_e
-         (in-hole E (remove-handler (quote x)))
+         v_e
+         (in-hole E (remove-handler x))
          (((x_3 h_3) ... (x h_s) (x_4 h_4) ...) any)
-         (msg_r ...))
+         (v_r ...))
         ;; -- to --
         (((x_1 h_1) ... (x h_s) (x_2 h_2) ...)
-         msg_e
-         (in-hole E VOID)
-         (((x_3 h_3) ... (x_4 h_4) ...) any))
-        δ_remove-handler)
-   (--> (in-hole HM (message-tag=? (∇ x_1 v) (quote x_2)))
-        ;; -- to --
-        (in-hole HM ,(if (equal? `x_1 `x_2) 0 42))
-        δ_message-tag=?) 
-   (--> (in-hole HM (message-value  (∇ x v)))
-        ;; -- to --
-        (in-hole HM v) 
-        δ_message-value)
+         v_e
+         (in-hole E (s))
+         (((x_3 h_3) ... (x_4 h_4) ...)
+          any))
+        remove-handler)
    (--> (S
-         msg_e
-         (in-hole E (send msg))
+         v_e
+         (in-hole E (send v))
          ΔS
-         (msg_r ...))
+         (v_r ...))
         ;; -- to --
-        (S msg_e (in-hole E VOID) ΔS (msg msg_r ...))
-    δ_send)
-   (--> (in-hole HM (eq? v_1 v_2))
+        (S v_e (in-hole E (s)) ΔS (v v_r ...))
+    send)
+   (--> (in-hole HM (equal? v_1 v_2))
         ;; -- to --
         (in-hole HM ,(if (and
                           (or (number? `v_1)
                               (symbol? `v_1))
-                          (eqv? `v_1 `v_2))
+                          (equal? `v_1 `v_2))
                          0
                          42))
-        δ_eq?)
+        δ_equal?)
    (--> (in-hole HM (if0 0 e_1 e_2))
         ;; -- to --
         (in-hole HM e_1)
         if0)
    (--> (in-hole HM (if0 v e_1 e_2))
         ;; -- to --
-        (in-hole HM e_1)
+        (in-hole HM e_2)
         (side-condition (not (equal? `v 0)))
         if!0)))
 
@@ -259,10 +193,7 @@
 (define-metafunction pop-pl
   get-possible-drugs-def : definition -> ((drug-type x) ...)
   [(get-possible-drugs-def state-def) ()]
-  [(get-possible-drugs-def
-    (define/handler (x ...)
-      state-def ...
-      e))
+  [(get-possible-drugs-def (define/handler (x ...) e))
    (get-possible-drugs-e e)])
 
 (define-metafunction pop-pl
