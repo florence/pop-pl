@@ -115,7 +115,12 @@
         δ_state-get)
    (--> (in-hole HM (+ n_1 n_2))
         ;; -- to --
-        (in-hole HM ,(+ `n_1 `n_2)))
+        (in-hole HM ,(+ `n_1 `n_2))
+        δ_+)
+   (--> (in-hole HM (equal? v_1 v_2))
+        ;; -- to --
+        (in-hole HM (equality v_1 v_2))
+        δ_equal?)
    (--> (S
          v_e
          (in-hole E (update x v))
@@ -164,16 +169,7 @@
          (v_r ...))
         ;; -- to --
         (S v_e (in-hole E (s)) ΔS (v v_r ...))
-    send)
-   (--> (in-hole HM (equal? v_1 v_2))
-        ;; -- to --
-        (in-hole HM ,(if (and
-                          (or (number? `v_1)
-                              (symbol? `v_1))
-                          (equal? `v_1 `v_2))
-                         0
-                         42))
-        δ_equal?)
+        send)
    (--> (in-hole HM (if0 0 e_1 e_2))
         ;; -- to --
         (in-hole HM e_1)
@@ -183,6 +179,16 @@
         (in-hole HM e_2)
         (side-condition (not (equal? `v 0)))
         if!0)))
+
+(define-metafunction pop-pl-eval
+  equality : e e -> n
+  [(equality n n) 0]
+  [(equality x x) 0]
+  [(equality (s (x v_e1) (x_a v_a) ...) (s (x_1 v_1) ... (x v_e2) (x_2 v_2) ...))
+   (equality (s (x_a v_a) ...) (s (x_1 v_1) ... (x_2 v_2) ...))
+   (where 0 (equality v_e1 v_e2))]
+  [(equality (s) (s)) 0]
+  [(equality v v) 42])
 
 (define-metafunction pop-pl
   get-possible-drugs : P -> (x ...)
