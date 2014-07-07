@@ -170,59 +170,61 @@
 (define to-program (make-async-channel))
 (define to-outside (make-async-channel))
 
-(define task-list%
-  (new
-   (class object%
-     (super-new)
-     
-     (define frame (new frame% [label "please do"]))
-     (define pane (new vertical-pane% [parent frame]))
-     
-     (define/public (update-tasks message)
-       (match message
-         [(msg n args)
-          (match* (n args)
-            [('give d)
-             (add-task! (~a "take " d)
-                        (thunk (async-channel-put to-program `(given ,d))))]
-            [('request (? n symbol?))
-             (add-request! n)]
-            [(_ _)
-             (add-task! (apply ~a n ": " args))])]))
-     
-     (define (add-request! n)
-       (block
-        (define container (new horizontal-panel% [parent pane]))
-        (define button
-          (new button%
-               [parent container]
-               [label (format "what is your current ~a" n)]
-               [callback 
-                (lambda (b e)
-                  (define v (string->number (send text get-value)))
-                  (when v
-                    (async-channel-put to-program `(update (,n ,v)))))]))
-        (define text
-          (new text-field%
-               [parent container]
-               [label ""]))))
+(define es (make-eventspace))
+(define task-list
+  (parameterize ([current-eventspace es])
+    (new
+     (class frame%
+       (super-new [label "please do"])
+       
+       (define pane (new vertical-pane% [parent this]))
+       
+       (define/public (update-tasks message)
+         (match message
+           [(msg n args)
+            (match* (n args)
+              [('give d)
+               (add-task! (~a "take " d)
+                          (thunk (async-channel-put to-program `(given ,d))))]
+              [('request (? n symbol?))
+               (add-request! n)]
+              [(_ _)
+               (add-task! (apply ~a n ": " args))])]))
+       
+       (define (add-request! n)
+         (block
+          (define container (new horizontal-panel% [parent pane]))
+          (define button
+            (new button%
+                 [parent container]
+                 [label (format "what is your current ~a" n)]
+                 [callback 
+                  (lambda (b e)
+                    (define v (string->number (send text get-value)))
+                    (when v
+                      (async-channel-put to-program `(update (,n ,v)))))]))
+          (define text
+            (new text-field%
+                 [parent container]
+                 [label ""]))))
 
-     (define (add-task! str . extras)
-       (new button%
-            [label str]
-            [parent pane]
-            [callback
-             (lambda (b e)
-               (send pane delete-child b)
-               (unless (null? extras)
-                 (for-each (lambda (f) (f)) extras)))]))
-     (send frame show #t))))
+       (define (add-task! str . extras)
+         (new button%
+              [label str]
+              [parent pane]
+              [callback
+               (lambda (b e)
+                 (send pane delete-child b)
+                 (unless (null? extras)
+                   (for-each (lambda (f) (f)) extras)))]))
+
+       (send this show #t)))))
 
 (define (start)
   (thread
    (thunk
     (let l ()
-      (send task-list% update-tasks (async-channel-get to-outside))
+      (send task-list update-tasks (async-channel-get to-outside))
       (l))))
   (thread
    (thunk
@@ -230,7 +232,8 @@
       (for-each (curry async-channel-put to-outside)
                 (evaluate-one-event (async-channel-get to-program)))
       (l))))
-  (sync never-evt))
+  (sync es)
+  (void))
 
 ;;;;; aux
 (define-syntax (cons! stx)
