@@ -20,9 +20,9 @@
   (remove-handler discontinue))
 
 (define/handler (initial old new evt)
-  (define (m? state)
-    (match? state 
-            (hash-table ('analgesic-type 'initial))))
+  (define (m? st)
+    (match? st
+            (state (analgesic-type 'initial))))
   (when (and
          (not (m? old))
          (m? new))
@@ -37,9 +37,9 @@
            (remove-handler initial2)))))))
 
 (define/handler (later/transitions old new evt)
-  (define (m? state)
-    (match? state
-            (hash-table ('analgesic-type 'later))))
+  (define (m? st)
+    (match? st
+            (state (analgesic-type 'later))))
   (when (and (not (m? old))
              (m? new))
     (new-handler
@@ -59,10 +59,10 @@
      (update last-time (current-time st))]
     [_ (void)])
   (match st
-    [(hash-table
-      ('npo? 'npo)
-      ('analgesic-type 'later)
-      ('last-time (? (lambda (_) (after? st (+ last-time (4 hours)))))))
+    [(state
+      (npo? 'npo)
+      (analgesic-type 'later)
+      (last-time (? (lambda (last-time) (after? st (+ last-time (4 hours)))))))
      (give drug)]
     [_ (void)]))
 
@@ -74,10 +74,10 @@
      (update last-time (current-time st))]
     [_ (void)])
   (match st 
-    [(hash-table
-      ('npo? 'po)
-      ('analgesic-type 'later)
-      ('last-time (? (lambda (_) (after? st (+ last-time (4 hours)))))))
+    [(state
+      (npo? 'po)
+      (analgesic-type 'later)
+      (last-time (? (lambda (last-time) (after? st (+ last-time (4 hours)))))))
      (give drug)]
     [_ (void)]))
 
@@ -89,11 +89,10 @@
      (update last-time (current-time st))]
     [_ (void)])
   (match st
-    [(hash-table
-      ('npo? 'po)
-      ('analgesic-type 'later)
-      ('last-time (? (lambda (_) (after? st (+ last-time (4 hours))))))
-      (_ _) ...)
+    [(state
+      (npo? 'po)
+      (analgesic-type 'later)
+      (last-time (? (lambda (last-time) (after? st (+ last-time (4 hours)))))))
      (give drug)]
     [_ (void)]))
 
@@ -115,43 +114,42 @@
     (give d2)))
 
 ;; this is iffy... we really should just let the machine handle this
-(define/handler (PCA _ state event)
-  (match* (state event)
-    [((hash-table ('on-demand (? values d)) (_ _) ...)
+(define/handler (PCA _ st event)
+  (match* (st event)
+    [((state (on-demand (? values d)))
       `(action (give-on-demand)))
      (give d)]
     [(_ _) (void)]))
 
 ;; which means these needs to communicate the new dosage to the machine
-(define/handler (breakthrough-pain _ state evt)
+(define/handler (breakthrough-pain _ st evt)
   (define/state pain-high-count natural? -> 0)
-  (match* (state evt)
-    [((hash-table ('pain-high-count 3) (_ _) ...)
+  (match* (st evt)
+    [((state (pain-high-count 3))
       `(update pain-score ,(? (curry <= 8))))
      (notify-physician)]
-    [((hash-table
-       ('on-demand (drug t m v))
-       ('pain-high-count c)
-       (_ _) ...)
+    [((state
+       (on-demand (drug t m v))
+       (pain-high-count c))
       `(update pain-score ,(? (curry <= 8))))
      (update pain-high-count (add1 c))
      (update on-demand (drug t m (+ v (10 micrograms))))
      (new-handler
       pain-score-check
-      (let ([t (+ (current-time state) (1 hour))])
+      (let ([t (+ (current-time st) (1 hour))])
         (lambda (old new _)
           (when (and (before? old t)
                      (after? new t))
             (remove-handler pain-score-check)
             (request 'value 'pain-score)))))]
-    [((hash-table ('pain-high-count c) (_ _) ...)
+    [((state (pain-high-count c))
       `(update pain-score ,_))
      (update pain-high-count (max (sub1 c) 0))]
     [(_ _) (void)]))
 
 (define/handler (minimal-pain _ state evt)
   (match* (state evt)
-    [((hash-table ('on-demand (drug t m v)) (_ _) ...)
+    [((state (on-demand (drug t m v)))
       `(update pain-score (? _ (curry >= 2))))
      (update on-demand (drug t m (- v (10 micrograms))))]
     [(_ _) (void)]))
@@ -172,6 +170,6 @@
                (define/state last-time time? -> 0)
                (when (> (current-time new) (+ (4 hours) (last-time new)))
                  (match new
-                   [(hash-table ('continous (drug t m v)) (_ _) ...)
+                   [(state (continous (drug t m v)))
                     (update continous (drug t m (max 0 (- v (10 mg)))))])))))))))
 
