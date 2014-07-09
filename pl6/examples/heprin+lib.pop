@@ -1,0 +1,52 @@
+#lang s-exp "../runtime.rkt"
+
+(import check-ppt give)
+
+(define/state stable? -> #f)
+(define/state sequential-stable-count -> 0)
+
+(define/handler (stablizer _ st evt)
+  (define count (sequential-stable-count st))
+  (whenever (count > 2)
+    (update stable? #t))
+  ;; shiny wrapper over match
+  (whenever (evt is `(update (ptt ,t)))
+     (if (>= 100 t 60)
+         (update sequential-stable-count (add1 count))
+         (update sequential-stable-count 0))))
+
+(define/handler (change-heparin _ st evt)
+  (define/state current-infusion
+    -> (drug (drug-type heparin) "iv" (13 units/kg/hour)))
+
+  (define (update-infusion-by x)
+    (define amt (match st [(state (current-infusion (drug _ _ v))) v]))
+    (define d (drug (drug-type heparin) "iv" (+ x v)))
+    (update current-infusion d)
+    (give d))
+  (define (give-bolus x)
+    (give (drug (drug-type heparin) "iv?" x)))
+  
+  (whenever (evt is `(update (ptt ,t))) 
+   (whenever (t < 45)
+             (give-bolus (80 units/kg))
+             (update-infusion-by (3 units/kg/hour)))
+   (whenever (45 < t < 59)
+             (give-bolus (40 units/kg))
+             (update-infusion-by (1 units/kg/hour)))
+   (whenever (101 < t < 123)
+             (update-infusion-by (-1 units/kg/hour)))
+   (whenever (t > 123)
+             (give (drug (drug-type heparin) "iv" (0 units/kg/hour)))
+             (after (1 hour)
+                    (update-infusion-by (3 units/kg/hour))))))
+
+(define/handler (ppt _ st _)
+  
+  (whenever (sequential-stable-count st)
+            (every (12 hours)
+                   (check-ppt)))
+  (whenever (not (sequential-stable-count st))
+            (every (6 hours)
+                   (check-ppt))))
+
