@@ -9,8 +9,6 @@
              [in:top-interaction #%top-interaction])
  #%top 
  #%module-begin
- free-identifier=?
- syntax
  (all-from-out unstable/match racket/match)
  let define void #%top
  quasiquote unquote #%datum quote when and or
@@ -61,10 +59,10 @@
     #:datum-literals (->)
     [(_ name:id
         value:expr ... -> v)
-     (syntax-local-lift-expression (syntax/loc stx (add-var! 'name v)))
+     (syntax-local-lift-expression (syntax/loc stx (add-var! #'name v)))
      (syntax/loc stx
        (define (name state)
-         (dict-ref state 'name)))]
+         (dict-ref state #'name)))]
     [(_ name:id value:expr ...)
      (syntax/loc stx (define/state name value ... -> undefined))]))
 (define (add-var! id v)
@@ -90,10 +88,8 @@
          #`(app 
             (lambda (t) (and (free-id-table? t)
                         (free-id-table-map t list)))
-            (list-no-order
-             #,@(datum->syntax
-                stx
-                (syntax->datum #'((? (lambda (p) (free-identifier=? p #'x)) (list _ v)) ...))) 
+            (list-no-order (? (lambda (p) (free-identifier=? (car p) #'x))
+                              (list _ v)) ... 
                            _ ___))])))
 
 ;;;;; handlers

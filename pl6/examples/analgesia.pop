@@ -147,8 +147,8 @@
      (update pain-high-count (max (sub1 c) 0))]
     [(_ _) (void)]))
 
-(define/handler (minimal-pain _ state evt)
-  (match* (state evt)
+(define/handler (minimal-pain _ st evt)
+  (match* (st evt)
     [((state (on-demand (drug t m v)))
       `(update pain-score (? _ (curry >= 2))))
      (update on-demand (drug t m (- v (10 micrograms))))]
