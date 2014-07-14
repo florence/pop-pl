@@ -1,0 +1,68 @@
+
+declare state has boolean stable? starts as false
+declare state has number sequential-stable-count starts as 0
+
+handler stablizer takes (old new evt)
+  let count be sequential-stable-count from new
+  match (old new)
+    with (state where count is not 2
+          state where count is 2)
+    then 
+       update stable? to true
+    
+  match evt
+    with `(update (ptt ,t))
+    then
+      if 100 >= t >= 60
+      then
+        update sequential-stable-count to be count+1
+      else
+        update sequential-stable-count to be 0
+
+
+handler change-heparin takes (_ st evt)
+  declare state has drug current-infusion starts as drug of type "heparin" given by "iv" at 13 units/kg/hour
+  
+  on update-infusion (x)
+    let amt be amount from current-infusion from st 
+    let d be drug of type "heparin" given by "iv" at amt
+    update current-infusion to be d
+    send "give" d "to patient"
+  end
+
+  on give-bolus (x)
+    send "give" drug of type "heparin" given by "iv" at x "to patient"
+  end
+
+  match evt
+    with `(update (ptt ,t))
+    then
+      when t < 45
+        give-bolus at 80 units/kg
+        update-infusion by 3 units/kg/hour
+      when 45 < t < 59
+        give-bolus at 40 units/kg
+        update-infusion by 1 unit/kg/hour
+      when 101 < t < 123
+        update-infusion by 1 unit/kg/hour
+      when t > 123
+        send "stop heparin" 
+        after 1 hour
+          update-infusion by 3 units/kg/hour
+
+
+handler ptt takes (_ st _)
+  declare state has number last-time that start as 0
+  match st
+    with state where stable? is false and where last-time is after 6 hours
+    then 
+      update last-time to be now
+      send "check ptt"
+    with state where stable? is true and where last-time is after 12 hours
+    then
+      update last-time to be now
+      send "check ptt"
+     
+      
+  
+  
