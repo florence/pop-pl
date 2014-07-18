@@ -1,0 +1,26 @@
+#lang "../runtime.rkt"
+
+(start give discontinue)
+
+(define/state adjuv-type -> 'initial)
+
+(handler discontinue
+         (stop "blkjselrj")
+         (remove-handler discontinue))
+
+(handler give
+         (case adjuv-type
+           [(initial)
+            (give "k" ...)
+            (update adjuv-type 'nsaid)]
+           [(nsaid)
+            (when (after? (6 hours)
+                          (time-of (last (give (or "k" "i" "a") ...))))
+              (if (eq? 'npo (last (po? ?)))
+                  (give "k" ...)
+                  (give "p" ...)))]
+           [(non-nsaid)
+            (when (after? (6 hours)
+                          (time-of (last (give (or "k" "i" "a")))))
+              (give "a" ...))]))
+

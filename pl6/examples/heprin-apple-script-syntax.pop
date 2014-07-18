@@ -5,13 +5,13 @@ declare state has number sequential-stable-count starts as 0
 handler stablizer takes (old new evt)
   let count be sequential-stable-count from new
   match (old new)
-    with (state where count is not 2
-          state where count is 2)
+    with (a state where count is not 2
+          a state where count is 2)
     then 
        update stable? to true
     
   match evt
-    with `(update (ptt ,t))
+    with a message like (update ptt ,t)
     then
       if 100 >= t >= 60
       then
@@ -35,7 +35,7 @@ handler change-heparin takes (_ st evt)
   end
 
   match evt
-    with `(update (ptt ,t))
+    with a message like (update ptt to ,t)
     then
       when t < 45
         give-bolus at 80 units/kg
@@ -54,11 +54,11 @@ handler change-heparin takes (_ st evt)
 handler ptt takes (_ st _)
   declare state has number last-time that start as 0
   match st
-    with state where stable? is false and where last-time is after 6 hours
+    with a state where stable? is false and where last-time is after 6 hours
     then 
       update last-time to be now
       send "check ptt"
-    with state where stable? is true and where last-time is after 12 hours
+    with a state where stable? is true and where last-time is after 12 hours
     then
       update last-time to be now
       send "check ptt"

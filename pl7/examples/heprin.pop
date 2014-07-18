@@ -1,0 +1,33 @@
+#lang "../runtime.rkt"
+
+(start start stablizer infuser)
+
+(handler infuser
+         (define (change-continous x)
+           (send (change "heparin" "continous" x)))
+         (define (give-bolus x)
+           (send (give "heparin" "bolus" x)))
+         ;; getting these to bind variables might be hard
+         (when (event-is (update ptt (with-var v)))
+           (cond 
+            [(< t 45)
+             (give-bolus (80 units/kg))
+             (change-continous (3 units/kg/hour))]
+            [(< 45 t 59)
+             (give-bolus (40 units/kg))
+             (change-continous (1 unit/kg/hour))]
+            [(< 101 t 123)
+             (change-continous (-1 unit/kg/hour))]
+            [(> 123 t)
+             (send (stop "heparin" "continous"))
+             (after (1 hour)
+                    (send (restart "heparin" "continous"))
+                    (change-continous (-3 units/kg/hour)))])))
+
+(handler stablizer
+         (define stable? 
+           (<= 2 (count (update ptt (>= 100 % 60))
+                        #:after-last (change "heprin" _ ...))))
+         (define time (if stable? (24 hours) (6 hours)))
+         (when (after? time (last-time-of (check-ppt)))
+           (check-ppt)))

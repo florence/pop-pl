@@ -1,0 +1,29 @@
+after f =>
+  (let ([t <current-time])
+    (new-handler <gensymed-name>
+     (λ (s1 s2 _)
+        (when (and (after? s2 t f)
+                   (before s1 t f))
+         <body>
+         (remove-handler <gensymed-name>)))))
+
+require X whenever Y =>
+  whenever/install Y X
+         
+
+handler :=
+   sets up a common reference point for everys
+   transforms free variables to look in the 'new' state
+
+on p := match on the current event
+
+whenever c := duplicate the condition
+              (and (not c1) c2)
+              where c1 looks up free variables in old state
+              where c2 looks up free variables in new state
+              
+
+whenever/install X B =>
+    whenever X install B
+    whenever (not X) uninstall B
+   

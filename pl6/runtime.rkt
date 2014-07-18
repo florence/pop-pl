@@ -1,6 +1,6 @@
 #lang racket
-(require (for-syntax syntax/parse racket/syntax unstable/sequence))
-(require racket/undefined racket/async-channel racket/gui racket/block unstable/match racket/match racket/dict syntax/id-table)
+(require (for-syntax syntax/parse racket/syntax unstable/sequence syntax/id-table racket/dict))
+(require racket/undefined racket/async-channel racket/gui racket/block unstable/match racket/match racket/dict)
 
 (require (for-syntax racket/base))
 (provide (for-syntax (all-from-out racket/base syntax/parse)))
@@ -50,30 +50,69 @@
   (syntax-parse stx
     [(_ n:number u:id) (syntax/loc stx (number/unit n 'u))]
     [(_ f a ...) (syntax/loc stx (#%app f a ...))]))
-;;;;; state
-(define state-old (make-immutable-free-id-table))
-(define state-new (make-immutable-free-id-table))
 
+;;;;; state
+(struct in:state (table))
+(define empty-state (in:state (hash)))
+(define state-old empty-state)
+(define state-new empty-state)
+
+(define-for-syntax valid-accessor (make-free-id-table))
+(define-for-syntax (add-state-accessor! n id)
+  (dict-set! valid-accessor n id))
+(define-for-syntax (state-accessor? n)
+  (dict-has-key? valid-accessor n))
+(define-for-syntax (validate-syntax-accessor n)
+  (unless (state-accessor? n)
+    (raise-syntax-error 'state-matcher "unbound state accessor" n)))
+;; (Syntax -> Syntax) Identifier
+(begin-for-syntax
+  (struct state-transformer (trans key)
+          #:property prop:procedure (struct-field-index trans)))
+(define-for-syntax (make-state-transformer key)
+  (define (trans stx)
+    (syntax-parse stx
+      [(_ state)
+       #`(dict-ref (in:state-table state) #,key)]))
+  (state-transformer trans key))
 (define-syntax (define/state stx)
   (syntax-parse stx
     #:datum-literals (->)
     [(_ name:id
         value:expr ... -> v)
-     (syntax-local-lift-expression (syntax/loc stx (add-var! #'name v)))
-     (syntax/loc stx
-       (define (name state)
-         (dict-ref state #'name)))]
+     (with-syntax ([id (syntax-local-lift-expression (syntax/loc stx (make-var 'name v)))])
+       (syntax/loc stx
+         (begin
+           #;
+           (begin-for-syntax
+             (add-state-accessor! #'name #t))
+           (define-syntax name
+             (make-state-transformer #'id)))))]
     [(_ name:id value:expr ...)
      (syntax/loc stx (define/state name value ... -> undefined))]))
-(define (add-var! id v)
-  (set! state-new (dict-set state-new id v)))
+
+(struct var (name n)
+        #:methods gen:custom-write
+        [(define (write-proc var port mode)
+           (display
+            (~a "@" (var-name var))
+            port))])
+
+(define make-var
+  (let ([c 1])
+    (lambda (name v)
+      (define n (var name c))
+      (set! c (add1 c))
+      (set! state-new (in:state (dict-set (in:state-table state-new) n v)))
+      n)))
 
 (define-syntax (update stx)
   (syntax-parse stx
     [(_ id:id v:expr)
-     (syntax/loc stx (in:update 'id v))]
-    [(_ id:id v:expr s:expr)
-     (syntax/loc stx (in:update 'id v s))]))
+     (with-syntax ([id (state-transformer-key (syntax-local-value #'id))])
+       (syntax/loc stx 
+         (in:update id v)))]))
+
 (define (in:update n v)
   (unless (dict-has-key? state-new n)
     (error 'update "non existant field"))
@@ -85,12 +124,13 @@
   (lambda (stx)
     (syntax-parse stx
       [(_ (x:id v) ...)
-         #`(app 
-            (lambda (t) (and (free-id-table? t)
-                        (free-id-table-map t list)))
-            (list-no-order (? (lambda (p) (free-identifier=? (car p) #'x))
-                              (list _ v)) ... 
-                           _ ___))])))
+       #`(?
+          (begin
+            #;
+            (begin-for-syntax
+              (for-each validate-syntax-accessor (syntax->list #'(x ...))))
+            in:state?)
+          (and (app x v) ...))])))
 
 ;;;;; handlers
 (define current-handler-delta (make-hash))
@@ -169,7 +209,6 @@
 ;; Event -> [Listof Response]
 ;; run this event through the system
 (define (evaluate-one-event event)
-  (displayln `(,state-old ,state-new ,(dict-keys handlers),event))
   (evaluate-handlers event))
 
 ;; Event -> [Listof Response]

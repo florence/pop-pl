@@ -1,0 +1,57 @@
+#lang racket
+(require "../runtime.rkt")
+
+(import call-doctor eat take)
+
+
+(start eating giving)
+
+(handler eating
+         (when (event-is (eating))
+           (send (request glucose-value))
+           (after (1 hour)
+                  (send (request glucose-value)))))
+(handler giving
+         (when (not-exists (take "glucose-tab" _) 
+                           #:after-last (result glucose-value (% <= 70)))
+           (send (take "glucose-tab" (2 tabs)))))
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;; vs
+
+
+(define/handler (eating-resp _ state event)
+  (match event
+    [(action (eating))
+     (mark 'meal)
+           (request glucose-value)
+           (new-handler
+            (let ([t (+ (? 1 hour) (current-time state))])
+              (lambda (old new _) 
+                (if (not (and (before? old t)
+                              (after? new t)))
+                    (no-op)
+                    (values Δ0
+                            (list (request glucose-value))))))))]
+    [_ null]))
+
+(define/handler (glucose-check old new _)
+  (define (m? s)
+    (match s
+      [(state (glucose-value g))
+       (<= g (? 70 units))]))
+  (if (not (and (not (m? old))
+                (m? new)))
+      null
+      (list (request glucose-value)
+            (take "glucose tab" (2 tabs))
+            (new-handler
+             (let ([t (+ (? 15 minutes) (current-time new))])
+               (lambda (old new _)
+                 (if (not (and (before? old t)
+                               (after? new t)))
+                     (no-op)
+                     (values Δ0
+                             (request glucose-value)))))))))

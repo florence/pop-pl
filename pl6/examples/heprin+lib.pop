@@ -1,12 +1,9 @@
 #lang s-exp "../runtime.rkt"
 
 (import check-ppt give)
-
-(define/state stable? -> #f)
-(define/state sequential-stable-count -> 0)
-
+#;
 (define/handler (stablizer old new evt)
-  (define count (sequential-stable-count new))
+  (define count (stable-count new))
   (match* (old new)
     [((state [count (not 2)])
       (state [count 2]))
@@ -14,8 +11,8 @@
   (match evt
     [`(update (ptt ,t))
      (if (>= 100 t 60)
-         (update sequential-stable-count (add1 count))
-         (update sequential-stable-count 0))]))
+         (update stable-count (add1 count))
+         (update stable-count 0))]))
 
 (define/handler (change-heparin _ st evt)
   (define/state current-infusion
@@ -45,8 +42,9 @@
             (after (1 hour)
                    (update-infusion-by (3 units/kg/hour)))])]))
 
+#;
 (define/handler (ptt _ st _)
-  (define last-time -> 0)
+  (define/state last-time -> 0)
   (match st 
     [(state [stable? #f]
             [last-time (? (curryr after? (6 hours)) _)])
@@ -58,3 +56,49 @@
      (check-ptt)]))
 
 
+
+  
+  
+  
+  
+  
+(define/state stable? -> #f)
+(define/state stable-count -> 0)
+
+
+
+(handler ptt
+         (define s (<= (? 3) (lookup (message (update ptt (with-value (>= 100 % 60)))))))
+         ;; defines a standard reference point for time
+         (when-this-becomes-true stable?  
+                                 install
+                                 (every (24 hours) ;; updates reference point
+                                        (check-ppt)))
+         (when-this-becomes-true (not stable?)
+                                 install
+                                 (every (6 hours)
+                                        (check-ppt))))
+
+(handler stablizer
+         ;; whenevers duplicate their expressions
+         ;; and bind free variables from the state
+         (when-this-becomes-true (stable-count . >= . 2)
+           (update stable? (add1 lsjefkles)))
+         
+         
+         
+         (on-message (update ptt (with-var v))
+           (cond [(>= 100 v 60) ;; 100 >= v >= 60
+                  (update stable-count (add1 stable-count))] ;; elsewhere free variables are looked up in the current state
+                 [else
+                  (update stable-count 0)
+                  (update stable? #f)])))
+
+
+(handler stablizer
+         (update stable? (<= (? 3) (lookup (message (update ptt (with-value (>= 100 % 60))))))))
+
+
+
+(and (not (get stable? old))
+     (get stable? new))
