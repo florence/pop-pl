@@ -1,9 +1,13 @@
 #lang "../runtime.rkt"
 
-(start start stablizer infuser)
+;(start stablizer infuser)
+(require iv)
+(require infusion)
+(require ptt-checking)
 
 (handler infuser
          (define (change-continous x)
+           (change-heprin x)
            (send (change "heparin" "continous" x)))
          (define (give-bolus x)
            (send (give "heparin" "bolus" x)))
@@ -24,10 +28,63 @@
                     (send (restart "heparin" "continous"))
                     (change-continous (-3 units/kg/hour)))])))
 
-(handler stablizer
+(handler ptt-checking
          (define stable? 
-           (<= 2 (count (update ptt (>= 100 % 60))
-                        #:after-last (change "heprin" _ ...))))
+           (<= 2 (how-many (update ptt (>= 100 % 60))
+                           (since (change "heprin" _ ...)))))
          (define time (if stable? (24 hours) (6 hours)))
-         (when (after? time (last-time-of (check-ppt)))
+         (when (after? time (time-of-last (check-ppt)))
            (check-ppt)))
+;; alternat syntax
+
+
+handler infusion is
+  when event-is ptt
+    v means value-of event
+
+    whenever v<45
+      change-heprin by: 3units/kg/hour 
+      give 80units/kg of: "heprin" by: "iv"
+
+    whenever 45<v<59
+      change-heprin by: 1unit/kg/hour
+      give 40units/kg of: "heprin" by: "subcut" whenever 45<v<59
+
+    whenever 101<v<123
+      change-heprin by: -1units/kg/hour 
+    
+    whenever v>123
+      stop "heparin"
+      after 1hour
+        restart "heparin"
+        change-heprin -3units/kg/hour
+
+
+heprin-ptt-checking is
+                                          that
+                                          that-is              since <time>
+  stable means most-recent ptt that-are theripudic since-last change-heprin  
+  Q6(check-ppt) whenever not stable
+  Q24(check-ppt) whenever stable
+
+
+  stable means most-recent 2 ptt that-are: theripudic since-last(change-heprin)
+
+
+message ptt is [update ptt ?]
+message change-heprin is [change "heprin" by: ?]
+message give is [give ? of: ? by: ? ]
+message stop is [stop ?]
+message restart is [restart ?]
+
+theraputic(x) := 
+
+
+all [update ptt ]
+  
+
+(handler iv
+         ;initially put-iv in
+         ;every x check iv is in
+         )
+

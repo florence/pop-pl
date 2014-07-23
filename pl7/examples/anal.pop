@@ -15,12 +15,16 @@
             (update adjuv-type 'nsaid)]
            [(nsaid)
             (when (after? (6 hours)
-                          (time-of (last (give (or "k" "i" "a") ...))))
-              (if (eq? 'npo (last (po? ?)))
+                          (last-time-since (give (or "k" "i" "a"))))
+              ;; not the happiest with this
+              (if (eq? 'npo (value-of (last (po? ?))))
                   (give "k" ...)
-                  (give "p" ...)))]
+                  (give "p" ...)))
+            (when (= 3 (how-many-days-of (give (or "k" "i"))
+                                         (since (3 days))))
+              (update adjuv-type non-nsaid))]
            [(non-nsaid)
             (when (after? (6 hours)
-                          (time-of (last (give (or "k" "i" "a")))))
+                          (last-time-since (give (or "k" "i" "a"))))
               (give "a" ...))]))
 
