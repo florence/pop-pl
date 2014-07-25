@@ -12,7 +12,7 @@
   (color "seagreen" t))
 (define (color c t . others)
   (define key (if (symbol? c) (symbol->string c) c))
-  (text t 
+  (text t
         (cons (send the-color-database find-color key)
               (append others (current-main-font)))
         (current-font-size)))
@@ -37,8 +37,7 @@
   @list{    start @const{18}units/kg @kw{of:} @const{"heprin"}})
  (make-item
   @list{@syntax{handler} infusion @syntax{is}}
-  @list{    @syntax{whenever} event-is ptt}
-  @list{         a-ptt @syntax{means} value-of event}
+  @list{    @syntax{whenever new} ptt}
   @list{ }
   @list{        @syntax{whenever;} }
   @list{         a-ptt@kw{<}@const{45}      @syntax{|}increase @const{"heprin"} @kw{by:} @const{3}units/kg/hour}
@@ -60,16 +59,16 @@
   @list{    Q24 check-ptt @syntax{whenever} stable}))
 (slide
  (make-item
-  @list{@syntax{message} ptt @syntax{is} @syntax{[}update ptt@syntax{?]}}
-  @list{@syntax{message} change @syntax{is} @syntax{[}change @syntax{?} @kw{by:} @syntax{?]}}
+  @list{@syntax{message} ptt @syntax{is} @syntax{[} a-ptt @syntax{]}}
+  @list{@syntax{message} change @syntax{is} @syntax{[} drug @kw{by:} amount @syntax{]}}
   @list{@syntax{message} increase @syntax{is} change}
   @list{@syntax{message} decrease@delim{(}d @kw{by:} a@delim{)}@syntax{is} change@delim{(}d by: -a @delim{)}}
-  @list{@syntax{message} check-ptt @syntax{is} @syntax{[}check-ptt@syntax{]}}
-  @list{@syntax{message} give @syntax{is} @syntax{[}give @syntax{?} @kw{of:} @syntax{?} @kw{by:} @syntax{?]}}
+  @list{@syntax{message} check-ptt @syntax{is} @syntax{[}@syntax{]}}
+  @list{@syntax{message} give @syntax{is} @syntax{[}amount @kw{of:} drug @kw{by:} method @syntax{]}}
   @list{@syntax{message} give-bolus @syntax{is} give}
-  @list{@syntax{message} start @syntax{is} @syntax{[}give @syntax{?} @kw{of:} @syntax{?]}}
-  @list{@syntax{message} hold @syntax{is} @syntax{[}hold @syntax{?]}}
-  @list{@syntax{message} restart @syntax{is} @syntax{[}restart @syntax{?]}}))
+  @list{@syntax{message} start @syntax{is} @syntax{[} amount @kw{of:} drug @syntax{]}}
+  @list{@syntax{message} hold @syntax{is} @syntax{[}drug@syntax{]}}
+  @list{@syntax{message} restart @syntax{is} @syntax{[}drug@syntax{]}}))
 
 
 (define (render)
