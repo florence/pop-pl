@@ -5,6 +5,7 @@
   (color "darkmagenta" t  'bold))
 (define (kw t)
   (color "olive" t))
+(define op kw)
 (define (delim t)
   (parameterize ([current-font-size 13])
     (color "royalblue" t)))
@@ -37,24 +38,25 @@
   @list{    start @const{18}units/kg @kw{of:} @const{"heprin"}})
  (make-item
   @list{@syntax{handler} infusion @syntax{is}}
-  @list{    @syntax{whenever new} ptt}
+  @list{    @syntax{whenever new} ptt}  
   @list{ }
-  @list{        @syntax{whenever;} }
-  @list{         a-ptt@kw{<}@const{45}      @syntax{|}increase @const{"heprin"} @kw{by:} @const{3}units/kg/hour}
+  @list{        @syntax{whenever} }
+  @list{         a-ptt@op{<}@const{45}      @syntax{|}increase @const{"heprin"} @kw{by:} @const{3}units/kg/hour}
   @list{                          @syntax{|}give-bolus @const{80}units/kg @kw{of:} @const{"heprin"} @kw{by:} @const{"iv"}}
   @list{ }
-  @list{        @const{45}@kw{<}a-ptt@kw{<}@const{59} @syntax{|}increase @const{"heprin"} @kw{by:} @const{1}unit/kg/hour}
+  @list{        @const{45}@op{<}a-ptt@op{<}@const{59} @syntax{|}increase @const{"heprin"} @kw{by:} @const{1}unit/kg/hour}
   @list{                          @syntax{|}give-bolus @const{40}units/kg @kw{of:} @const{"heprin"} @kw{by:} @const{"iv"}}
   @list{ }
-  @list{        @const{101}@kw{<}a-ptt@kw{<}@const{123}@syntax{|}decrease @const{"heprin"} @kw{by:} @const{1}units/kg/hour}
+  @list{        @const{101}@op{<}a-ptt@op{<}@const{123}@syntax{|}decrease @const{"heprin"} @kw{by:} @const{1}units/kg/hour}
   @list{ }
-  @list{         a-ptt@kw{>}@const{123}     @syntax{|}hold @const{"heparin"}}
+  @list{         a-ptt@op{>}@const{123}     @syntax{|}hold @const{"heparin"}}
   @list{                          @syntax{|}@syntax{after} @const{1}hour}
   @list{                          @syntax{|}       restart @const{"heprin"}}
   @list{                          @syntax{|}       decrease @const{"heprin"} @const{3}units/kg/hour})
  (make-item
   @list{@syntax{handler} heprin-ptt-checking @syntax{is}}
   @list{    stable @syntax{means} most-recent @const{2} ptt @kw{that-are:} theripudic since-last@delim{(}change@delim{(}@const{"heprin"}@delim{)}@delim{)}}
+  @list{    theripudic @syntax{means a} ptt @syntax{where} @const{60} @op{<} a-ptt @op{<} @const{100}}
   @list{    Q6 check-ptt @syntax{whenever} not stable}
   @list{    Q24 check-ptt @syntax{whenever} stable}))
 (slide
