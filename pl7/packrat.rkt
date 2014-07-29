@@ -1,6 +1,6 @@
 #lang racket
 (provide 
- (prefix-out : (combine-out lit rx seq ! & + * ? EOF))
+ (prefix-out : (combine-out lit rx seq ! & + * ? / EOF))
  define-parser/colorer
  (struct-out position)
  position->vector)
