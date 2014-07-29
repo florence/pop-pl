@@ -7,7 +7,7 @@
 
 (handler infuser
          (define (change-continous x)
-           (change-heprin x)
+           (change-heparin x)
            (send (change "heparin" "continous" x)))
          (define (give-bolus x)
            (send (give "heparin" "bolus" x)))
@@ -31,7 +31,7 @@
 (handler ptt-checking
          (define stable? 
            (<= 2 (how-many (update ptt (>= 100 % 60))
-                           (since (change "heprin" _ ...)))))
+                           (since (change "heparin" _ ...)))))
          (define time (if stable? (24 hours) (6 hours)))
          (when (after? time (time-of-last (check-ppt)))
            (check-ppt)))
@@ -43,36 +43,36 @@ handler infusion is
     v means value-of event
 
     whenever v<45
-      change-heprin by: 3units/kg/hour 
-      give 80units/kg of: "heprin" by: "iv"
+      change-heparin by: 3units/kg/hour 
+      give 80units/kg of: "heparin" by: "iv"
 
     whenever 45<v<59
-      change-heprin by: 1unit/kg/hour
-      give 40units/kg of: "heprin" by: "subcut" whenever 45<v<59
+      change-heparin by: 1unit/kg/hour
+      give 40units/kg of: "heparin" by: "subcut" whenever 45<v<59
 
     whenever 101<v<123
-      change-heprin by: -1units/kg/hour 
+      change-heparin by: -1units/kg/hour 
     
     whenever v>123
       stop "heparin"
       after 1hour
         restart "heparin"
-        change-heprin -3units/kg/hour
+        change-heparin -3units/kg/hour
 
 
-heprin-ptt-checking is
+heparin-ptt-checking is
                                           that
                                           that-is              since <time>
-  stable means most-recent ptt that-are theripudic since-last change-heprin  
+  stable means most-recent ptt that-are theripudic since-last change-heparin  
   Q6(check-ppt) whenever not stable
   Q24(check-ppt) whenever stable
 
 
-  stable means most-recent 2 ptt that-are: theripudic since-last(change-heprin)
+  stable means most-recent 2 ptt that-are: theripudic since-last(change-heparin)
 
 
 message ptt is [update ptt ?]
-message change-heprin is [change "heprin" by: ?]
+message change-heparin is [change "heparin" by: ?]
 message give is [give ? of: ? by: ? ]
 message stop is [stop ?]
 message restart is [restart ?]
