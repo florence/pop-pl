@@ -46,13 +46,15 @@
                      [name r.r] ...)
                     s)])
          (lambda (str)
-           (define-values (res _) (parse lang str 0))
+           (define t (make-hasheq))
+           (define-values (res _) (parse lang str 0 t))
+           (displayln t)
            res))]))
 
 (define (parse pat str pos [table (make-hasheq)])
   (define (memoize val end)
-    (define sub (hash-ref! table pat (make-hasheq)))
-    (hash-set! sub pos (list val end)))
+    (define sub (hash-ref! table str (make-hasheq)))
+    (hash-set! sub pos val))
   (define (get pat pos)
     (hash-ref (hash-ref table pat (hash)) pos #f))
   (define-values (r p)
@@ -123,27 +125,56 @@
 
 
 (module+ test
-  (define p
-    (parser
-     [Top (seq (lambda (r p) (first r))
-               (list Expr EOF))]
-     [Expr Sum]
-     [Sum (seq (lambda (l p) (apply r:+ (flatten l)))
-               (list Product (* (lambda (l p) l)
-                                (seq (match-lambda** 
-                                      [((list "+" n) _) n]
-                                      [((list "-" n) _) (- n)])
-                                     (list (/ (list "+" "-")) Product)))))]
-     [Product (seq (lambda (l p) (apply r:* (flatten l)))
-                   (list Value (* (lambda (l p) l) 
+  (let ()
+    (define p
+      (parser
+       [Top (seq (lambda (r p) (first r))
+                 (list Expr EOF))]
+       [Expr Sum]
+       [Sum (seq (lambda (l p) (apply r:+ (flatten l)))
+                 (list Product (* (lambda (l p) l)
                                   (seq (match-lambda** 
-                                        [((list "*" n) _) n]
-                                        [((list "/" n) _) (r:/ n)])
-                                       (list (/ (list "*" "/")) Value)))))]
-     [Value (/ (list (rx (lambda (r p) (string->number r)) #rx"[0-9]+")
-                     (seq (lambda (l p) (second l))
-                          (list "(" Expr ")"))))]))
-  (check-equal? (p "1") 1)
-  (check-equal? (p "1+2") 3)
-  (check-equal? (p "1+2/2") 2)
-  (check-equal? (p "(1+2)/2") 3/2))
+                                        [((list "+" n) _) n]
+                                        [((list "-" n) _) (- n)])
+                                       (list (/ (list "+" "-")) Product)))))]
+       [Product (seq (lambda (l p) (apply r:* (flatten l)))
+                     (list Value (* (lambda (l p) l) 
+                                    (seq (match-lambda** 
+                                          [((list "*" n) _) n]
+                                          [((list "/" n) _) (r:/ n)])
+                                         (list (/ (list "*" "/")) Value)))))]
+       [Value (/ (list (rx (lambda (r p) (string->number r)) #rx"[0-9]+")
+                       (seq (lambda (l p) (second l))
+                            (list "(" Expr ")"))))]))
+    (check-equal? (p "1") 1)
+    (check-equal? (p "1+2") 3)
+    (check-equal? (p "1+2/2") 2)
+    (check-equal? (p "(1+2)/2") 3/2))
+  (let ()
+    (define orig-stx (read-syntax 'derp (open-input-bytes #"x")))
+    (define (->stx e pos)
+      (datum->syntax #f e (vector #f #f #f pos #f) orig-stx))
+    (define p
+      (parser
+       [Top (seq (lambda (r p) (first r))
+                 (list Expr EOF))]
+       [Expr Sum]
+       [Sum (seq (lambda (l p) (->stx (cons '+ (flatten l)) p))
+                 (list Product (* (lambda (l p) l)
+                                  (seq (match-lambda** 
+                                        [((list "+" n) p) (->stx n p)]
+                                        [((list "-" n) p) (->stx `(- ,n) p)])
+                                       (list (/ (list "+" "-")) Product)))))]
+       [Product (seq (lambda (l p) (->stx (cons '* (flatten l)) p))
+                     (list Value (* (lambda (l p) l) 
+                                    (seq (match-lambda** 
+                                          [((list "*" n) p) (->stx n p)]
+                                          [((list "/" n) p) (->stx`(/ ,n) p)])
+                                         (list (/ (list "*" "/")) Value)))))]
+       [Value (/ (list (rx (lambda (r p) (->stx (string->number r) p)) #rx"[0-9]+")
+                       (seq (lambda (l p) (second l))
+                            (list "(" Expr ")"))))]))
+    (define t1 (p "(1+2)/3"))
+    (displayln t1)
+    ;(check-equal? (eval-syntax t1 (make-base-namespace)) 1)
+    ))
