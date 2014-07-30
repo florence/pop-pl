@@ -91,6 +91,7 @@
                             (set-port-next-location! in a b c))])
          (syntax-parameterize ([reset (make-rename-transformer #'r)])
            body ...))]))
+(define tab-count (make-parameter 0))
 (define (parse pat i [table (make-hasheq)] #:debug [a:debug #f])
   (define in (if (string? i) (open-input-string i) i))
   (port-count-lines! in)
@@ -106,6 +107,7 @@
     (hash-ref (hash-ref table pat (hash)) start #f))
   (define (debug e)
     (when a:debug
+      (display (make-string (tab-count) #\tab))
       (write e)
       (displayln "")
       (displayln "")
@@ -119,8 +121,10 @@
         (if v
             (values v (get-pos)) 
             (match pat
-              [(pattern _ p)
-               (parse* p)]
+              [(pattern n p)
+               (debug `(starting ,n))
+               (parameterize ([tab-count (add1 (tab-count))])
+                 (parse* p))]
               [(app string? #t)
                (parse* (lit (const pat) #f pat))]
               [(lit f c pat)
@@ -181,7 +185,7 @@
                (define-values (r p) (parse* pat))
                (if r
                    (values (f r (get-pos)) (get-pos))
-                   (fail p))]
+                   (begin (reset) (values #t (get-pos))))]
               [(eof)
                (values (eof-object? (peek-byte in)) (get-pos))])))))
   
@@ -190,7 +194,7 @@
   
   (when r
     (memoize r))
-  (values r (get-pos)))
+  (values r p))
 
 (define (lang->colorer lang)
   ;; build table

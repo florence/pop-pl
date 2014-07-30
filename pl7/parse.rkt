@@ -16,16 +16,18 @@
   (match-lambda
    [(list _ args _)
     `(make-message ,@args)]))
-(define (all-but-last l)
-  (cond [(null? l) null]
-        [(null? (rest l)) null]
-        [else (cons (first l)
-                    (all-but-last (rest l)))]))
 
 (define-parser/colorer (parse lex color)
-  [Top (:seq (->stx all-but-last) #f (list (:+ no-op (:/ (list Require Initially Handler Message))) :EOF))]
+  [Top (:seq (->stx
+              (compose
+               (lambda (b) (list* 'module 'TODO 'pop-pl b))
+               first))
+             #f
+             (list (:+ no-op 
+                       (:/ (list Require Initially Handler Message)))
+                   :EOF))]
 
-  [Require (:seq (->stx (compose second ))
+  [Require (:seq (->stx (compose second))
                  #f
                  (list REQUIRE WHITESPACE ID WHITESPACE NEWLINE))]
   
@@ -45,15 +47,16 @@
                            (list MESSAGE WHITESPACE ArgDef WHITESPACE IS WHITESPACE Expr END))))]
   [MessageForm (:seq  (->stx message-maker)
                       #f
-                      (list OPEN-BRACKET WHITESPACE ArgList WHITESPACE CLOSE-BRACKET))]
+                      (list OPEN-BRACKET ArgList CLOSE-BRACKET))]
   
   ;; arguments
   [ArgDef (:seq (->stx second) 
                 #f
                 (list OPEN-PAREN ArgList CLOSE-PAREN))]
-  [ArgList (:* (->stx flatten)
+  [ArgList (:* (->stx (compose (curry filter (negate string?))
+                               flatten))
                (:/ (list WHITESPACE
-                         (:seq raw #f (list KEYWORD ID))
+                         (:seq no-op #f (list KEYWORD WHITESPACE ID))
                          ID)))]
   
   ;; expressions
@@ -71,17 +74,19 @@
   [NEWLINE (:lit no-op 'white-space "\n")]
   [STRING (:rx no-op 'constant #rx"\".*[^\\]\"")]
   [WHITESPACE (:rx no-op 'white-space #rx" +")]
-  [KEYWORD (:seq (->stx (compose string->keyword symbol->string first))
+  [?WHITESPACE (:? no-op WHITESPACE)]
+  [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
                  'keyword
-                 (list ID ":"))]
+                 (list ID-LIKE ":"))]
   [ID (:seq (->stx first)
             'no-color
-            (list (:rx (->stx string->symbol) #f #rx"[a-zA-Z]+")
+            (list ID-LIKE
                   (:! ":")))]
+  [ID-LIKE (:rx (->stx string->symbol) #f #rx"[a-zA-Z]+")]
   [OPEN-PAREN (:lit no-op 'paren "(")]
   [CLOSE-PAREN (:lit no-op 'paren ")")]
   ;; silly
-  [Todo (:! (:rx no-op #f #rx"."))]
+  [Todo (:! (:? no-op (:rx no-op #f #rx".")))]
   #:colors
   [syntax "red"]
   [constant "green"]
@@ -90,5 +95,6 @@
   [keyword "yellow"])
 
 (module+ test
-  (check-equal? (syntax->datum (parse "message test is [ a b: c ]" #:debug #t))
-                '(define test (make-message a #:b c))))
+  (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))
+                '(module TODO pop-pl
+                  (define test (make-message a #:b c)))))
