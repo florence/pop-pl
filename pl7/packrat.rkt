@@ -7,6 +7,7 @@
 
 
 (require racket/shared (prefix-in r: racket))
+(require racket/stxparam)
 (require (for-syntax syntax/parse))
 (module+ test (require rackunit))
 
@@ -79,7 +80,17 @@
                        res)
                      (lang->colorer lang)
                      (lambda (q) (hash-ref colors q 'no-color))))))]))
-
+(define-syntax-parameter reset (make-rename-transformer #'void))
+(define-syntax (with-reset stx)
+  (syntax-parse stx
+    [(_ in:id body ...)
+     #'(let*-values ([(p) (file-position in)]
+                     [(a b c) (port-next-location in)]
+                     [(r) (lambda ()
+                            (file-position in p)
+                            (set-port-next-location! in a b c))])
+         (syntax-parameterize ([reset (make-rename-transformer #'r)])
+           body ...))]))
 (define (parse pat i [table (make-hasheq)] #:debug [a:debug #f])
   (define in (if (string? i) (open-input-string i) i))
   (port-count-lines! in)
@@ -100,77 +111,79 @@
       (displayln "")
       (displayln "")))
   (define-values (r p)
-    (let ([v (get pat)])
-      (if v
-          (values v (get-pos)) 
-          (match pat
-            [(pattern _ p)
-             (parse* p)]
-            [(app string? #t)
-             (parse* (lit (const pat) #f pat))]
-            [(lit f c pat)
-             (parse* (rx f c (regexp-quote pat)))]
-            [(rx f _ reg)
-             (define locs (regexp-match-peek-positions* reg in))
-             (define has (and locs (assoc 0 locs)))
-             (define end (and has 
-                              (cdr has)))
-             (debug `(,reg matched ,locs))
-             (if (not end)
-                 (values #f (get-pos))
-                 (values (f (read-string end in) (get-pos)) (get-pos)))]
-            [(/ (list* pats))
-             (let loop ([pats pats])
-               (cond [(null? pats)
-                      (values #f (get-pos))]
-                     [else 
-                      (define pat (first pats))
-                      (define-values (r p) (parse* pat))
-                      (if r
-                          (values r (get-pos))
-                          (loop (rest pats)))]))]
-            [(seq f _ (list* pats))
-             (let loop ([rs null] [pats pats])
-               (cond [(null? pats)
-                      (define p (get-pos))
-                      (values (f (reverse rs) p) p)]
-                     [else
-                      (define pat (first pats))
-                      (define-values (r p) (parse* pat))
-                      (if (not r)
-                          (values #f (get-pos))
-                          (loop (cons r rs) (rest pats)))]))]
-            [(! pat)
-             (define-values (r p) (parse* (& pat)))
-             (if (not r)
-                 (values #t (get-pos))
-                 (values #f (get-pos)))]
-            [(& pat)
-             (define init (file-position in))
-             (define-values (r p) (parse* pat))
-             (define loc (get-pos))
-             ;(set-port-next-location! in a b c)
-             (file-position in init)
-             (if r
-                 (values r loc)
-                 (values #f (get-pos)))]
-            [(+ f pat)
-             (parse* (seq (lambda (r p) (f (cons (first r) (second r)) p))
-                         #f
-                         (list pat (* (lambda (r p) r) pat))))]
-            [(* f pat)
-             (let loop ([res null])
+    (with-reset
+        in
+      (let ([v (get pat)])
+        (define (fail p)
+          (values #f p))
+        (if v
+            (values v (get-pos)) 
+            (match pat
+              [(pattern _ p)
+               (parse* p)]
+              [(app string? #t)
+               (parse* (lit (const pat) #f pat))]
+              [(lit f c pat)
+               (parse* (rx f c (regexp-quote pat)))]
+              [(rx f _ reg)
+               (define locs (regexp-match-peek-positions* reg in))
+               (define has (and locs (assoc 0 locs)))
+               (define end (and has 
+                                (cdr has)))
+               (debug `(,reg matched ,locs))
+               (if (not end)
+                   (fail (get-pos))
+                   (values (f (read-string end in) (get-pos)) (get-pos)))]
+              [(/ (list* pats))
+               (let loop ([pats pats] [pos (get-pos)]) 
+                 (cond [(null? pats)
+                        (fail pos)]
+                       [else 
+                        (define pat (first pats))
+                        (define-values (r p) (parse* pat))
+                        (if r
+                            (values r (get-pos))
+                            (begin (reset) (loop (rest pats) p)))]))]
+              [(seq f _ (list* pats))
+               (let loop ([rs null] [pats pats])
+                 (cond [(null? pats)
+                        (define p (get-pos))
+                        (values (f (reverse rs) p) p)]
+                       [else
+                        (define pat (first pats))
+                        (define-values (r p) (parse* pat))
+                        (if (not r)
+                            (fail p)
+                            (loop (cons r rs) (rest pats)))]))]
+              [(! pat)
+               (define-values (r p) (parse* (& pat)))
+               (if (not r)
+                   (values #t (get-pos))
+                   (fail p))]
+              [(& pat)
+               (define-values (r p) (parse* pat))
+               (define loc (get-pos))
+               (reset)
+               (if r
+                   (values r loc)
+                   (values #f (get-pos)))]
+              [(+ f pat)
+               (parse* (seq (lambda (r p) (f (cons (first r) (second r)) p))
+                            #f
+                            (list pat (* (lambda (r p) r) pat))))]
+              [(* f pat)
+               (let loop ([res null])
+                 (define-values (r p) (parse* pat))
+                 (if r
+                     (loop (cons r res))
+                     (values (f (reverse res) (get-pos)) (get-pos))))]
+              [(? f pat)
                (define-values (r p) (parse* pat))
                (if r
-                   (loop (cons r res))
-                   (values (f (reverse res) (get-pos)) (get-pos))))]
-            [(? f pat)
-             (define-values (r p) (parse* pat))
-             (if r
-                 (values (f r (get-pos)) (get-pos))
-                 (values #t p))]
-            [(eof)
-             (values (eof-object? (peek-byte in)) (get-pos))]))))
+                   (values (f r (get-pos)) (get-pos))
+                   (fail p))]
+              [(eof)
+               (values (eof-object? (peek-byte in)) (get-pos))])))))
   
   (when (pattern? pat)
       (debug `(pat: ,pat res: ,r at: ,(get-pos))))
@@ -255,6 +268,15 @@
       [X (* (lambda (r p) r) (rx (lambda (r p) r) #f #rx"."))])
     (check-equal? (p "abc")
                   (list "a" "b" "c")))
+  ;; test that we reset correctly in :/
+  (let ()
+    (define-parser/colorer (p l c)
+      [X (/ (list (seq (lambda (r c) r)
+                       #f
+                       (list "c" "a"))
+                  "c"))])
+    (check-equal? (p "c")
+                  "c"))
   (let ()
     (define-parser/colorer (p l c)
       [Expr (seq (lambda (l p) l)
