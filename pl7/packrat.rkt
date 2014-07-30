@@ -33,7 +33,7 @@
 
 ;;; patterns
 (struct pat (f) #:mutable)
-(struct pattern (p) #:transparent #:mutable)
+(struct pattern (name p) #:transparent #:mutable)
 (struct colorable pat (color) #:mutable)
 ;; Regex
 (struct lit colorable (str) #:mutable #:transparent)
@@ -56,63 +56,66 @@
 (define EOF (eof))
 
 (define-syntax (define-parser/colorer stx)
-
-  (define-syntax-class pat
-    #:attributes (r)
-    (pattern x:id
-             #:with r #'(pattern x))
-    (pattern e:expr
-             #:with r #'e))
-
   (syntax-parse stx
     [(_ (p:id lex:id col:id)
-        [top:id s:pat]
-        [name:id r:pat] ...
+        [top:id s:expr]
+        [name:id r:expr] ...
         (~optional (~seq #:colors [x:id c:str] ...)))
      (with-syntax ([colors (if (not (attribute x))
                                #'(hash)
                                #'(make-hash (list (cons 'x c) ...)))])
        #'(define-values (p lex col)
            (let ([lang (shared 
-                        ([top s.r]
-                         [name r.r] ...)
+                        ([top (pattern 'top s)]
+                         [name (pattern 'name r)] ...)
                         s)]
                  [color colors])
-             (values (lambda (in)
+             (values (lambda (in #:debug [debug #f])
                        (define t (make-hasheq))
-                       (define-values (res _) (parse lang in t))
-                                        ;(displayln t)
+                       (define-values (res p) (parse lang in t #:debug debug))
+                       (when (and debug (not res))
+                         (write `(failed at ,p with table ,t))
+                         (write "\n"))
                        res)
                      (lang->colorer lang)
                      (lambda (q) (hash-ref colors q 'no-color))))))]))
 
-(define (parse pat i [table (make-hasheq)])
+(define (parse pat i [table (make-hasheq)] #:debug [a:debug #f])
   (define in (if (string? i) (open-input-string i) i))
   (port-count-lines! in)
   (define start (make-location in))
+
   (define (get-pos) (make-position start (make-location in) in))
+  (define (parse* pat) (parse pat in table #:debug a:debug))
   (define (memoize val)
     ;;FIXME
     (define sub (hash-ref! table in (make-hash)))
     (hash-set! sub start val))
   (define (get pat)
     (hash-ref (hash-ref table pat (hash)) start #f))
+  (define (debug e)
+    (when a:debug
+      (write e)
+      (displayln "")
+      (displayln "")
+      (displayln "")))
   (define-values (r p)
     (let ([v (get pat)])
       (if v
           (values v (get-pos)) 
           (match pat
-            [(pattern p)
-             (parse p in table)]
+            [(pattern _ p)
+             (parse* p)]
             [(app string? #t)
-             (parse (rx (const pat) #f (regexp-quote pat)) in table)]
+             (parse* (lit (const pat) #f pat))]
             [(lit f c pat)
-             (parse (rx f c (regexp-quote pat)) in table)]
+             (parse* (rx f c (regexp-quote pat)))]
             [(rx f _ reg)
              (define locs (regexp-match-peek-positions* reg in))
              (define has (and locs (assoc 0 locs)))
              (define end (and has 
                               (cdr has)))
+             (debug `(,reg matched ,locs))
              (if (not end)
                  (values #f (get-pos))
                  (values (f (read-string end in) (get-pos)) (get-pos)))]
@@ -122,7 +125,7 @@
                       (values #f (get-pos))]
                      [else 
                       (define pat (first pats))
-                      (define-values (r p) (parse pat in table))
+                      (define-values (r p) (parse* pat))
                       (if r
                           (values r (get-pos))
                           (loop (rest pats)))]))]
@@ -133,38 +136,45 @@
                       (values (f (reverse rs) p) p)]
                      [else
                       (define pat (first pats))
-                      (define-values (r p) (parse pat in table))
+                      (define-values (r p) (parse* pat))
                       (if (not r)
                           (values #f (get-pos))
                           (loop (cons r rs) (rest pats)))]))]
             [(! pat)
-             (define-values (r p) (parse pat in table))
+             (define-values (r p) (parse* (& pat)))
              (if (not r)
                  (values #t (get-pos))
                  (values #f (get-pos)))]
             [(& pat)
-             (define-values (a b c) (port-next-location in))
-             (define-values (r p) (parse pat in table))
+             (define init (file-position in))
+             (define-values (r p) (parse* pat))
              (define loc (get-pos))
-             (set-port-next-location! in a b c)
+             ;(set-port-next-location! in a b c)
+             (file-position in init)
              (if r
                  (values r loc)
                  (values #f (get-pos)))]
             [(+ f pat)
-             (parse (seq (list pat (* pat)) f) in table)]
+             (parse* (seq (lambda (r p) (f (cons (first r) (second r)) p))
+                         #f
+                         (list pat (* (lambda (r p) r) pat))))]
             [(* f pat)
              (let loop ([res null])
-               (define-values (r p) (parse pat in table))
+               (define-values (r p) (parse* pat))
                (if r
-                   (loop (cons r null))
+                   (loop (cons r res))
                    (values (f (reverse res) (get-pos)) (get-pos))))]
             [(? f pat)
-             (define-values (r p) (parse pat in table))
+             (define-values (r p) (parse* pat))
              (if r
                  (values (f r (get-pos)) (get-pos))
                  (values #t p))]
             [(eof)
              (values (eof-object? (peek-byte in)) (get-pos))]))))
+  
+  (when (pattern? pat)
+      (debug `(pat: ,pat res: ,r at: ,(get-pos))))
+  
   (when r
     (memoize r))
   (values r (get-pos)))
@@ -187,7 +197,7 @@
         [(+ f pat) (loop pat)]
         [(& pat) (loop pat)]
         [(! pat) (loop pat)]
-        [(pattern pat) (loop pat)]
+        [(pattern _ pat) (loop pat)]
         [(seq f col pats) 
          (when col
            (add! cur))
@@ -239,6 +249,12 @@
     (check-equal? (p "1+2") 3)
     (check-equal? (p "1+2/2") 2)
     (check-equal? (p "(1+2)/2") 3/2))
+  ;; test that * is greedy
+  (let ()
+    (define-parser/colorer (p l c)
+      [X (* (lambda (r p) r) (rx (lambda (r p) r) #f #rx"."))])
+    (check-equal? (p "abc")
+                  (list "a" "b" "c")))
   (let ()
     (define-parser/colorer (p l c)
       [Expr (seq (lambda (l p) l)

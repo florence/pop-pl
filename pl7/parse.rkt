@@ -1,5 +1,7 @@
 #lang racket
+(provide parse lex color)
 (require "packrat.rkt")
+(module+ test (require rackunit))
 
 (define orig-prop (read-syntax 'x (open-input-bytes #"x")))
 (define ((->stx f) e p)
@@ -21,7 +23,7 @@
                     (all-but-last (rest l)))]))
 
 (define-parser/colorer (parse lex color)
-  [Top (:seq (->stx all-but-last) #f (list (:* no-op (:/ (list Require Initially Handler Message))) :EOF))]
+  [Top (:seq (->stx all-but-last) #f (list (:+ no-op (:/ (list Require Initially Handler Message))) :EOF))]
 
   [Require (:seq (->stx (compose second ))
                  #f
@@ -34,23 +36,25 @@
   ;; messages
   [Message (:/ (list (:seq (->stx message-parse)
                            #f
-                           (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE MessageForm NEWLINE))
+                           (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE MessageForm END))
                      (:seq (->stx message-parse)
                            #f
-                           (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE ID NEWLINE))
+                           (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE ID END))
                      (:seq (->stx message-parse)
                            #f
-                           (list MESSAGE WHITESPACE ArgDef WHITESPACE IS WHITESPACE Expr NEWLINE))))]
+                           (list MESSAGE WHITESPACE ArgDef WHITESPACE IS WHITESPACE Expr END))))]
   [MessageForm (:seq  (->stx message-maker)
                       #f
-                      (list OPEN-BRACKET ArgList CLOSE-BRACKET))]
+                      (list OPEN-BRACKET WHITESPACE ArgList WHITESPACE CLOSE-BRACKET))]
   
   ;; arguments
   [ArgDef (:seq (->stx second) 
                 #f
                 (list OPEN-PAREN ArgList CLOSE-PAREN))]
   [ArgList (:* (->stx flatten)
-               (:/ (list ID (:seq raw #f (list KEYWORD ID)))))]
+               (:/ (list WHITESPACE
+                         (:seq raw #f (list KEYWORD ID))
+                         ID)))]
   
   ;; expressions
   [Expr Todo]
@@ -58,25 +62,33 @@
   ;; keywords
   [REQUIRE (:lit no-op 'syntax "require")]
   [MESSAGE (:lit no-op 'syntax "message")]
-  [IS (:lit no-op "is" 'syntax)]
+  [IS (:lit no-op 'syntax "is")]
   [OPEN-BRACKET (:lit no-op 'syntax "[")]
   [CLOSE-BRACKET (:lit no-op 'syntax "]")]
 
   ;; basics
+  [END (:& (:/ (list NEWLINE :EOF)))]
   [NEWLINE (:lit no-op 'white-space "\n")]
   [STRING (:rx no-op 'constant #rx"\".*[^\\]\"")]
-  [WHITESPACE (:rx no-op 'white-space #rx" *")]
+  [WHITESPACE (:rx no-op 'white-space #rx" +")]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string first))
                  'keyword
                  (list ID ":"))]
-  [ID (:rx (->stx (compose string->symbol first))  'no-color #rx"[a-zA-Z]+")]
+  [ID (:seq (->stx first)
+            'no-color
+            (list (:rx (->stx string->symbol) #f #rx"[a-zA-Z]+")
+                  (:! ":")))]
   [OPEN-PAREN (:lit no-op 'paren "(")]
   [CLOSE-PAREN (:lit no-op 'paren ")")]
   ;; silly
-  [Todo ""]
+  [Todo (:! (:rx no-op #f #rx"."))]
   #:colors
   [syntax "red"]
   [constant "green"]
   [paren "blue"]
   [op "yellow"]
   [keyword "yellow"])
+
+(module+ test
+  (check-equal? (syntax->datum (parse "message test is [ a b: c ]" #:debug #t))
+                '(define test (make-message a #:b c))))
