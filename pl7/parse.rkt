@@ -16,6 +16,19 @@
   (match-lambda
    [(list _ args _)
     `(make-message ,@args)]))
+(define parse-init
+  (match-lambda
+   [(list* _ _ lines)
+    `(initially ,@lines)]))
+(define parse-handler
+  (match-lambda
+   [(list* _ name _ _ lines)
+    `(define ,name (make-handler ,@(filter cons? lines)))]))
+(define parse-line
+  (match-lambda
+   [(list indent expr _)
+    '(line ,(depth indent) ,expr)]
+   [(? string? v) null]))
 
 (define-parser/colorer (parse lex color)
   [Top (:seq (->stx
@@ -29,11 +42,36 @@
 
   [Require (:seq (->stx (compose second))
                  #f
-                 (list REQUIRE WHITESPACE ID WHITESPACE NEWLINE))]
+                 (list REQUIRE WHITESPACE ID WHITESPACE END))]
   
-  [Initially Todo]
+  [Initially (:seq (->stx parse-init)
+                   #f
+                   (list INITIALLY END (:+ raw Line)))]
   
-  [Handler Todo]
+  [Handler (:seq (->stx parse-handler)
+                 #f
+                 (list HANDLER ID IS END (:+ raw Line)))]
+  
+  [Line (:/ 
+         (list
+          (:seq (lambda (r p) (apply string-append (flatten r)))
+                #f
+                (list NEWLINE (:* no-op SPACING) END))
+          (:seq (->stx parse-line)
+                #f
+                (list INDENTATION (:/ (list Expr Whenever Means WheneverPart)) END))))]
+  [Whenever (:/
+             (list WHENEVER
+                   (:seq ? #f (list WHENEVER WHITESPACE EXPR))
+                   (:seq ? #f (list Expr WHITESPACE WHENEVER Expr))))]
+  [Means (:seq ? #f (list ID WHITESPACE MEANS WHITESPACE EXPR))]
+  [WheneverPart (:seq ? #f (list PIPE WHITESPACE EXPR))]
+
+  [INTENTATION (:seq no-op
+                     #f
+                     (list NEWLINE ))]
+  [SPACING (:* (lambda (r p) (apply string-append (flatten r)))
+               WHITESPACE)]
 
   ;; messages
   [Message (:/ (list (:seq (->stx message-parse)
@@ -53,7 +91,7 @@
   [ArgDef (:seq (->stx second) 
                 #f
                 (list OPEN-PAREN ArgList CLOSE-PAREN))]
-  [ArgList (:* (->stx (compose (curry filter (negate string?))
+  [ArgList (:* (->stx (compose (curry filter syntax?)
                                flatten))
                (:/ (list WHITESPACE
                          (:seq no-op #f (list KEYWORD WHITESPACE ID))
@@ -68,6 +106,11 @@
   [IS (:lit no-op 'syntax "is")]
   [OPEN-BRACKET (:lit no-op 'syntax "[")]
   [CLOSE-BRACKET (:lit no-op 'syntax "]")]
+  [WHENEVER (:lit no-op 'syntax "whenever")]
+  [HANDLER (:lit no-op 'syntax "handler")]
+  [INITIALLY (:lit no-op 'syntax "initially")]
+  [MEANS (:lit no-op 'syntax "means")]
+  [PIPE (:lit no-op 'syntax "|")]
 
   ;; basics
   [END (:& (:/ (list NEWLINE :EOF)))]
