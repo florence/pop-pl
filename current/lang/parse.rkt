@@ -161,7 +161,7 @@
   [CLOSE-PAREN (:lit no-op 'parenthesis ")")]
   ;; silly
   [Todo (:! (:? no-op (:rx no-op #f #rx".")))]
-  [LANG (:seq no-op 'no-color (list "#lang" (:rx no-op #f #rx".*") NEWLINE))])
+  [LANG (:seq no-op 'comment (list "#lang" (:rx no-op #f #rx".*\n")))])
 
 (module+ test
   (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))

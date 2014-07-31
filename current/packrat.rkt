@@ -204,7 +204,7 @@
     (unless (set-member? seen cur)
       (set-add! seen cur)
       (match cur
-        [(app string? #t) (add! cur)]
+        [(app string? #t) (void)]
         [(lit _ color s) (when color (add! cur))]
         [(rx _ color s) (when color (add! cur))]
         [(? f pat) (loop pat)]
@@ -223,26 +223,28 @@
   (lambda (in)
     (define-values (_ __ start) (port-next-location in))
     (port-count-lines! in)
-    (let loop ([tt tok->type] [res #f])
-      (cond [(null? tt) 
-             (if res
-                 (apply values res)
-                 (if (eof-object? (peek-char in))
-                     (values #f 'eof #f #f #f)
-                     (begin
-                       (read-char in)
-                       (loop tok->type #f))))]
-            [else
-             (with-reset in
+    (with-reset in
+      (let loop ([tt tok->type] [res #f])
+        (cond [(null? tt) 
+               (cond [res
+                      (let loop ()
+                        (define-values (_ __ end) (port-next-location in))
+                        (when (< end (last res))
+                          (read-char in)
+                          (loop)))
+                      (apply values res)]
+                     [(eof-object? (peek-byte in)) (values #f 'eof #f #f #f)]
+                     [else (values (read-char in) 'error #f start (add1 start))])]
+              [else
+               (reset)
                (define pat (first tt))
                (define-values (r p) (parse pat in))
-               (reset)
                (if (not r)
                    (loop (rest tt) res)
-                   (let ([offset (- (position-start p) start)])
+                   (let ([offset (position-start p)])
                      (if (or (not res) (< offset (fourth res)))
                          (loop (rest tt) (list r (pat-color pat) #f offset (r:+ offset (position-span p))))
-                         (loop (rest tt) res)))))]))))
+                         (loop (rest tt) res))))])))))
 
 
 (module+ test
