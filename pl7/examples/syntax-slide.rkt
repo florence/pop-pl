@@ -61,6 +61,13 @@
   @list{    Q24 check-ptt @syntax{whenever} stable}))
 (slide
  (make-item
+  @list{@syntax{unit}tablet@syntax{has}@const{.13}milligrams}
+  @list{@syntax{do} take @const{1} tablet @kw{of:}@const{"deproxin"}by:@const{"mouth"}}
+  @list{@syntax{initially}}
+  @list{    @syntax{after}@const{1} week}
+  @list{       check-deproxin-levels}))
+#;(slide
+ (make-item
   @list{@syntax{message} ptt @syntax{is} @syntax{[} a-ptt @syntax{]}}
   @list{@syntax{message} change @syntax{is} @syntax{[} drug @kw{by:} amount @syntax{]}}
   @list{@syntax{message} increase @syntax{is} change}
@@ -74,4 +81,13 @@
 
 
 (define (render)
-  (map pict->bitmap (get-slides-as-picts "syntax-slide.rkt" 1024 768 #t)))
+  (define (draw p name)
+    (define file (expand-user-path (~a "~/Desktop/pop-pl-" name ".svg")))
+    (define dc (new svg-dc% [width 1024] [height 768] [output file] [exists 'replace]))
+    (send dc start-doc "a")
+    (send dc start-page)
+    (draw-pict p dc 0 0)
+    (send dc end-page)
+    (send dc end-doc))
+  (define slides (get-slides-as-picts "syntax-slide.rkt" 1024 768 #t))
+  (for-each draw slides (build-list (length slides) values)))
