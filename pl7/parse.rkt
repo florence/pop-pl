@@ -37,6 +37,18 @@
       [(#\space) (add1 l)]
       [(#\tab) (+ l TAB-WIDTH)]
       [else l])))
+(define parse-whenever
+  (match-lambda
+   [(list "whenever") '(whenever)]
+   [(list "whenever" expr) `(whenever ,expr)]
+   [(list do "whenever" when) `(whenever ,do ,when)]))
+(define parse-whenever-part
+  (match-lambda
+   [(list t _ _ _ e) `(part ,t ,e)]
+   [(list _ _ e) `(part ,e)]))
+(define parse-means
+  (match-lambda
+   [(list id _ _ _ expr) `(define ,id ,expr)]))
 
 (define-parser/colorer (parse lex color)
   [Top (:seq (->stx
@@ -69,11 +81,14 @@
                 #f
                 (list INDENTATION (:/ (list Expr Whenever Means WheneverPart)) END))))]
   [Whenever (:/
-             (list WHENEVER
-                   (:seq ? #f (list WHENEVER WHITESPACE EXPR))
-                   (:seq ? #f (list Expr WHITESPACE WHENEVER Expr))))]
-  [Means (:seq ? #f (list ID WHITESPACE MEANS WHITESPACE EXPR))]
-  [WheneverPart (:seq ? #f (list PIPE WHITESPACE EXPR))]
+             (list (:seq (->stx parse-whenever) #f (list WHENEVER))
+                   (:seq (->stx parse-whenever) #f (list WHENEVER WHITESPACE EXPR))
+                   (:seq (->stx parse-whenever) #f (list Expr WHITESPACE WHENEVER Expr))))]
+  [Means (:seq (->stx parse-means) #f (list ID WHITESPACE MEANS WHITESPACE EXPR))]
+  [WheneverPart (:/ 
+                 (list 
+                  (:seq (->stx parse-whenever-part) #f (list Expr WHITESPACE PIPE WHITESPACE Expr))
+                  (:seq (->stx parse-whenever-part) #f (list PIPE WHITESPACE Expr))))]
 
   [INDENTATION (:seq no-op
                      #f
