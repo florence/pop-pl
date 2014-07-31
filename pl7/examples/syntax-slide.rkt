@@ -55,7 +55,7 @@
   @list{                          @syntax{|}       decrease @const{"heprin"} @const{3}units/kg/hour})
  (make-item
   @list{@syntax{handler} heprin-ptt-checking @syntax{is}}
-  @list{    stable @syntax{means} most-recent @const{2} ptt @kw{that-are:} therapeuticc since-last@delim{(}change@delim{(}@const{"heprin"}@delim{)}@delim{)}}
+  @list{    stable @syntax{means} most-recent @const{2} ptt @kw{that-are:} therapeutic since-last@delim{(}change@delim{(}@const{"heprin"}@delim{)}@delim{)}}
   @list{    therapeutic @syntax{means a} ptt @syntax{where} @const{60} @op{<} a-ptt @op{<} @const{100}}
   @list{    Q6 check-ptt @syntax{whenever} not stable}
   @list{    Q24 check-ptt @syntax{whenever} stable}))
