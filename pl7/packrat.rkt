@@ -58,19 +58,15 @@
 
 (define-syntax (define-parser/colorer stx)
   (syntax-parse stx
-    [(_ (p:id lex:id col:id)
+    [(_ (p:id lex:id)
         [top:id s:expr]
-        [name:id r:expr] ...
-        (~optional (~seq #:colors [x:id c:str] ...)))
-     (with-syntax ([colors (if (not (attribute x))
-                               #'(hash)
-                               #'(make-hash (list (cons 'x c) ...)))])
-       #'(define-values (p lex col)
+        [name:id r:expr] ...)
+     (with-syntax ()
+       #'(define-values (p lex)
            (let ([lang (shared 
                         ([top (pattern 'top s)]
                          [name (pattern 'name r)] ...)
-                        s)]
-                 [color colors])
+                        s)])
              (values (lambda (in #:debug [debug #f])
                        (define t (make-hasheq))
                        (define-values (res p) (parse lang in t #:debug debug))
@@ -78,8 +74,7 @@
                          (write `(failed at ,p with table ,t))
                          (write "\n"))
                        res)
-                     (lang->colorer lang)
-                     (lambda (q) (hash-ref colors q 'no-color))))))]))
+                     (lang->colorer lang)))))]))
 (define-syntax-parameter reset (make-rename-transformer #'void))
 (define-syntax (with-reset stx)
   (syntax-parse stx
@@ -237,7 +232,7 @@
 
 (module+ test
   (let ()
-    (define-parser/colorer (p l c)
+    (define-parser/colorer (p l)
       [Top (seq (lambda (r p) (first r))
                 #f
                 (list Expr EOF))]
@@ -268,13 +263,13 @@
     (check-equal? (p "(1+2)/2") 3/2))
   ;; test that * is greedy
   (let ()
-    (define-parser/colorer (p l c)
+    (define-parser/colorer (p l)
       [X (* (lambda (r p) r) (rx (lambda (r p) r) #f #rx"."))])
     (check-equal? (p "abc")
                   (list "a" "b" "c")))
   ;; test that we reset correctly in :/
   (let ()
-    (define-parser/colorer (p l c)
+    (define-parser/colorer (p l)
       [X (/ (list (seq (lambda (r c) r)
                        #f
                        (list "c" "a"))
@@ -282,7 +277,7 @@
     (check-equal? (p "c")
                   "c"))
   (let ()
-    (define-parser/colorer (p l c)
+    (define-parser/colorer (p l)
       [Expr (seq (lambda (l p) l)
                  #f
                  (list (* (lambda (l p) l)
@@ -298,10 +293,7 @@
                        (eof)))]
       [WHITESPACE (rx (lambda (r p) r) 'white-space #rx" +")]
       [OPEN  (lit (lambda (r p) r) 'bound "{")]
-      [CLOSE (lit (lambda (r p) r) 'bound "}")]
-      #:colors
-      [syntax "red"]
-      [bound "blue"])
+      [CLOSE (lit (lambda (r p) r) 'bound "}")])
     (let-values ([(_ type match start end) (l (open-input-string "when {}"))])
       (check-equal? type 'syntax)
       (check-equal? start 0)

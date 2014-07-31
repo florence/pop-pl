@@ -1,5 +1,5 @@
 #lang racket
-(provide parse lex color)
+(provide parse lex)
 (require "packrat.rkt")
 (module+ test (require rackunit))
 
@@ -50,7 +50,7 @@
   (match-lambda
    [(list id _ _ _ expr) `(define ,id ,expr)]))
 
-(define-parser/colorer (parse lex color)
+(define-parser/colorer (parse lex)
   [Top (:seq (->stx
               (compose
                (lambda (b) (list* 'module 'TODO 'pop-pl b))
@@ -121,19 +121,26 @@
                          ID)))]
   
   ;; expressions
-  [Expr Todo]
+  [Expr (:/
+         (list
+          Call
+          Numberic
+          ID))]
+  
+  [Call Todo]
+  [Numberic Todo]
   
   ;; keywords
-  [REQUIRE (:lit no-op 'syntax "require")]
-  [MESSAGE (:lit no-op 'syntax "message")]
-  [IS (:lit no-op 'syntax "is")]
-  [OPEN-BRACKET (:lit no-op 'syntax "[")]
-  [CLOSE-BRACKET (:lit no-op 'syntax "]")]
-  [WHENEVER (:lit no-op 'syntax "whenever")]
-  [HANDLER (:lit no-op 'syntax "handler")]
-  [INITIALLY (:lit no-op 'syntax "initially")]
-  [MEANS (:lit no-op 'syntax "means")]
-  [PIPE (:lit no-op 'syntax "|")]
+  [REQUIRE (:lit no-op 'other "require")]
+  [MESSAGE (:lit no-op 'other "message")]
+  [IS (:lit no-op 'other "is")]
+  [OPEN-BRACKET (:lit no-op 'other "[")]
+  [CLOSE-BRACKET (:lit no-op 'other "]")]
+  [WHENEVER (:lit no-op 'other "whenever")]
+  [HANDLER (:lit no-op 'other "handler")]
+  [INITIALLY (:lit no-op 'other "initially")]
+  [MEANS (:lit no-op 'other "means")]
+  [PIPE (:lit no-op 'other "|")]
 
   ;; basics
   [END (:& (:/ (list NEWLINE :EOF)))]
@@ -149,18 +156,17 @@
             (list ID-LIKE
                   (:! ":")))]
   [ID-LIKE (:rx (->stx string->symbol) #f #rx"[a-zA-Z]+")]
-  [OPEN-PAREN (:lit no-op 'paren "(")]
-  [CLOSE-PAREN (:lit no-op 'paren ")")]
+  [OPEN-PAREN (:lit no-op 'parenthesis "(")]
+  [CLOSE-PAREN (:lit no-op 'parenthesis ")")]
   ;; silly
-  [Todo (:! (:? no-op (:rx no-op #f #rx".")))]
-  #:colors
-  [syntax "red"]
-  [constant "green"]
-  [paren "blue"]
-  [op "yellow"]
-  [keyword "yellow"])
+  [Todo (:! (:? no-op (:rx no-op #f #rx".")))])
 
 (module+ test
   (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))
                 '(module TODO pop-pl
-                  (define test (make-message a #:b c)))))
+                  (define test (make-message a #:b c))))
+  (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
+    (read-line in)
+    (check-equal? (syntax->datum (parse in))
+                  '(module TODO pop-pl
+                    (define test (make-message a #:b c))))))
