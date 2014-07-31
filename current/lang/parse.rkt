@@ -1,6 +1,6 @@
 #lang racket
 (provide parse lex)
-(require "packrat.rkt")
+(require "../packrat.rkt")
 (module+ test (require rackunit))
 
 (define TAB-WIDTH 4)
@@ -57,9 +57,9 @@
                second))
              #f
              (list 
-              (:+ no-op 
-                       (:/ (list Require Initially Handler Message)))
-                   :EOF))]
+              (:? no-op LANG)
+              (:+ no-op (:/ (list Require Initially Handler Message)))
+              :EOF))]
 
   [Require (:seq (->stx (compose second))
                  #f
