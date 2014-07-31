@@ -59,13 +59,15 @@
   @list{    therapeutic @syntax{means a} ptt @syntax{where} @const{60} @op{<} a-ptt @op{<} @const{100}}
   @list{    Q6 check-ptt @syntax{whenever} not stable}
   @list{    Q24 check-ptt @syntax{whenever} stable}))
+
 (slide
  (make-item
-  @list{@syntax{unit}tablet@syntax{has}@const{.13}milligrams}
-  @list{@syntax{do} take @const{1} tablet @kw{of:}@const{"deproxin"}by:@const{"mouth"}}
+  @list{@syntax{unit}tablet@syntax{has}@const{0.125}milligrams}
+  @list{@syntax{do} take @const{1} tablet @kw{of:}@const{"digoxin"}by:@const{"mouth"}}
   @list{@syntax{initially}}
   @list{    @syntax{after}@const{1} week}
-  @list{       check-deproxin-levels}))
+  @list{       check-digoxin-levels}))
+
 #;(slide
  (make-item
   @list{@syntax{message} ptt @syntax{is} @syntax{[} a-ptt @syntax{]}}
