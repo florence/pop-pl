@@ -29,33 +29,33 @@
 (current-main-font "monaco")
 (slide 
  (make-item
-  @list{@syntax{require} heprin-ptt-checking}
+  @list{@syntax{require} heparin-ptt-checking}
   @list{@syntax{require} heparin-infusion}
   @list{@syntax{require} iv-inserted})
  (make-item
   @list{@syntax{initially}}
-  @list{    give-bolus @const{80}units/kg/hour @kw{of:} @const{"heprin"} @kw{by:} @const{"iv"}}
-  @list{    start @const{18}units/kg @kw{of:} @const{"heprin"}})
+  @list{    give-bolus @const{80}units/kg/hour @kw{of:} @const{"heparin"} @kw{by:} @const{"iv"}}
+  @list{    start @const{18}units/kg @kw{of:} @const{"heparin"}})
  (make-item
   @list{@syntax{handler} infusion @syntax{is}}
   @list{    @syntax{whenever new} ptt}  
   @list{ }
   @list{        @syntax{whenever} }
-  @list{         a-ptt@op{<}@const{45}      @syntax{|}increase @const{"heprin"} @kw{by:} @const{3}units/kg/hour}
-  @list{                          @syntax{|}give-bolus @const{80}units/kg @kw{of:} @const{"heprin"} @kw{by:} @const{"iv"}}
+  @list{         a-ptt@op{<}@const{45}      @syntax{|}increase @const{"heparin"} @kw{by:} @const{3}units/kg/hour}
+  @list{                          @syntax{|}give-bolus @const{80}units/kg @kw{of:} @const{"heparin"} @kw{by:} @const{"iv"}}
   @list{ }
-  @list{        @const{45}@op{<}a-ptt@op{<}@const{59} @syntax{|}increase @const{"heprin"} @kw{by:} @const{1}unit/kg/hour}
-  @list{                          @syntax{|}give-bolus @const{40}units/kg @kw{of:} @const{"heprin"} @kw{by:} @const{"iv"}}
+  @list{        @const{45}@op{<}a-ptt@op{<}@const{59} @syntax{|}increase @const{"heparin"} @kw{by:} @const{1}unit/kg/hour}
+  @list{                          @syntax{|}give-bolus @const{40}units/kg @kw{of:} @const{"heparin"} @kw{by:} @const{"iv"}}
   @list{ }
-  @list{        @const{101}@op{<}a-ptt@op{<}@const{123}@syntax{|}decrease @const{"heprin"} @kw{by:} @const{1}units/kg/hour}
+  @list{        @const{101}@op{<}a-ptt@op{<}@const{123}@syntax{|}decrease @const{"heparin"} @kw{by:} @const{1}units/kg/hour}
   @list{ }
   @list{         a-ptt@op{>}@const{123}     @syntax{|}hold @const{"heparin"}}
   @list{                          @syntax{|}@syntax{after} @const{1}hour}
-  @list{                          @syntax{|}       restart @const{"heprin"}}
-  @list{                          @syntax{|}       decrease @const{"heprin"} @const{3}units/kg/hour})
+  @list{                          @syntax{|}       restart @const{"heparin"}}
+  @list{                          @syntax{|}       decrease @const{"heparin"} @const{3}units/kg/hour})
  (make-item
-  @list{@syntax{handler} heprin-ptt-checking @syntax{is}}
-  @list{    stable @syntax{means} most-recent @const{2} ptt @kw{that-are:} therapeutic since-last@delim{(}change@delim{(}@const{"heprin"}@delim{)}@delim{)}}
+  @list{@syntax{handler} heparin-ptt-checking @syntax{is}}
+  @list{    stable @syntax{means} most-recent @const{2} ptt @kw{that-are:} therapeutic since-last@delim{(}change@delim{(}@const{"heparin"}@delim{)}@delim{)}}
   @list{    therapeutic @syntax{means a} ptt @syntax{where} @const{60} @op{<} a-ptt @op{<} @const{100}}
   @list{    Q6 check-ptt @syntax{whenever} not stable}
   @list{    Q24 check-ptt @syntax{whenever} stable}))
