@@ -54,9 +54,10 @@
   [Top (:seq (->stx
               (compose
                (lambda (b) (list* 'module 'TODO 'pop-pl b))
-               first))
+               second))
              #f
-             (list (:+ no-op 
+             (list 
+              (:+ no-op 
                        (:/ (list Require Initially Handler Message)))
                    :EOF))]
 
@@ -159,7 +160,8 @@
   [OPEN-PAREN (:lit no-op 'parenthesis "(")]
   [CLOSE-PAREN (:lit no-op 'parenthesis ")")]
   ;; silly
-  [Todo (:! (:? no-op (:rx no-op #f #rx".")))])
+  [Todo (:! (:? no-op (:rx no-op #f #rx".")))]
+  [LANG (:seq no-op 'no-color (list "#lang" (:rx no-op #f #rx".*") NEWLINE))])
 
 (module+ test
   (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))

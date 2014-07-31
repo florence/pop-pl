@@ -15,7 +15,10 @@
 (struct location (line col pos) #:transparent)
 (struct position (source line col start span) #:transparent)
 (define (make-location in)
-  (call-with-values (thunk (port-next-location in)) location))
+  (define-values (l c p) (port-next-location in))
+  (if (and (not l) c)
+      (location 0 c p)
+      (location l c p)))
 (define (make-position l1 l2 [name #f])
   (position (object-name name)
             (location-line l1)
@@ -219,15 +222,27 @@
   ;;
   (lambda (in)
     (define-values (_ __ start) (port-next-location in))
-    (let loop ([tok->type tok->type])
-      (cond [(null? tok->type) (values #f 'eof #f #f #f)]
+    (port-count-lines! in)
+    (let loop ([tt tok->type] [res #f])
+      (cond [(null? tt) 
+             (if res
+                 (apply values res)
+                 (if (eof-object? (peek-char in))
+                     (values #f 'eof #f #f #f)
+                     (begin
+                       (read-char in)
+                       (loop tok->type #f))))]
             [else
-             (define pat (first tok->type))
-             (define-values (r p) (parse pat in))
-             (if (not r)
-                 (loop (rest tok->type))
-                 (let ([offset (- (position-start p) start)])
-                   (values r (pat-color pat) #f offset (r:+ offset (position-span p)))))]))))
+             (with-reset in
+               (define pat (first tt))
+               (define-values (r p) (parse pat in))
+               (reset)
+               (if (not r)
+                   (loop (rest tt) res)
+                   (let ([offset (- (position-start p) start)])
+                     (if (or (not res) (< offset (fourth res)))
+                         (loop (rest tt) (list r (pat-color pat) #f offset (r:+ offset (position-span p))))
+                         (loop (rest tt) res)))))]))))
 
 
 (module+ test
