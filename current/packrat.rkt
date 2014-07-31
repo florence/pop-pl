@@ -31,21 +31,19 @@
           (position-col p)
           (position-start p)
           (position-span p)))
-
 (define (pat-color p)
   (colorable-color p))
 
 ;;; patterns
 (struct pat (f) #:mutable)
 (struct pattern (name p) #:transparent #:mutable)
-(struct colorable pat (color) #:mutable)
 ;; Regex
-(struct lit colorable (str) #:mutable #:transparent)
-(struct rx colorable (pat) #:transparent #:mutable)
+(struct lit pat (str) #:mutable #:transparent)
+(struct rx pat (pat) #:transparent #:mutable)
                                         ; listof pattern
 (struct / (values) #:transparent #:mutable)
                                         ; listof pattern
-(struct seq colorable (values) #:transparent #:mutable)
+(struct seq pat (values) #:transparent #:mutable)
                                         ; pattern
 (struct ! (pat) #:transparent #:mutable)
                                         ; pattern
@@ -59,25 +57,32 @@
 (struct eof ())
 (define EOF (eof))
 
+(struct colorable (color pattern) #:transparent)
+(define (make-colorables c . ps)
+  (map (curry colorable c) ps))
 (define-syntax (define-parser/colorer stx)
   (syntax-parse stx
     [(_ (p:id lex:id)
         [top:id s:expr]
-        [name:id r:expr] ...)
-     (with-syntax ()
+        [name:id r:expr] ...
+        (~optional (~seq #:tokens (color:id tok:id ...) ...)))
+     (with-syntax ([toks
+                    (if (attribute tok)
+                        #'(flatten (list (make-colorables 'color tok ...) ...))
+                        #'(list))])
        #'(define-values (p lex)
-           (let ([lang (shared 
-                        ([top (pattern 'top s)]
-                         [name (pattern 'name r)] ...)
-                        s)])
-             (values (lambda (in #:debug [debug #f])
-                       (define t (make-hasheq))
-                       (define-values (res p) (parse lang in t #:debug debug))
-                       (when (and debug (not res))
-                         (write `(failed at ,p with table ,t))
-                         (write "\n"))
-                       res)
-                     (lang->colorer lang)))))]))
+           (shared 
+            ([top (pattern 'top s)]
+             [name (pattern 'name r)] ...)
+            (let ([lang top])
+              (values (lambda (in #:debug [debug #f])
+                        (define t (make-hasheq))
+                        (define-values (res p) (parse lang in t #:debug debug))
+                        (when (and debug (not res))
+                          (write `(failed at ,p with table ,t))
+                          (write "\n"))
+                        res)
+                      (lang->colorer toks))))))]))
 (define-syntax-parameter reset (make-rename-transformer #'void))
 (define-syntax (with-reset stx)
   (syntax-parse stx
@@ -119,15 +124,16 @@
         (if v
             (values v (get-pos)) 
             (match pat
+              [(colorable c p) (parse* p)]
               [(pattern n p)
                (debug `(starting ,n))
                (parameterize ([tab-count (add1 (tab-count))])
                  (parse* p))]
               [(app string? #t)
-               (parse* (lit (const pat) #f pat))]
-              [(lit f c pat)
-               (parse* (rx f c (regexp-quote pat)))]
-              [(rx f _ reg)
+               (parse* (lit (const pat) pat))]
+              [(lit f pat)
+               (parse* (rx f (regexp-quote pat)))]
+              [(rx f reg)
                (define locs (regexp-match-peek-positions* reg in))
                (define has (and locs (assoc 0 locs)))
                (define end (and has 
@@ -146,7 +152,7 @@
                         (if r
                             (values r (get-pos))
                             (begin (reset) (loop (rest pats) p)))]))]
-              [(seq f _ (list* pats))
+              [(seq f (list* pats))
                (let loop ([rs null] [pats pats])
                  (cond [(null? pats)
                         (define p (get-pos))
@@ -171,7 +177,6 @@
                    (values #f (get-pos)))]
               [(+ f pat)
                (parse* (seq (lambda (r p) (f (cons (first r) (second r)) p))
-                            #f
                             (list pat (* (lambda (r p) r) pat))))]
               [(* f pat)
                (let loop ([res null])
@@ -194,85 +199,44 @@
     (memoize r))
   (values r p))
 
-(define (lang->colorer lang)
-  ;; build table
-  (define tok->type null)
-  (define seen (mutable-seteq))
-  (define (add! pat)
-    (set! tok->type (cons pat tok->type)))
-  (let loop ([cur lang])
-    (unless (set-member? seen cur)
-      (set-add! seen cur)
-      (match cur
-        [(app string? #t) (void)]
-        [(lit _ color s) (when color (add! cur))]
-        [(rx _ color s) (when color (add! cur))]
-        [(? f pat) (loop pat)]
-        [(* f pat) (loop pat)]
-        [(+ f pat) (loop pat)]
-        [(& pat) (loop pat)]
-        [(! pat) (loop pat)]
-        [(pattern _ pat) (loop pat)]
-        [(seq f col pats) 
-         (when col
-           (add! cur))
-         (for-each loop pats)]
-        [(/ pats) (for-each loop pats)]
-        [(eof) (void)])))
-  ;;
-  (lambda (in)
-    (define-values (_ __ start) (port-next-location in))
-    (port-count-lines! in)
-    (with-reset in
-      (let loop ([tt tok->type] [res #f])
-        (cond [(null? tt) 
-               (cond [res
-                      (let loop ()
-                        (define-values (_ __ end) (port-next-location in))
-                        (when (< end (last res))
-                          (read-char in)
-                          (loop)))
-                      (apply values res)]
-                     [(eof-object? (peek-byte in)) (values #f 'eof #f #f #f)]
-                     [else (values (read-char in) 'error #f start (add1 start))])]
-              [else
-               (reset)
-               (define pat (first tt))
-               (define-values (r p) (parse pat in))
+(define ((lang->colorer tok->type) in)
+  (define-values (_ __ start) (port-next-location in))
+  (port-count-lines! in)
+  (with-reset in
+    (let loop ([tt tok->type])
+      (cond [(null? tt) 
+             (cond [(eof-object? (peek-byte in)) (values #f 'eof #f #f #f)]
+                   [else (values (read-char in) 'error #f start (add1 start))])]
+            [else
+             (reset)
+             (define pat (first tt))
+             (define-values (r p) (parse pat in))
+             (let ([offset (position-start p)])
                (if (not r)
-                   (loop (rest tt) res)
-                   (let ([offset (position-start p)])
-                     (if (or (not res) (< offset (fourth res)))
-                         (loop (rest tt) (list r (pat-color pat) #f offset (r:+ offset (position-span p))))
-                         (loop (rest tt) res))))])))))
+                   (loop (rest tt))
+                   (values r (pat-color pat) #f offset (r:+ offset (position-span p)))))]))))
 
 
 (module+ test
   (let ()
     (define-parser/colorer (p l)
       [Top (seq (lambda (r p) (first r))
-                #f
                 (list Expr EOF))]
       [Expr Sum]
       [Sum (seq (lambda (l p) (apply r:+ (flatten l)))
-                #f
                 (list Product (* (lambda (l p) l)
                                  (seq (match-lambda** 
                                        [((list "+" n) _) n]
                                        [((list "-" n) _) (- n)])
-                                      #f
                                       (list (/ (list "+" "-")) Product)))))]
       [Product (seq (lambda (l p) (apply r:* (flatten l)))
-                    #f
                     (list Value (* (lambda (l p) l) 
                                    (seq (match-lambda** 
                                          [((list "*" n) _) n]
                                          [((list "/" n) _) (r:/ n)])
-                                        #f
                                         (list (/ (list "*" "/")) Value)))))]
-      [Value (/ (list (rx (lambda (r p) (string->number r)) #f #rx"[0-9]+")
+      [Value (/ (list (rx (lambda (r p) (string->number r)) #rx"[0-9]+")
                       (seq (lambda (l p) (second l))
-                           #f
                            (list "(" Expr ")"))))])
     (check-equal? (p "1") 1)
     (check-equal? (p "1+2") 3)
@@ -281,14 +245,13 @@
   ;; test that * is greedy
   (let ()
     (define-parser/colorer (p l)
-      [X (* (lambda (r p) r) (rx (lambda (r p) r) #f #rx"."))])
+      [X (* (lambda (r p) r) (rx (lambda (r p) r) #rx"."))])
     (check-equal? (p "abc")
                   (list "a" "b" "c")))
   ;; test that we reset correctly in :/
   (let ()
     (define-parser/colorer (p l)
       [X (/ (list (seq (lambda (r c) r)
-                       #f
                        (list "c" "a"))
                   "c"))])
     (check-equal? (p "c")
@@ -296,29 +259,31 @@
   (let ()
     (define-parser/colorer (p l)
       [Expr (seq (lambda (l p) l)
-                 #f
                  (list (* (lambda (l p) l)
                         (seq (lambda (l p) l)
-                             #f
                              (list
-                              (lit (lambda (l p) l) 'syntax "when")
+                              WHEN 
                               WHITESPACE
                               OPEN
                               WHITESPACE
                               CLOSE
                               WHITESPACE)))
                        (eof)))]
-      [WHITESPACE (rx (lambda (r p) r) 'white-space #rx" +")]
-      [OPEN  (lit (lambda (r p) r) 'bound "{")]
-      [CLOSE (lit (lambda (r p) r) 'bound "}")])
+      [WHEN (lit (lambda (l p) l) "when")]
+      [WHITESPACE (rx (lambda (r p) r) #rx" +")]
+      [OPEN  (lit (lambda (r p) r) "{")]
+      [CLOSE (lit (lambda (r p) r) "}")]
+      #:tokens (syntax WHEN) 
+      (bound OPEN CLOSE)
+      (whitespace WHITESPACE))
     (let-values ([(_ type match start end) (l (open-input-string "when {}"))])
       (check-equal? type 'syntax)
-      (check-equal? start 0)
-      (check-equal? end 4))
+      (check-equal? start 1)
+      (check-equal? end 5))
     (let-values ([(_ type match start end) (l (open-input-string "when {}"))])
       (check-equal? type 'syntax)
-      (check-equal? start 0)
-      (check-equal? end 4)))
+      (check-equal? start 1)
+      (check-equal? end 5)))
                                         ; (let ()
                                         ;   (define orig-stx (read-syntax 'derp (open-input-bytes #"x")))
                                         ;   (define (->stx e pos)

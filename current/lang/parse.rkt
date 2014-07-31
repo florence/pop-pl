@@ -55,70 +55,58 @@
               (compose
                (lambda (b) (list* 'module 'TODO 'pop-pl b))
                second))
-             #f
              (list 
               (:? no-op LANG)
               (:+ no-op (:/ (list Require Initially Handler Message)))
               :EOF))]
 
   [Require (:seq (->stx (compose second))
-                 #f
                  (list REQUIRE WHITESPACE ID WHITESPACE END))]
   
   [Initially (:seq (->stx parse-init)
-                   #f
                    (list INITIALLY END (:+ raw Line)))]
   
   [Handler (:seq (->stx parse-handler)
-                 #f
                  (list HANDLER ID IS END (:+ raw Line)))]
   
   [Line (:/ 
          (list
           (:seq (lambda (r p) (apply string-append (flatten r)))
-                #f
                 (list NEWLINE (:* no-op SPACING) END))
           (:seq (->stx parse-line)
-                #f
                 (list INDENTATION (:/ (list Expr Whenever Means WheneverPart)) END))))]
   [Whenever (:/
-             (list (:seq (->stx parse-whenever) #f (list WHENEVER))
-                   (:seq (->stx parse-whenever) #f (list WHENEVER WHITESPACE Expr))
-                   (:seq (->stx parse-whenever) #f (list Expr WHITESPACE WHENEVER Expr))))]
-  [Means (:seq (->stx parse-means) #f (list ID WHITESPACE MEANS WHITESPACE Expr))]
+             (list (:seq (->stx parse-whenever) (list WHENEVER))
+                   (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr))
+                   (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER Expr))))]
+  [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverPart (:/ 
                  (list 
-                  (:seq (->stx parse-whenever-part) #f (list Expr WHITESPACE PIPE WHITESPACE Expr))
-                  (:seq (->stx parse-whenever-part) #f (list PIPE WHITESPACE Expr))))]
+                  (:seq (->stx parse-whenever-part) (list Expr WHITESPACE PIPE WHITESPACE Expr))
+                  (:seq (->stx parse-whenever-part) (list PIPE WHITESPACE Expr))))]
 
   [INDENTATION (:seq no-op
-                     #f
                      (list NEWLINE ))]
   [SPACING (:* (lambda (r p) (apply string-append (flatten r)))
                WHITESPACE)]
 
   ;; messages
   [Message (:/ (list (:seq (->stx message-parse)
-                           #f
                            (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE MessageForm END))
                      (:seq (->stx message-parse)
-                           #f
                            (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE ID END))
                      (:seq (->stx message-parse)
-                           #f
                            (list MESSAGE WHITESPACE ArgDef WHITESPACE IS WHITESPACE Expr END))))]
   [MessageForm (:seq  (->stx message-maker)
-                      #f
                       (list OPEN-BRACKET ArgList CLOSE-BRACKET))]
   
   ;; arguments
   [ArgDef (:seq (->stx second) 
-                #f
                 (list OPEN-PAREN ArgList CLOSE-PAREN))]
   [ArgList (:* (->stx (compose (curry filter syntax?)
                                flatten))
                (:/ (list WHITESPACE
-                         (:seq no-op #f (list KEYWORD WHITESPACE ID))
+                         (:seq no-op (list KEYWORD WHITESPACE ID))
                          ID)))]
   
   ;; expressions
@@ -132,36 +120,42 @@
   [Numberic Todo]
   
   ;; keywords
-  [REQUIRE (:lit no-op 'other "require")]
-  [MESSAGE (:lit no-op 'other "message")]
-  [IS (:lit no-op 'other "is")]
-  [OPEN-BRACKET (:lit no-op 'other "[")]
-  [CLOSE-BRACKET (:lit no-op 'other "]")]
-  [WHENEVER (:lit no-op 'other "whenever")]
-  [HANDLER (:lit no-op 'other "handler")]
-  [INITIALLY (:lit no-op 'other "initially")]
-  [MEANS (:lit no-op 'other "means")]
-  [PIPE (:lit no-op 'other "|")]
+  [REQUIRE (:lit no-op "require")]
+  [MESSAGE (:lit no-op "message")]
+  [IS (:lit no-op "is")]
+  [OPEN-BRACKET (:lit no-op "[")]
+  [CLOSE-BRACKET (:lit no-op "]")]
+  [WHENEVER (:lit no-op "whenever")]
+  [HANDLER (:lit no-op "handler")]
+  [INITIALLY (:lit no-op "initially")]
+  [MEANS (:lit no-op "means")]
+  [PIPE (:lit no-op "|")]
 
   ;; basics
   [END (:& (:/ (list NEWLINE :EOF)))]
-  [NEWLINE (:lit no-op 'white-space "\n")]
-  [STRING (:rx no-op 'constant #rx"\".*[^\\]\"")]
-  [WHITESPACE (:rx no-op 'white-space #rx" +")]
+  [NEWLINE (:lit no-op "\n")]
+  [STRING (:rx no-op #rx"\".*?[^\\]\"")]
+  [WHITESPACE (:rx no-op #rx" +")]
   [?WHITESPACE (:? no-op WHITESPACE)]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
-                 'keyword
                  (list ID-LIKE ":"))]
   [ID (:seq (->stx first)
-            'no-color
             (list ID-LIKE
-                  (:! ":")))]
-  [ID-LIKE (:rx (->stx string->symbol) #f #rx"[a-zA-Z]+")]
-  [OPEN-PAREN (:lit no-op 'parenthesis "(")]
-  [CLOSE-PAREN (:lit no-op 'parenthesis ")")]
+                  (:/ (list (:! ":") END))))]
+  [ID-LIKE (:rx (->stx string->symbol)  #rx"[a-zA-Z]+")]
+  [OPEN-PAREN (:lit no-op "(")]
+  [CLOSE-PAREN (:lit no-op ")")]
   ;; silly
-  [Todo (:! (:? no-op (:rx no-op #f #rx".")))]
-  [LANG (:seq no-op 'comment (list "#lang" (:rx no-op #f #rx".*\n")))])
+  [Todo (:! (:? no-op (:rx no-op #rx".")))]
+  [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*\n")))]
+  #:tokens 
+  (comment LANG) 
+  (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE) 
+  (white-space NEWLINE WHITESPACE) 
+  (constant STRING) 
+  (keyword KEYWORD)
+  (no-color ID)
+  (parenthesis OPEN-PAREN CLOSE-PAREN))
 
 (module+ test
   (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))
