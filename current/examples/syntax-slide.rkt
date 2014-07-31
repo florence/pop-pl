@@ -34,8 +34,8 @@
   @list{@syntax{require} iv-inserted})
  (make-item
   @list{@syntax{initially}}
-  @list{    give-bolus @const{80}units/kg/hour @kw{of:} @const{"heparin"} @kw{by:} @const{"iv"}}
-  @list{    start @const{18}units/kg @kw{of:} @const{"heparin"}})
+  @list{    give-bolus @const{80}units/kg @kw{of:} @const{"heparin"} @kw{by:} @const{"iv"}}
+  @list{    start @const{18}units/kg/hour @kw{of:} @const{"heparin"}})
  (make-item
   @list{@syntax{handler} infusion @syntax{is}}
   @list{    @syntax{whenever new} ptt}  
