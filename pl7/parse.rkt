@@ -3,6 +3,8 @@
 (require "packrat.rkt")
 (module+ test (require rackunit))
 
+(define TAB-WIDTH 4)
+
 (define orig-prop (read-syntax 'x (open-input-bytes #"x")))
 (define ((->stx f) e p)
   (datum->syntax #f
@@ -29,6 +31,12 @@
    [(list indent expr _)
     '(line ,(depth indent) ,expr)]
    [(? string? v) null]))
+(define (line-depth s)
+  (for/fold ([l 0]) ([c (string->list s)])
+    (case c
+      [(#\space) (add1 l)]
+      [(#\tab) (+ l TAB-WIDTH)]
+      [else l])))
 
 (define-parser/colorer (parse lex color)
   [Top (:seq (->stx
@@ -67,7 +75,7 @@
   [Means (:seq ? #f (list ID WHITESPACE MEANS WHITESPACE EXPR))]
   [WheneverPart (:seq ? #f (list PIPE WHITESPACE EXPR))]
 
-  [INTENTATION (:seq no-op
+  [INDENTATION (:seq no-op
                      #f
                      (list NEWLINE ))]
   [SPACING (:* (lambda (r p) (apply string-append (flatten r)))
