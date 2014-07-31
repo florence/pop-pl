@@ -82,9 +82,9 @@
                 (list INDENTATION (:/ (list Expr Whenever Means WheneverPart)) END))))]
   [Whenever (:/
              (list (:seq (->stx parse-whenever) #f (list WHENEVER))
-                   (:seq (->stx parse-whenever) #f (list WHENEVER WHITESPACE EXPR))
+                   (:seq (->stx parse-whenever) #f (list WHENEVER WHITESPACE Expr))
                    (:seq (->stx parse-whenever) #f (list Expr WHITESPACE WHENEVER Expr))))]
-  [Means (:seq (->stx parse-means) #f (list ID WHITESPACE MEANS WHITESPACE EXPR))]
+  [Means (:seq (->stx parse-means) #f (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverPart (:/ 
                  (list 
                   (:seq (->stx parse-whenever-part) #f (list Expr WHITESPACE PIPE WHITESPACE Expr))
