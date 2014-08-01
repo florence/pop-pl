@@ -20,8 +20,8 @@
     `(make-message ,@args)]))
 (define parse-init
   (match-lambda
-   [(list* _ _ lines)
-    `(initially ,@lines)]))
+   [(list _ _ lines)
+    `(initially ,@(filter syntax? lines))]))
 (define parse-handler
   (match-lambda
    [(list _ _ name _ _ _ _ lines)
@@ -54,6 +54,10 @@
 (define parse-means
   (match-lambda
    [(list id _ _ _ expr) `(define ,id ,expr)]))
+(define parse-require
+    (match-lambda
+     [(list _ _ name _ _)
+      `(add-handler ,name)]))
 
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
@@ -66,12 +70,12 @@
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?\n")]
-
-  [Require (:seq (->stx (compose second))
-                 (list REQUIRE WHITESPACE ID WHITESPACE END))]
+  
+  [Require (:seq (->stx parse-require)
+                 (list REQUIRE WHITESPACE ID (:? no-op WHITESPACE) END))]
   
   [Initially (:seq (->stx parse-init)
-                   (list INITIALLY END (:+ raw Line)))]
+                   (list INITIALLY END (:+ no-op Line)))]
   
   [Handler (:seq (->stx parse-handler)
                  (list HANDLER WHITESPACE ID WHITESPACE IS (:? no-op WHITESPACE) END (:+ no-op Line)))]
@@ -189,14 +193,21 @@
   (parenthesis OPEN-PAREN CLOSE-PAREN))
 
 (module+ test
+  (define (module . e)
+    `(module TODO pop-pl ,@e))
   (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))
-                '(module TODO pop-pl
-                  (define test (make-message a #:b c))))
+                (module '(define test (make-message a #:b c))))
+
   (check-equal? (syntax->datum (parse "handler x is\n  test"))
-                '(module TODO pop-pl
-                  (define x (make-handler (line 2 test)))))
+                (module '(define x (make-handler (line 2 test)))))
+
+  (check-equal? (syntax->datum (parse "initially\n  test"))
+                (module '(initially (line 2 test))))
+  
+  (check-equal? (syntax->datum (parse "require x"))
+                (module '(add-handler x)))
+
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
     (check-equal? (syntax->datum (parse in))
-                  '(module TODO pop-pl
-                    (define test (make-message a #:b c))))))
+                  (module '(define test (make-message a #:b c))))))
