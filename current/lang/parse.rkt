@@ -57,8 +57,10 @@
                second))
              (list 
               (:? no-op LANG)
-              (:+ no-op (:/ (list Require Initially Handler Message)))
+              (:+ no-op (:/ (list Require COMMENT Initially Handler Message)))
               :EOF))]
+  [COMMENT (:rx (->stx (const '(void)))
+                #rx"//.*?\n")]
 
   [Require (:seq (->stx (compose second))
                  (list REQUIRE WHITESPACE ID WHITESPACE END))]
@@ -118,22 +120,43 @@
   
   [Call Todo]
   [Numberic Todo]
+  [Number (:/
+           (list Number+Unit
+                 NUMBER-RAW))]
+  [Number+Unit (:seq (->stx values) (list NUMBER-RAW Unit))]
+  [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
+  [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
+              (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" UNIT-RAW))))))]
+  [UNIT-RAW (:/ (list "unit"
+                      "units"
+                      "kg"
+                      "hour"
+                      "hours"
+                      "day"
+                      "days"
+                      "week"
+                      "weeks"
+                      "minute"
+                      "minutes"))]
+  [OP (:/ (list "and" "<" ">"))]
   
   ;; keywords
-  [REQUIRE (:lit no-op "require")]
-  [MESSAGE (:lit no-op "message")]
-  [IS (:lit no-op "is")]
-  [OPEN-BRACKET (:lit no-op "[")]
-  [CLOSE-BRACKET (:lit no-op "]")]
-  [WHENEVER (:lit no-op "whenever")]
-  [HANDLER (:lit no-op "handler")]
-  [INITIALLY (:lit no-op "initially")]
-  [MEANS (:lit no-op "means")]
-  [PIPE (:lit no-op "|")]
+  [REQUIRE "require"]
+  [MESSAGE "message"]
+  [IS "is"]
+  [OPEN-BRACKET "["]
+  [CLOSE-BRACKET "]"]
+  [WHENEVER "whenever"]
+  [HANDLER "handler"]
+  [INITIALLY "initially"]
+  [MEANS "means"]
+  [PIPE "|"]
+  [AFTER "after"]
+  [FUNCTION "function"]
 
   ;; basics
   [END (:& (:/ (list NEWLINE :EOF)))]
-  [NEWLINE (:lit no-op "\n")]
+  [NEWLINE "\n"]
   [STRING (:rx no-op #rx"\".*?[^\\]\"")]
   [WHITESPACE (:rx no-op #rx" +")]
   [?WHITESPACE (:? no-op WHITESPACE)]
@@ -143,16 +166,19 @@
             (list ID-LIKE
                   (:/ (list (:! ":") END))))]
   [ID-LIKE (:rx (->stx string->symbol)  #rx"[a-zA-Z]+")]
-  [OPEN-PAREN (:lit no-op "(")]
-  [CLOSE-PAREN (:lit no-op ")")]
+  [OPEN-PAREN "("]
+  [CLOSE-PAREN ")"]
+  [NEW "new"]
   ;; silly
   [Todo (:! (:? no-op (:rx no-op #rx".")))]
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*\n")))]
+  [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
   #:tokens 
-  (comment LANG) 
-  (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE) 
+  (comment LANG COMMENT) 
+  (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
+         OP FUNCTION NEW) 
   (white-space NEWLINE WHITESPACE) 
-  (constant STRING) 
+  (constant STRING INCOMPLETE-STRING Number Unit) 
   (keyword KEYWORD)
   (no-color ID)
   (parenthesis OPEN-PAREN CLOSE-PAREN))

@@ -1,90 +1,50 @@
-#lang "../runtime.rkt"
+#lang pop-pl/current
 
-;(start stablizer infuser)
-(require iv)
-(require infusion)
-(require ptt-checking)
+require heparinPttChecking
+require heparinInfusion
+require ivInserted
 
-(handler infuser
-         (define (change-continous x)
-           (change-heparin x)
-           (send (change "heparin" "continous" x)))
-         (define (give-bolus x)
-           (send (give "heparin" "bolus" x)))
-         ;; getting these to bind variables might be hard
-         (when (event-is (update ptt (with-var v)))
-           (cond 
-            [(< t 45)
-             (give-bolus (80 units/kg))
-             (change-continous (3 units/kg/hour))]
-            [(< 45 t 59)
-             (give-bolus (40 units/kg))
-             (change-continous (1 unit/kg/hour))]
-            [(< 101 t 123)
-             (change-continous (-1 unit/kg/hour))]
-            [(> 123 t)
-             (send (stop "heparin" "continous"))
-             (after (1 hour)
-                    (send (restart "heparin" "continous"))
-                    (change-continous (-3 units/kg/hour)))])))
-
-(handler ptt-checking
-         (define stable? 
-           (<= 2 (how-many (update ptt (>= 100 % 60))
-                           (since (change "heparin" _ ...)))))
-         (define time (if stable? (24 hours) (6 hours)))
-         (when (after? time (time-of-last (check-ppt)))
-           (check-ppt)))
-;; alternat syntax
-
+initially 
+   giveBolus 80 units/kg of: "heparin" by: "iv"
+   start 18 units/kg/hour of: "heparin"
 
 handler infusion is
-  when event-is ptt
-    v means value-of event
+  whenever new ptt
+    whenever
+    aPtt < 45        | giveBolus 80 units/kg of: "heparin" by: "iv"
+                     | increase "heparin" by: 3 units/kg/hour
 
-    whenever v<45
-      change-heparin by: 3units/kg/hour 
-      give 80units/kg of: "heparin" by: "iv"
+    45 < aPtt < 59   | giveBolus 40 units/kg of: "heparin" by: "iv"
+                     | increase "heparin" by: 1 unit/kg/hour
 
-    whenever 45<v<59
-      change-heparin by: 1unit/kg/hour
-      give 40units/kg of: "heparin" by: "subcut" whenever 45<v<59
+    101 < aPtt < 123 | decrease "heparin" by: 1 unit/kg/hour
 
-    whenever 101<v<123
-      change-heparin by: -1units/kg/hour 
-    
-    whenever v>123
-      stop "heparin"
-      after 1hour
-        restart "heparin"
-        change-heparin -3units/kg/hour
+    aPtt > 123       | hold "heparin"
+                     | after 1 hour
+                     |     restart "heparin"
+                     |     decrease "heparin" by: 3 units/kg/hour
 
+// version 1
+handler heparinPttChecking is
+  Q 24 hours checkPtt
+  // this is iffy may need nested whenevers (ew)
+  whenever new change "heparin"
+      after 6 hours
+        checkPtt
+  whenever new giveBolus "heparin"
+      after 6 hours
+        checkPtt
+      
 
-heparin-ptt-checking is
-                                          that
-                                          that-is              since <time>
-  stable means most-recent ptt that-are theripudic since-last change-heparin  
-  Q6(check-ppt) whenever not stable
-  Q24(check-ppt) whenever stable
+// version 2
+handler heparinPttChecking is
+  Q 6 hours checkPtt whenever not lastTwoValuesInTheraputicRange
+  Q 24 hours checkPtt whenever lastTwoValuesInTheraputicRange
 
-
-  stable means most-recent 2 ptt that-are: theripudic since-last(change-heparin)
-
-
-message ptt is [update ptt ?]
-message change-heparin is [change "heparin" by: ?]
-message give is [give ? of: ? by: ? ]
-message stop is [stop ?]
-message restart is [restart ?]
-
-theraputic(x) := 
-
-
-all [update ptt ]
-  
-
-(handler iv
-         ;initially put-iv in
-         ;every x check iv is in
-         )
-
+function lastTwoValuesInTheraputicRange is
+  first means get 1 ptt
+  second means get 2 ptt
+  lastChange means get 1 checkPtt
+  first after lastChange and second after lastChange and therapudic first and therapudic second
+function therapudic(ptt) is
+  59 < aPtt < 101

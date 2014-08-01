@@ -52,7 +52,7 @@
   @list{         a-ptt@op{>}@const{123}     @syntax{|}hold @const{"heparin"}}
   @list{                          @syntax{|}@syntax{after} @const{1}hour}
   @list{                          @syntax{|}       restart @const{"heparin"}}
-  @list{                          @syntax{|}       decrease @const{"heparin"} @const{3}units/kg/hour})
+  @list{                          @syntax{|}       decrease @const{"heparin"} @kw{by:}@const{3}units/kg/hour})
  (make-item
   @list{@syntax{handler} heparin-ptt-checking @syntax{is}}
   @list{    stable @syntax{means} most-recent @const{2} ptt @kw{that-are:} therapeutic since-last@delim{(}change@delim{(}@const{"heparin"}@delim{)}@delim{)}}
