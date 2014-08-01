@@ -24,12 +24,17 @@
     `(initially ,@lines)]))
 (define parse-handler
   (match-lambda
-   [(list* _ name _ _ lines)
-    `(define ,name (make-handler ,@(filter cons? lines)))]))
+   [(list _ _ name _ _ _ _ lines)
+    `(define ,name (make-handler ,@(filter syntax? lines)))]))
+(module+ test
+  (let ([s #'(line 0 2)])
+    (check-equal? (parse-handler (list "handler" " " 'x "is" " " #t "\n" `(,s ,42)))
+                  `(define x (make-handler ,s)))))
+
 (define parse-line
   (match-lambda
    [(list indent expr _)
-    '(line ,(depth indent) ,expr)]
+    `(line ,(line-depth indent) ,expr)]
    [(? string? v) null]))
 (define (line-depth s)
   (for/fold ([l 0]) ([c (string->list s)])
@@ -69,12 +74,12 @@
                    (list INITIALLY END (:+ raw Line)))]
   
   [Handler (:seq (->stx parse-handler)
-                 (list HANDLER ID IS END (:+ raw Line)))]
+                 (list HANDLER WHITESPACE ID WHITESPACE IS (:? no-op WHITESPACE) END (:+ no-op Line)))]
   
   [Line (:/ 
          (list
           (:seq (lambda (r p) (apply string-append (flatten r)))
-                (list NEWLINE (:* no-op SPACING) END))
+                (list NEWLINE SPACING END))
           (:seq (->stx parse-line)
                 (list INDENTATION (:/ (list Expr Whenever Means WheneverPart)) END))))]
   [Whenever (:/
@@ -87,9 +92,9 @@
                   (:seq (->stx parse-whenever-part) (list Expr WHITESPACE PIPE WHITESPACE Expr))
                   (:seq (->stx parse-whenever-part) (list PIPE WHITESPACE Expr))))]
 
-  [INDENTATION (:seq no-op
-                     (list NEWLINE ))]
-  [SPACING (:* (lambda (r p) (apply string-append (flatten r)))
+  [INDENTATION (:seq (lambda (r p) (apply string-append r)) 
+                     (list NEWLINE SPACING))]
+  [SPACING (:+ (lambda (r p) (apply string-append (flatten r)))
                WHITESPACE)]
 
   ;; messages
@@ -187,6 +192,9 @@
   (check-equal? (syntax->datum (parse "message test is [ a b: c ]"))
                 '(module TODO pop-pl
                   (define test (make-message a #:b c))))
+  (check-equal? (syntax->datum (parse "handler x is\n  test"))
+                '(module TODO pop-pl
+                  (define x (make-handler (line 2 test)))))
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
     (check-equal? (syntax->datum (parse in))

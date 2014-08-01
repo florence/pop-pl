@@ -46,5 +46,6 @@ function lastTwoValuesInTheraputicRange is
   second means get 2 ptt
   lastChange means get 1 checkPtt
   first after lastChange and second after lastChange and therapudic first and therapudic second
+
 function therapudic(ptt) is
   59 < aPtt < 101
