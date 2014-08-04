@@ -181,10 +181,13 @@
                             (list pat (* (lambda (r p) r) pat))))]
               [(* f pat)
                (let loop ([res null])
-                 (define-values (r p) (parse* pat))
-                 (if r
-                     (loop (cons r res))
-                     (values (f (reverse res) (get-pos)) (get-pos))))]
+                 (with-reset in
+                   (define-values (r p) (parse* pat))
+                   (if r
+                       (loop (cons r res))
+                       (begin 
+                         (reset)
+                         (values (f (reverse res) (get-pos)) (get-pos))))))]
               [(? f pat)
                (define-values (r p) (parse* pat))
                (if r

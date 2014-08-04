@@ -175,9 +175,9 @@
                 (list INDENTATION (:/ (list Whenever Means Expr)) END))))]
   [Whenever (:/
              (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ no-op (:seq no-op (list INDENTATION WheneverPart END)))))
+                   (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE NEW WHITESPACE ID))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr))
-                   (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER Expr))
-                   (:seq (->stx parse-whenever) (list WHENEVER NEW ID))))]
+                   (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr))))]
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverPart (:/ 
                  (list 
@@ -262,7 +262,7 @@
   [ID (:seq (->stx first)
             (list ID-LIKE
                   (:/ (list (:! ":") END))))]
-  [ID-LIKE (:rx (->stx string->symbol)  #rx"[a-zA-Z]+")]
+  [ID-LIKE (:rx (->stx string->symbol)  #rx"[a-zA-Z][a-zA-Z0-9]*")]
   [OPEN-PAREN "("]
   [CLOSE-PAREN ")"]
   [NEW "new"]
@@ -292,11 +292,19 @@
        #`(let ([val (parse t 
                            #,@(if (attribute d) #'(#:debug d) #'())
                            #,@(if (attribute p) #'(#:pattern p) #'()))]) 
+           (define (convert v)
+             (cond [(syntax? v)
+                    (syntax->datum v)]
+                   [(list? v)
+                    (map convert v)]
+                   [else v]))
            (if (not val)
                (fail (~a "parsing " t " returned false"))
-               #,(syntax/loc stx
-                   (check-equal? (syntax->datum val)
-                                 (module 'e ...)))))]))
+               #,(quasisyntax/loc stx
+                   (check-equal? (convert val)
+                                 #,@(if (attribute p) 
+                                       #'('e ...)
+                                       #'((module 'e ...)))))))]))
   (test-parse "message test is [ a b: c ]"
               (define test (make-message a #:b c)))
 
@@ -314,6 +322,47 @@
   (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
               (define b (make-handler (whenever x 12) x))
               (initially x))
+  (test-parse "require m"
+              (add-handler m))
+  (test-parse 
+   "handler b is
+  QQ
+  whenever t1
+    e1
+    e2
+    whenever new x
+      e3
+      e4
+    whenever
+    g | m
+      | x
+    g2 | v
+       | v2
+    e5
+initially
+  whenever 12
+    m"
+   (define b (make-handler
+              QQ
+              (whenever t1
+                        e1
+                        e2 
+                        (whenever-new x e3 e4)
+                        (whenever (g m x) (g2 v v2))
+                        e5)))
+   (initially (whenever 12 m)))
+  (test-parse "\n  QQ"
+              #:pattern Line
+              (line 2 QQ))
+  (test-parse "\n whenever t1"
+              #:pattern Line
+              (line 1 (whenever t1)))
+  (test-parse "\n    e1"
+              #:pattern Line
+              (line 4 e1))
+  (test-parse "\n  whenever new x"
+              #:pattern Line
+              (line 2 (whenever-new x)))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
