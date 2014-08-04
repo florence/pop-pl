@@ -46,33 +46,33 @@
 (define (join-lines lines)
   (define (join* lines depth [results null])
     (cond [(null? lines) 
-           (values (reverse results) null)]
+           (values results null)]
           [else
            (define line (first lines))
            (match line
              [(list 'line inner-depth e)
               (if (<= inner-depth depth)
                   (let ()
-                    (define-values (res b) (join* (rest lines) depth))
+                    (define-values (res b) (join* lines (sub1 depth)))
+                    (values results (append res b))
+                    #;
                     (if (null? b)
                         (values results res)
                         (error 'internal-error "expected null, got ~s" b)))
                   (syntax-parse e
                     [(whenever e) 
                      (define-values (next rst) (join* (rest lines) inner-depth))
-                     (values (cons #`(whenever e #,@next)
-                                   (append rst results))
-                             null)]
+                     (values (append results (list #`(whenever e #,@next)) rst) null)]
                     [_ 
-                     (join* (rest lines) depth (cons e results))]))]
+                     (join* (rest lines) depth (append results (list e)))]))]
              [(? syntax? line)
-              (join* (rest lines) depth (cons line results))]
+              (join* (rest lines) depth (append results (list line)))]
              [_ (join* (rest lines) depth results)])]))
-  ;; -- in --
+  ; -- in --
   (define-values (result rst) (join* lines -1))
   (if (null? rst)
       result
-      (error 'internal-error "expected null, got ~s" rst)))
+      (error 'internal-error "expected null, got ~s result" rst)))
 (module+ test
   (check-equal? (syntax->datum
                  (datum->syntax
@@ -106,7 +106,7 @@
 (define parse-whenever+parts
   (match-lambda
    [(list "whenever" _ _ (list (list _ part _) ...))
-    `(whenever  ,(flatten-parts part))]))
+    `(whenever  ,@(flatten-parts part))]))
 ;; condense the line-by-line whenever into a series of clauses
 (define (flatten-parts parts [results null])
   (cond [(null? parts) (reverse results)]
@@ -123,12 +123,15 @@
     (splitf-at (rest parts) 
                (lambda (stx)
                  (syntax-parse stx
-                   [(e) #f]
-                   [(t e) #t]))))
-  (values (syntax-parse (list start bits)
-            [((t e1) e2 ...)
+                   [(e) #t]
+                   [(t e) #f]))))
+  (values (syntax-parse (list* start bits)
+            [((t e1) (e2) ...)
              (syntax/loc start (t e1 e2 ...))])
           remainder))
+(module+ test 
+  (check-equal? (map syntax->datum (flatten-parts (list #'(t1 1) #'(2) #'(3) #'(t2 4) #'(t3 5))))
+                '((t1 1 2 3) (t2 4) (t3 5))))
 ;; parse a litteral line from the part
 (define parse-whenever-part
   (match-lambda
@@ -150,7 +153,7 @@
                second))
              (list 
               (:? no-op LANG)
-              (:+ no-op (:/ (list Require COMMENT Initially Handler Message)))
+              (:+ no-op (:seq (lambda (r p) (second r)) (list (:? no-op NEWLINE) (:/  (list Require COMMENT Initially Handler Message)))))
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?\n")]
@@ -169,9 +172,9 @@
           (:seq (lambda (r p) (apply string-append (flatten r)))
                 (list NEWLINE SPACING END))
           (:seq (lambda (r p) (parse-line r))
-                (list INDENTATION (:/ (list Expr Whenever Means)) END))))]
+                (list INDENTATION (:/ (list Whenever Means Expr)) END))))]
   [Whenever (:/
-             (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ no-op (list INDENTATION WheneverPart END))))
+             (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ no-op (:seq no-op (list INDENTATION WheneverPart END)))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr))
                    (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER Expr))
                    (:seq (->stx parse-whenever) (list WHENEVER NEW ID))))]
@@ -213,7 +216,7 @@
           ID))]
   
   [Call Todo]
-  [Numberic Todo]
+  [Numberic (:/ (list Number Todo))]
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
@@ -280,29 +283,37 @@
 (module+ test
   (define (module . e)
     `(module TODO pop-pl ,@e))
-  (define-syntax (test-top-parse stx)
+  (define-syntax (test-parse stx)
     (syntax-parse stx
-      [(_ t:str (~optional (~seq #:debug d))
-              e:expr ...)
-       #`(check-equal? (syntax->datum (parse t #,@(if (attribute d) #'(#:debug d) #'())))
-                       (module 'e ...))]))
-  (test-top-parse "message test is [ a b: c ]"
-                  (define test (make-message a #:b c)))
+      [(_ t:str
+          (~optional (~seq #:debug d))
+          (~optional (~seq #:pattern p))
+          e:expr ...)
+       #`(let ([val (parse t 
+                           #,@(if (attribute d) #'(#:debug d) #'())
+                           #,@(if (attribute p) #'(#:pattern p) #'()))]) 
+           (if (not val)
+               (fail (~a "parsing " t " returned false"))
+               #,(syntax/loc stx
+                   (check-equal? (syntax->datum val)
+                                 (module 'e ...)))))]))
+  (test-parse "message test is [ a b: c ]"
+              (define test (make-message a #:b c)))
 
-  (test-top-parse "handler x is\n  test"
-                  (define x (make-handler test)))
+  (test-parse "handler x is\n  test"
+              (define x (make-handler test)))
 
-  (test-top-parse "initially\n  test"
-                  (initially test))
+  (test-parse "initially\n  test"
+              (initially test))
   
-  (test-top-parse "require x"
-                  (add-handler x))
-  (test-top-parse "initially\n  whenever\n  x | x\n  | n"
-                  ;#:debug #t
-                  (initially (whenever (x x))))
-  (test-top-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
-                  (define b (make-handler (whenever x 12) x))
-                  (initially x))
+  (test-parse "require x"
+              (add-handler x))
+  (test-parse "initially\n  whenever\n  x | x\n  | n"
+              ;#:debug #t
+              (initially (whenever (x x n))))
+  (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
+              (define b (make-handler (whenever x 12) x))
+              (initially x))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
