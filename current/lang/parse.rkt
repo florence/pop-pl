@@ -211,30 +211,40 @@
   ;; expressions
   [Expr (:/
          (list
-          Call
           Numberic
+          Call
           ID))]
   
-  [Call Todo]
+  [Call (:seq (->stx flatten)
+              (list ID Args))]
+  [Args (:/ (list (:seq (lambda (r p) (match (flatten r) [(list _ a ... _) a])) (list OPEN-PAREN (:? no-op ArgsListCall) CLOSE-PAREN))
+                  ArgsListCall))]
+  [ArgsListCall
+   (:+ (lambda (r p) (filter (negate string?) r)) 
+       (:/ (list
+            (:seq (lambda (r p) (match r [(list _ k _ e) (list k e)])) (list WHITESPACE KEYWORD WHITESPACE Expr))
+            (:seq (->stx second) (list WHITESPACE Expr)))))]
+  
   [Numberic (:/ (list Number Todo))]
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
-  [Number+Unit (:seq (->stx values) (list NUMBER-RAW Unit))]
+  [Number+Unit (:seq (->stx (lambda (s) `(number ,@s))) (list NUMBER-RAW Unit))]
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
               (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" UNIT-RAW))))))]
-  [UNIT-RAW (:/ (list "unit"
-                      "units"
+  [UNIT-RAW (:/ (list "units"
+                      "unit"
+                      "kgs"
                       "kg"
-                      "hour"
                       "hours"
-                      "day"
+                      "hour"
                       "days"
-                      "week"
+                      "day"
                       "weeks"
-                      "minute"
-                      "minutes"))]
+                      "week"
+                      "minutes"
+                      "minute"))]
   [OP (:/ (list "and" "<" ">"))]
   
   ;; keywords
@@ -304,7 +314,8 @@
                    (check-equal? (convert val)
                                  #,@(if (attribute p) 
                                        #'('e ...)
-                                       #'((module 'e ...)))))))]))
+                                       #'((module 'e ...)))
+                                 t))))]))
   (test-parse "message test is [ a b: c ]"
               (define test (make-message a #:b c)))
 
@@ -316,9 +327,10 @@
   
   (test-parse "require x"
               (add-handler x))
-  (test-parse "initially\n  whenever\n  x | x\n  | n"
-              ;#:debug #t
+  (test-parse "initially\n  whenever\n   x | x\n   | n"
               (initially (whenever (x x n))))
+  (test-parse "initially\n  whenever x\n    x\n    n"
+              (initially (whenever x x n)))
   (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
               (define b (make-handler (whenever x 12) x))
               (initially x))
@@ -342,7 +354,7 @@
 initially
   whenever 12
     m"
-   (define b (make-handler
+ (define b (make-handler
               QQ
               (whenever t1
                         e1
@@ -363,6 +375,68 @@ initially
   (test-parse "\n  whenever new x"
               #:pattern Line
               (line 2 (whenever-new x)))
+ 
+  ;;; expressions
+  (test-parse "x"
+              #:pattern Expr
+              x)
+  (test-parse "x 1 2 y: 3 z"
+              #:pattern Call
+              (x 1 2 #:y 3 z))
+  (test-parse "x 1 2 y: 3 z"
+              #:pattern Expr
+              (x 1 2 #:y 3 z))
+  (test-parse "1+2*4"
+              #:pattern Expr
+              (+ 1 (* 2 4)))
+  (test-parse "x 1 + 4 * 3 by: 3*z z"
+              #:pattern Expr
+              (x (+ 1 (* 4 3)) #:by (* 3 z) z))
+  (test-parse "x \"m\" by: z"
+              #:pattern Expr
+              (x "m" #:by z))
+  
+  
+  ;;; the big one
+  #;
+  (test-parse
+"#lang pop-pl/current
+require heparinPttChecking
+require heparinInfusion
+require ivInserted
+
+initially 
+   giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+   start 18 units/kg/hour of: \"heparin\"
+
+handler infusion is
+  whenever new ptt
+    whenever
+    aPtt < 45        | giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+                     | increase \"heparin\" by: 3 units/kg/hour
+
+    45 < aPtt < 59   | giveBolus 40 units/kg of: "heparin" by: "iv"
+                     | increase \"heparin\" by: 1 unit/kg/hour
+
+    101 < aPtt < 123 | decrease \"heparin\" by: 1 unit/kg/hour
+
+    aPtt > 123       | hold \"heparin\"
+                     | after 1 hour
+                     |     restart \"heparin\"
+                     |     decrease \"heparin\" by: 3 units/kg/hour"
+   (add-handler heparinPttChecking)
+   (add-handler heparinInfusion)
+   (add-handler ivInserted)
+   (initially
+    (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")
+    (start (number 18 units/kg/hour) #:of "heparin"))
+   (define infusion
+     (make-handler
+      (whenever-new
+       ptt
+       (whenever
+        [(< aPtt 45) ]
+        [])))))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
