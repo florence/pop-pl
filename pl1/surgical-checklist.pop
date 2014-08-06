@@ -1,4 +1,4 @@
-#lang pop-pl
+#lang pop-pl/pl1
 
 Boolean in_op_consent = false;
 Boolean y = false;

@@ -1,3 +1,3 @@
 #lang info
 
-(define collection "pop-pl")
+(define collection "pop-pl/pl1")

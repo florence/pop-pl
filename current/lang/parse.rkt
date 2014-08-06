@@ -208,13 +208,14 @@
                          (:seq no-op (list KEYWORD WHITESPACE ID))
                          ID)))]
   
-  ;; expressions
+  ;;; expressions
   [Expr (:/
          (list
           Numberic
           Call
           ID))]
   
+  ;; function calls
   [Call (:seq (->stx flatten)
               (list ID Args))]
   [Args (:/ (list (:seq (lambda (r p) (match (flatten r) [(list _ a ... _) a])) (list OPEN-PAREN (:? no-op ArgsListCall) CLOSE-PAREN))
@@ -225,6 +226,7 @@
             (:seq (lambda (r p) (match r [(list _ k _ e) (list k e)])) (list WHITESPACE KEYWORD WHITESPACE Expr))
             (:seq (->stx second) (list WHITESPACE Expr)))))]
   
+  ;;  math
   [Numberic (:/ (list Number Todo))]
   [Number (:/
            (list Number+Unit
