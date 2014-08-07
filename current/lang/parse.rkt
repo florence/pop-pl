@@ -54,11 +54,7 @@
               (if (<= inner-depth depth)
                   (let ()
                     (define-values (res b) (join* lines (sub1 depth)))
-                    (values results (append res b))
-                    #;
-                    (if (null? b)
-                        (values results res)
-                        (error 'internal-error "expected null, got ~s" b)))
+                    (values results (append res b)))
                   (syntax-parse e
                     [(whenever e) 
                      (define-values (next rst) (join* (rest lines) inner-depth))
@@ -235,18 +231,25 @@
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
               (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" UNIT-RAW))))))]
-  [UNIT-RAW (:/ (list "units"
-                      "unit"
-                      "kgs"
-                      "kg"
-                      "hours"
-                      "hour"
-                      "days"
-                      "day"
-                      "weeks"
-                      "week"
-                      "minutes"
-                      "minute"))]
+  [UNIT-RAW (:/ (sort
+                 (list "units"
+                       "unit"
+                       "kgs"
+                       "kg"
+                       "cm"
+                       "mgs"
+                       "mg"
+                       "micrograms"
+                       "microgram"
+                       "hours"
+                       "hour"
+                       "days"
+                       "day"
+                       "weeks"
+                       "week"
+                       "minutes"
+                       "minute")
+                 (lambda (l r) (>  (string-length l) (string-length r)))))]
   [OP (:/ (list "and" "<" ">"))]
   
   ;; keywords
