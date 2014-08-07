@@ -1,0 +1,27 @@
+#lang pop-pl/current
+
+
+// fentanyl section
+initially
+  start 25 micrograms/hour of: "fentanyl"
+  set "fentanyl, on demand" to: 25 micrograms
+
+handler breakthroughPain is 
+  whenever new painscore
+    whenever score > 8 cm
+      increase "fentanyl, on demand" by: 10 micrograms
+      after 1 hour
+         checkPainScore
+  
+  whenever last 3 painscore (> 8) //??????
+    notifyDoctor
+
+handler minimalPain is
+   whenever last 3 painscore (< 3) since last(change("fentanyl, on demand")) //???????
+      decrease "fentanyl, on demand" by: 10 micrograms
+
+
+
+message painscore is [ score ]
+message checkPainScore is []
+message notifyDoctor is []
