@@ -13,11 +13,13 @@ handler breakthroughPain is
       after 1 hour
          checkPainScore
   
-  whenever last 3 painscore (> 8) //??????
-    notifyDoctor
+  // implicity is since last notifyDoctor()
+  // handles one argument messages only
+  notifyDoctor whenever painscore > 8, 3 times
 
 handler minimalPain is
-   whenever last 3 painscore (< 3) since last(change("fentanyl, on demand")) //???????
+   // implicity is since last decrease("fentanyl, on demand")... takes first arg only, and automatically
+   whenever painscore < 3, 3 times
       decrease "fentanyl, on demand" by: 10 micrograms
 
 
