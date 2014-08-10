@@ -7,19 +7,22 @@ initially
   set "fentanyl, on demand" to: 25 micrograms
 
 handler breakthroughPain is 
-  whenever new painscore
-    whenever score > 8 cm
+  whenever new painscore and score > 8 cm
       increase "fentanyl, on demand" by: 10 micrograms
       after 1 hour
          checkPainScore
-  
+  and whenever this happens 3 times
+     notifyDoctor
+  // or
+
   // implicity is since last notifyDoctor()
   // handles one argument messages only
-  notifyDoctor whenever painscore > 8, 3 times
+  notifyDoctor whenever painscore > 8 then within 1 hour increase("fentanyl"), 3 times
 
 handler minimalPain is
    // implicity is since last decrease("fentanyl, on demand")... takes first arg only, and automatically
-   whenever painscore < 3, 3 times
+   // third possible syntax
+   whenever painscore < 3, 3 times, 1 hour apart
       decrease "fentanyl, on demand" by: 10 micrograms
 
 
