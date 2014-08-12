@@ -34,18 +34,15 @@ handler heparinPttChecking is
   whenever new giveBolus "heparin"
       after 6 hours
         checkPtt
-      
 
-// version 2
+
+//version 2
 handler heparinPttChecking is
-  Q 6 hours checkPtt whenever not lastTwoValuesInTheraputicRange
-  Q 24 hours checkPtt whenever lastTwoValuesInTheraputicRange
+  Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
+  Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times
 
-function lastTwoValuesInTheraputicRange is
-  first means get 1 ptt
-  second means get 2 ptt
-  lastChange means get 1 checkPtt
-  first after lastChange and second after lastChange and therapudic first and therapudic second
 
-function therapudic(ptt) is
-  59 < aPtt < 101
+message ptt is [ aPtt ]
+message change is [ drug by: value ]
+message increase is change
+message decrease(drug by: change) is change(drug by: -change)

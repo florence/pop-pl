@@ -7,6 +7,7 @@ initially
   set "fentanyl, on demand" to: 25 micrograms
 
 handler breakthroughPain is 
+  // and will need to bind forward i think
   whenever new painscore and score > 8 cm
       increase "fentanyl, on demand" by: 10 micrograms
       after 1 hour
@@ -17,12 +18,14 @@ handler breakthroughPain is
 
   // implicity is since last notifyDoctor()
   // handles one argument messages only
-  notifyDoctor whenever painscore > 8 then within 1 hour increase("fentanyl"), 3 times
+
+  notifyDoctor whenever painscore > 8, 3 consecutive times
 
 handler minimalPain is
    // implicity is since last decrease("fentanyl, on demand")... takes first arg only, and automatically
+   // issue: decrease is actually change
    // third possible syntax
-   whenever painscore < 3, 3 times, 1 hour apart
+   whenever painscore < 3, 3 consecutive times, 1 hour apart
       decrease "fentanyl, on demand" by: 10 micrograms
 
 
