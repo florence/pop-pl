@@ -233,10 +233,10 @@
   ;;; expressions
   [Expr (:/
          (list
-          Infix
           STRING
           Call
-          ID))]
+          ID
+          Infix))]
   
   ;; function calls
   [Call (:seq (->stx flatten)
@@ -251,7 +251,31 @@
   
   ;; infix 
 
-  [Infix (:/ (list Number Todo))]
+  [Infix (:/ (list Numeric Todo))]
+  [Numeric Sum]
+  [Sum (:seq (->stx 
+              (match-lambda
+               [(list r (? null? _)) r]
+               [(list r rest) `(+ ,r ,@rest)]))
+             (list Product
+                   (:* no-op
+                       (:seq (->stx
+                              (match-lambda
+                               [(list "+" v) v]
+                               [(list "-" v) `(- v)]))
+                             (list (:/ (list "+" "-")) Product)))))]
+  [Product (:seq (->stx 
+                  (match-lambda
+                   [(list r (? null? _)) r]
+                   [(list r rest) `(* ,r ,@rest)]))
+                 (list NValue
+                       (:* no-op
+                           (:seq (->stx
+                                  (match-lambda
+                                   [(list "*" v) v]
+                                   [(list "/" v) `(/ v)]))
+                                 (list (:/ (list "*" "/")) NValue)))))]
+  [NValue (:/ (list ID Number (:seq (->stx second) (list OPEN-PAREN Numeric CLOSE-PAREN))))]
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
@@ -435,7 +459,7 @@ initially
   (test-parse "1+2*4"
               #:pattern Expr
               (+ 1 (* 2 4)))
-  (test-parse "x 1 + 4 * 3 by: 3*z z"
+  (test-parse "x 1+4*3 by: 3*z z"
               #:pattern Expr
               (x (+ 1 (* 4 3)) #:by (* 3 z) z))
   (test-parse "x \"m\" by: z"
