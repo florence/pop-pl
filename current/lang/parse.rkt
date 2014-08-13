@@ -151,7 +151,6 @@
 ;;; infix
 (define (parse-bool-from-numb l)
   (define pats (flatten l))
-  (displayln pats)
   (define (go l)
     (match l
       [(list) l]
@@ -507,7 +506,9 @@ initially
   (test-parse "1<2<3"
               #:pattern Expr
               (and (< 1 2) (< 2 3)))
-  (test-parse "4>=4")
+  (test-parse "4>=4"
+              #:pattern Expr
+              (>= 4 4))
   (test-parse "1<2<3and4>=4"
               #:pattern Expr 
               (and (and (< 1 2) (< 2 3))
