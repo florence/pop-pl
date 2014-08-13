@@ -56,9 +56,9 @@
                     (define-values (res b) (join* lines (sub1 depth)))
                     (values results (append res b)))
                   (syntax-parse e
-                    [(whenever e) 
+                    [(whenever e ...) 
                      (define-values (next rst) (join* (rest lines) inner-depth))
-                     (values (append results (list #`(whenever e #,@next)) rst) null)]
+                     (values (append results (list #`(whenever e ... #,@next)) rst) null)]
                     [_ 
                      (join* (rest lines) depth (append results (list e)))]))]
              [(? syntax? line)
@@ -76,10 +76,10 @@
                   #f
                   (join-lines
                    `((line 0 ,#'x)
-                     (line 0 ,#'(whenever y))
+                     (line 0 ,#'(whenever y #:derp 1))
                      (line 1 ,#'x)
                      (line 2 ,#'x)))))
-                '(x (whenever y x x)))
+                '(x (whenever y #:derp 1 x x)))
   (check-equal? (syntax->datum
                  (datum->syntax
                   #f
@@ -97,7 +97,7 @@
 (define parse-whenever
   (match-lambda
    [(list "whenever" _ "new" _ id) `(whenever-new ,id)]
-   [(list "whenever" _ expr) `(whenever ,expr)]
+   [(list "whenever" _ expr (list extras ...)) `(whenever ,expr ,@(flatten extras))]
    [(list do _ "whenever" _ when) `(whenever ,do ,when)]))
 ;; parse a whenever that has many parts
 (define parse-whenever+parts
@@ -134,7 +134,7 @@
 (module+ test 
   (check-equal? (map syntax->datum (flatten-parts (list #'(t1 (line 0 1)) #'((line 5 2)) #'((line 4 3)) #'(t2 (line 12 4)) #'(t3 (line 6 5)))))
                 '((t1 1 2 3) (t2 4) (t3 5))))
-;; parse a litteral line from the part
+;; parse a literal line from the part
 (define parse-whenever-part
   (match-lambda
    [(list t _ _ e) `(,t ,e)]
@@ -188,9 +188,15 @@
   [Whenever (:/
              (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ no-op (:seq no-op (list INDENTATION WheneverPart END)))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE NEW WHITESPACE ID))
-                   (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr))
+                   (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
                    (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr))))]
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
+  [WheneverExtras (:seq (lambda (r p) (fourth r))
+                        (list ?WHITESPACE COMMA ?WHITESPACE WheneverExtrasStx))]
+  [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (first r)))
+                                     (list NUMBER-RAW WHITESPACE "times"))
+                               (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
+                                     (list Number WHITESPACE "apart"))))]
   [WheneverPart (:/ 
                  (list 
                   (:seq (->stx parse-whenever-part) (list Expr WHITESPACE PIPE Line-Like))
@@ -228,6 +234,7 @@
   [Expr (:/
          (list
           Infix
+          STRING
           Call
           ID))]
   
@@ -248,7 +255,7 @@
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
-  [Number+Unit (:seq (->stx (lambda (s) `(number ,@s))) (list NUMBER-RAW Unit))]
+  [Number+Unit (:seq (->stx (lambda (s) `(number ,(first s) ,(third s)))) (list NUMBER-RAW WHITESPACE Unit))]
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
               (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" UNIT-RAW))))))]
@@ -290,7 +297,7 @@
   ;; basics
   [END (:& (:seq no-op (list ?WHITESPACE (:/ (list NEWLINE :EOF)))))]
   [NEWLINE "\n"]
-  [STRING (:rx no-op #rx"\".*?[^\\]\"")]
+  [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   [WHITESPACE (:rx no-op #rx" +")]
   [?WHITESPACE (:? no-op WHITESPACE)]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
@@ -349,6 +356,13 @@
 
   (test-parse "handler x is\n  test"
               (define x (make-handler test)))
+  
+  (test-parse "initially\n whenever x, 3 times, 1 hour apart\n  x"
+              (initially
+               (whenever x #:times 3 #:apart (number 1 hour) x)))
+  (test-parse "1 hour"
+              #:pattern Number
+              (number 1 hour))
 
   (test-parse "initially\n  test"
               (initially test))
