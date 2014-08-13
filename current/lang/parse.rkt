@@ -148,6 +148,26 @@
      [(list _ _ name _ _)
       `(add-handler ,name)]))
 
+;;; infix
+(define (parse-bool-from-numb l)
+  (define pats (flatten l))
+  (displayln pats)
+  (define (go l)
+    (match l
+      [(list) l]
+      [(list v #t) v]
+      [(list v1 op v2) (list op v1 v2)]
+      [(list v1 op v2 #t) (list op v1 v2)]
+      [(list* v1 op v2 rest)
+       `(and ,(list op v1 v2)
+         ,(go (cons v2 rest)))]))
+  ;; -- in --
+  (go pats))
+(module+ test
+  (check-equal? (parse-bool-from-numb '(1 (< (3 < 4))))
+                '(and (< 1 3)
+                  (< 3 4))))
+
 (define (raise-parse-error p m)
   (raise-read-error m
                     (position-source p)
@@ -251,7 +271,21 @@
   
   ;; infix 
 
-  [Infix (:/ (list Numeric Todo))]
+  [Infix (:/ (list Bool Numeric Todo))]
+  [Bool AndOr]
+  [AndOr (:seq (->stx
+                (match-lambda
+                 [(list b1 (list (? syntax? op) b2)) (list op b1 b2)]
+                 [(list b1 _) b1]))
+               (list BoolFromNumTop (:? no-op (:seq no-op (list ANDOR Bool))) ))]
+  [ANDOR (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list "and" "or"))))]
+
+  
+  [BoolFromNumTop (:seq (->stx parse-bool-from-numb) (list BoolFromNum))]
+  [BoolFromNum
+   (:seq no-op (list Numeric (:? no-op (:seq no-op (list LGT BoolFromNum)))))]
+  [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list "<=" ">=" ">" "<"))))]
+
   [Numeric Sum]
   [Sum (:seq (->stx 
               (match-lambda
@@ -262,7 +296,7 @@
                        (:seq (->stx
                               (match-lambda
                                [(list "+" v) v]
-                               [(list "-" v) `(- v)]))
+                               [(list "-" v) `(- ,v)]))
                              (list (:/ (list "+" "-")) Product)))))]
   [Product (:seq (->stx 
                   (match-lambda
@@ -273,7 +307,7 @@
                            (:seq (->stx
                                   (match-lambda
                                    [(list "*" v) v]
-                                   [(list "/" v) `(/ v)]))
+                                   [(list "/" v) `(/ ,v)]))
                                  (list (:/ (list "*" "/")) NValue)))))]
   [NValue (:/ (list ID Number (:seq (->stx second) (list OPEN-PAREN Numeric CLOSE-PAREN))))]
   [Number (:/
@@ -301,8 +335,8 @@
                        "week"
                        "minutes"
                        "minute")
-                 (lambda (l r) (>  (string-length l) (string-length r)))))]
-  [OP (:/ (list "and" "<" ">"))]
+                 (lambda (l r) (> (string-length l) (string-length r)))))]
+  [OP (:/ (list "and" "or" "=" "<" ">" "+" "-" "*" "/"))]
   
   ;; keywords
   [REQUIRE "require"]
@@ -359,9 +393,9 @@
           e:expr ...)
        #`(let ([val (parse t 
                            #,@(if (attribute d) #'(#:debug d) #'())
-                           #,@(if (attribute p) #'(#:pattern p) #'()))]
+                           #,@(if (attribute p) #'(#:pattern (:seq (lambda (r p) (first r)) (list p :EOF))) #'()))]
                [res #,@(if (attribute p) 
-                           #'('e ...)
+                           #'('e ...);; there should only be one here
                            #'((module 'e ...)))]) 
            (define (convert v)
              (cond [(syntax? v)
@@ -370,7 +404,7 @@
                     (map convert v)]
                    [else v]))
            (if (not val)
-               (fail (~a "parsing " t " returned false, expected " res))
+               (fail (~a "parsing \"" t "\" returned false, expected " res))
                #,(quasisyntax/loc stx
                    (check-equal? (convert val)
                                  res 
@@ -465,7 +499,19 @@ initially
   (test-parse "x \"m\" by: z"
               #:pattern Expr
               (x "m" #:by z))
-  
+ 
+  ;; infix
+  (test-parse "1<2"
+              #:pattern Expr
+              (< 1 2))
+  (test-parse "1<2<3"
+              #:pattern Expr
+              (and (< 1 2) (< 2 3)))
+  (test-parse "4>=4")
+  (test-parse "1<2<3and4>=4"
+              #:pattern Expr 
+              (and (and (< 1 2) (< 2 3))
+                   (>= 4 4)))
   
   ;;; the big one
   #;
