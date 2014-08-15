@@ -46,6 +46,9 @@
       [else l])))
 ;;; joining things to the right depth
 (define (join-lines lines)
+  (define-syntax-class scope-introducer
+    #:datum-literals (after whenever whenever-new)
+    (pattern (~or whenever whenever-new after)))
   (define (join* lines depth [results null])
     (cond [(null? lines) 
            (values results null)]
@@ -58,9 +61,9 @@
                     (define-values (res b) (join* lines (sub1 depth)))
                     (values results (append res b)))
                   (syntax-parse e
-                    [(whenever e ...) 
+                    [(i:scope-introducer e ...) 
                      (define-values (next rst) (join* (rest lines) inner-depth))
-                     (values (append results (list #`(whenever e ... #,@next)) rst) null)]
+                     (values (append results (list #`(i e ... #,@next)) rst) null)]
                     [_ 
                      (join* (rest lines) depth (append results (list e)))]))]
              [(? syntax? line)
@@ -181,7 +184,13 @@
                second))
              (list 
               (:? no-op LANG)
-              (:+ no-op (:seq (lambda (r p) (second r)) (list (:? no-op NEWLINE) (:/  (list Require COMMENT Initially Handler Message)))))
+              (:+ no-op 
+                  (:/
+                   (list
+                    (:seq no-op (list NEWLINE END))
+                    (:seq (lambda (r p) (second r))
+                          (list (:? no-op NEWLINE)
+                                (:/  (list Require COMMENT Initially Handler Message)))))))
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?(\n|$)")]
@@ -197,15 +206,20 @@
   
   [Line (:/ 
          (list
-          (:seq (lambda (r p) (apply string-append (flatten r)))
-                (list NEWLINE SPACING END))
           (:seq (lambda (r p) (parse-line r))
                 (list INDENTATION Line-Body END))
+          EmptyLine
           ;; errors
+          #;
           (:seq (lambda (r p) (raise-parse-error p "a line must start with indentation"))
-                (list (:/ (list Whenever Means Expr)) END))))]
+                (list NEWLINE Line-Body END))))]
+  [EmptyLine (:seq (lambda (r p) "")
+                   (list NEWLINE END))]
+  [Line-Body (:/ (list Whenever Means Expr After))]
+  [After (:seq (->stx (match-lambda [(list "after" n) `(after ,n)])) 
+               (list AFTER Number))]
   [Whenever (:/
-             (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ no-op (:seq no-op (list INDENTATION WheneverPart END)))))
+             (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ (lambda (r p) (filter list? r)) (:/ (list EmptyLine (:seq no-op (list INDENTATION WheneverPart END)))))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE NEW WHITESPACE ID))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
                    (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
@@ -218,12 +232,12 @@
                                      (list Number WHITESPACE "apart"))))]
   [WheneverPart (:/ 
                  (list 
-                  (:seq (->stx parse-whenever-part) (list Expr WHITESPACE PIPE Line-Like))
+                  (:seq (->stx parse-whenever-part) (list Expr ?WHITESPACE PIPE Line-Like))
                   (:seq (->stx parse-whenever-part) (list PIPE Line-Like))))]
   [Line-Like (:seq (lambda (r p) (parse-line r))
                    (list SPACING Line-Body END))]
 
-  [Line-Body (:/ (list Whenever Means Expr))]
+  
 
   [INDENTATION (:seq (lambda (r p) (apply string-append r)) 
                      (list NEWLINE SPACING))]
@@ -254,7 +268,6 @@
          (list
           STRING
           Call
-          ID
           Infix))]
   
   ;; function calls
@@ -352,7 +365,7 @@
   [FUNCTION "function"]
 
   ;; basics
-  [END (:& (:seq no-op (list ?WHITESPACE (:/ (list NEWLINE :EOF)))))]
+  [END (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))]
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   [WHITESPACE (:rx no-op #rx" +")]
@@ -369,7 +382,7 @@
   [COMMA ","]
   ;; silly
   [Todo (:! (:? no-op (:rx no-op #rx".")))]
-  [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*\n")))]
+  [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
   #:tokens 
   (comment LANG COMMENT) 
@@ -439,6 +452,8 @@
               (initially
                (whenever
                 [x (whenever x y)])))
+  (test-parse "initially\n after 1 hour\n  x\n  y"
+              (initially (after (number 1 hour) x y)))
   (test-parse 
    "handler b is
   QQ
@@ -518,8 +533,63 @@ initially
               (and (and (< 1 2) (< 2 3))
                    (>= 4 4)))
   
-  ;;; the big one
-  #;
+  ;;; the big ones
+  (test-parse 
+   "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
+   #:pattern Expr
+   (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv"))
+  (test-parse
+   "start 18 units/kg/hour of: \"heparin\""
+   #:pattern Expr
+   (start (number 18 units/kg/hour) #:of "heparin"))
+  (test-parse
+   "initially 
+   giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
+   (initially (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")))
+  (test-parse
+   "initially 
+   x"
+   (initially x))
+  (test-parse "\n  x"
+              #:pattern Line
+              (line 2 x))
+  (test-parse "x"
+              #:pattern Line-Body
+              x)
+  (test-parse
+"initially 
+   giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+   start 18 units/kg/hour of: \"heparin\""
+  (initially
+    (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")
+    (start (number 18 units/kg/hour) #:of "heparin")))
+  (test-parse
+   "handler infusion is
+  whenever new ptt
+    whenever x
+     x"
+   (define infusion (make-handler (whenever-new ptt (whenever x x)))))
+  (test-parse
+   "handler infusion is
+  whenever new ptt
+    whenever
+     x | x"
+   (define infusion (make-handler (whenever-new ptt (whenever (x x))))))
+  (test-parse
+   "handler infusion is
+  whenever new ptt
+    whenever
+     x < x| x"
+   (define infusion (make-handler (whenever-new ptt (whenever ((< x x) x))))))
+  (test-parse
+   "handler infusion is
+  whenever new ptt
+    whenever
+     x < x<x| x"
+   (define infusion (make-handler (whenever-new ptt (whenever ((and (< x x) (< x x)) x))))))
+  (test-parse "x < x"
+              #:pattern Expr
+              (< x x))
   (test-parse
 "#lang pop-pl/current
 require heparinPttChecking
@@ -536,7 +606,7 @@ handler infusion is
     aPtt < 45        | giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
                      | increase \"heparin\" by: 3 units/kg/hour
 
-    45 < aPtt < 59   | giveBolus 40 units/kg of: "heparin" by: "iv"
+    45 < aPtt < 59   | giveBolus 40 units/kg of: \"heparin\" by: \"iv\"
                      | increase \"heparin\" by: 1 unit/kg/hour
 
     101 < aPtt < 123 | decrease \"heparin\" by: 1 unit/kg/hour
@@ -556,8 +626,21 @@ handler infusion is
       (whenever-new
        ptt
        (whenever
-        [(< aPtt 45) ]
-        [])))))
+        [(< aPtt 45)
+         (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (number 3 units/kg/hour))]
+        [(and (< 45 aPtt)
+              (< aPtt 59))
+         (giveBolus (number 40 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" (number 1 unit/kg/hour))]
+        [(and (< 101 aPtt)
+              (< aPtt 123))
+         (decrease "heparin" #:by (number 1 unit/kg/hour))]
+        [(> aPtt 123)
+         (hold "heparin")
+         (after (1 hour)
+                (restart "heparin")
+                (decrease "heparin" #:by (number 3 units/kg/hour)))])))))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
