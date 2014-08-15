@@ -12,9 +12,6 @@ handler breakthroughPain is
       increase "fentanyl, on demand" by: 10 micrograms
       after 1 hour
          checkPainScore
-  and whenever this happens 3 times
-     notifyDoctor
-  // or
 
   // implicity is since last notifyDoctor()
   // handles one argument messages only

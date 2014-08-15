@@ -208,7 +208,7 @@
              (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ no-op (:seq no-op (list INDENTATION WheneverPart END)))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE NEW WHITESPACE ID))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
-                   (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr))))]
+                   (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverExtras (:seq (lambda (r p) (fourth r))
                         (list ?WHITESPACE COMMA ?WHITESPACE WheneverExtrasStx))]
