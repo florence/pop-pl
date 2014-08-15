@@ -12,6 +12,8 @@
                  (f e)
                  (position->vector p)
                  orig-prop))
+(define (->stx/filter f)
+  (->stx (lambda (r) (f (filter syntax? (flatten r))))))
 (define (no-op r p) r)
 (define raw (->stx values))
 (define message-parse (match-lambda [(list _ _ id _ _ _ f _) `(define ,id ,f)]))
@@ -153,10 +155,8 @@
   (define pats (flatten l))
   (define (go l)
     (match l
-      [(list) l]
-      [(list v #t) v]
+      [(list v) v]
       [(list v1 op v2) (list op v1 v2)]
-      [(list v1 op v2 #t) (list op v1 v2)]
       [(list* v1 op v2 rest)
        `(and ,(list op v1 v2)
          ,(go (cons v2 rest)))]))
@@ -272,42 +272,42 @@
 
   [Infix (:/ (list Bool Numeric Todo))]
   [Bool AndOr]
-  [AndOr (:seq (->stx
+  [AndOr (:seq (->stx/filter
                 (match-lambda
-                 [(list b1 (list (? syntax? op) b2)) (list op b1 b2)]
-                 [(list b1 _) b1]))
-               (list BoolFromNumTop (:? no-op (:seq no-op (list ANDOR Bool))) ))]
+                 [(list b1 (? syntax? op) b2) (list op b1 b2)]
+                 [(list b1) b1]))
+               (list BoolFromNumTop (:? no-op (:seq no-op (list ?WHITESPACE ANDOR ?WHITESPACE Bool))) ))]
   [ANDOR (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list "and" "or"))))]
 
   
-  [BoolFromNumTop (:seq (->stx parse-bool-from-numb) (list BoolFromNum))]
+  [BoolFromNumTop (:seq (->stx/filter parse-bool-from-numb) (list BoolFromNum))]
   [BoolFromNum
-   (:seq no-op (list Numeric (:? no-op (:seq no-op (list LGT BoolFromNum)))))]
+   (:seq no-op (list Numeric (:? no-op (:seq no-op (list ?WHITESPACE LGT ?WHITESPACE BoolFromNum)))))]
   [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list "<=" ">=" ">" "<"))))]
 
   [Numeric Sum]
-  [Sum (:seq (->stx 
+  [Sum (:seq (->stx/filter
               (match-lambda
-               [(list r (? null? _)) r]
-               [(list r rest) `(+ ,r ,@rest)]))
+               [(list r) r]
+               [(list* r rest) `(+ ,r ,@rest)]))
              (list Product
                    (:* no-op
-                       (:seq (->stx
-                              (match-lambda
-                               [(list "+" v) v]
-                               [(list "-" v) `(- ,v)]))
-                             (list (:/ (list "+" "-")) Product)))))]
-  [Product (:seq (->stx 
+                       (:seq (->stx/filter (lambda (r) (if (null? (rest r)) (first r) r)))
+                             (list ?WHITESPACE PM ?WHITESPACE Product)))))]
+  [PM (:/ (list PLUS MINUS))]
+  [PLUS "+"]
+  [MINUS (:seq (->stx (const '-)) (list "-"))]
+  [Product (:seq (->stx/filter 
                   (match-lambda
-                   [(list r (? null? _)) r]
-                   [(list r rest) `(* ,r ,@rest)]))
+                   [(list r) r]
+                   [(list r rest) `(* ,r ,rest)]))
                  (list NValue
                        (:* no-op
-                           (:seq (->stx
-                                  (match-lambda
-                                   [(list "*" v) v]
-                                   [(list "/" v) `(/ ,v)]))
-                                 (list (:/ (list "*" "/")) NValue)))))]
+                           (:seq (->stx/filter (lambda (r) (if (null? (rest r)) (first r) r)))
+                                 (list ?WHITESPACE TS ?WHITESPACE NValue)))))]
+  [TS (:/ (list TIMES DIVIDE))]
+  [TIMES "*"]
+  [DIVIDE (:seq (->stx (const '/)) (list "/"))]
   [NValue (:/ (list ID Number (:seq (->stx second) (list OPEN-PAREN Numeric CLOSE-PAREN))))]
   [Number (:/
            (list Number+Unit
@@ -509,6 +509,10 @@ initially
   (test-parse "4>=4"
               #:pattern Expr
               (>= 4 4))
+  (test-parse "1 < 2 < 3 and 4 >= 4"
+              #:pattern Expr 
+              (and (and (< 1 2) (< 2 3))
+                   (>= 4 4)))
   (test-parse "1<2<3and4>=4"
               #:pattern Expr 
               (and (and (< 1 2) (< 2 3))
