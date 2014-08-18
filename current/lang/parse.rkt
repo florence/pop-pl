@@ -396,7 +396,7 @@
                  (list ID-LIKE ":"))]
   [ID (:seq (->stx second)
             (list 
-             (:& (:! Keywords))
+             (:& (:! (:seq no-op (list Keywords (:/ (list " " END))))))
              ID-LIKE
              (:/ (list (:! ":") END))))]
   [ID-LIKE (:rx (->stx string->symbol)  #rx"[a-zA-Z][a-zA-Z0-9]*")]
