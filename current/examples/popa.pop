@@ -16,13 +16,13 @@ handler breakthroughPain is
   // implicity is since last notifyDoctor()
   // handles one argument messages only
 
-  notifyDoctor whenever painscore > 8, 3 consecutive times
+  notifyDoctor whenever painscore > 8, 3 times
 
 handler minimalPain is
    // implicity is since last decrease("fentanyl, on demand")... takes first arg only, and automatically
    // issue: decrease is actually change
    // third possible syntax
-   whenever painscore < 3, 3 consecutive times, 1 hour apart
+   whenever painscore < 3, 3 times, 1 hour apart
       decrease "fentanyl, on demand" by: 10 micrograms
 
 
