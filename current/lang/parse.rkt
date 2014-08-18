@@ -412,7 +412,7 @@
   (white-space NEWLINE WHITESPACE) 
   (constant STRING INCOMPLETE-STRING Number Unit) 
   (keyword KEYWORD)
-  (no-color ID)
+  (symbol ID)
   (parenthesis OPEN-PAREN CLOSE-PAREN))
 
 (module+ test
