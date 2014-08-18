@@ -27,6 +27,6 @@ handler minimalPain is
 
 
 
-message painscore is [ score ]
-message checkPainScore is []
-message notifyDoctor is []
+//message painscore is [ score ]
+//message checkPainScore is []
+//message notifyDoctor is []
