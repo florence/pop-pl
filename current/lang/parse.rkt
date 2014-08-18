@@ -101,7 +101,9 @@
 ;; parse an whenever header
 (define parse-whenever
   (match-lambda
-   [(list "whenever" _ "new" _ id) `(whenever-new ,id)]
+   [(list "whenever" _ "new" _ id #t) `(whenever-new ,id)]
+   [(list "whenever" _ "new" _ id (list _ _ _ e))
+    `(whenever-new (,id ,e))]
    [(list "whenever" _ expr (list* extras)) `(whenever ,expr ,@(flatten extras))]
    [(list do _ "whenever" _ when (list* extras)) `(whenever ,when ,@(flatten extras) ,do)]))
 ;; parse a whenever that has many parts
@@ -224,7 +226,9 @@
                                (:+ (lambda (r p) (filter list? r))
                                    (:/ (list EmptyLine
                                              (:seq no-op (list INDENTATION WheneverPart END)))))))
-                   (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE NEW WHITESPACE ID))
+                   (:seq (->stx parse-whenever)
+                         (list WHENEVER WHITESPACE NEW WHITESPACE ID
+                               (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
                    (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
@@ -299,7 +303,7 @@
                  [(list b1 (? syntax? op) b2) (list op b1 b2)]
                  [(list b1) b1]))
                (list BoolFromNumTop (:? no-op (:seq no-op (list ?WHITESPACE ANDOR ?WHITESPACE Bool))) ))]
-  [ANDOR (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list "and" "or"))))]
+  [ANDOR (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list AND OR))))]
 
   
   [BoolFromNumTop (:seq (->stx/filter parse-bool-from-numb) (list BoolFromNum))]
@@ -362,7 +366,9 @@
   ;; keywords
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
-                      UNIT-RAW))]
+                      UNIT-RAW AND OR OP))]
+  [AND "and"]
+  [OR "or"]
   [REQUIRE "require"]
   [MESSAGE "message"]
   [IS "is"]
@@ -712,6 +718,11 @@ handler infusion is
  (line 1
        (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
                  (Q (number 6 hours) checkPtt))))
+(test-parse
+ "handler x is
+  whenever new q and qValue
+    e"
+ (define x (make-handler (whenever-new (q qValue) e))))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
