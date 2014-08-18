@@ -80,7 +80,7 @@
                       (when (and debug (not res))
                         (write `(failed at ,p with table ,t))
                         (write "\n"))
-                      res)
+                      (values res p))
                     (lang->colorer toks)
                     top
                     name ...))))]))
@@ -197,7 +197,7 @@
                (values (eof-object? (peek-byte in)) (get-pos))])))))
   
   (when (pattern? pat)
-      (debug `(pat: ,pat res: ,r at: ,(get-pos))))
+      (debug `(pat: ,(pattern-name pat) res: ,r at: ,(get-pos))))
   
   (when r
     (memoize r))
@@ -287,33 +287,4 @@
     (let-values ([(_ type match start end) (l (open-input-string "when {}"))])
       (check-equal? type 'syntax)
       (check-equal? start 1)
-      (check-equal? end 5)))
-                                        ; (let ()
-                                        ;   (define orig-stx (read-syntax 'derp (open-input-bytes #"x")))
-                                        ;   (define (->stx e pos)
-                                        ;     (datum->syntax #f e (vector #f #f #f pos #f) orig-stx))
-                                        ;   (define p
-                                        ;     (parser
-                                        ;      [Top (seq (lambda (r p) (first r))
-                                        ;                (list Expr EOF))]
-                                        ;      [Expr Sum]
-                                        ;      [Sum (seq (lambda (l p) (->stx (cons '+ (flatten l)) p))
-                                        ;                (list Product (* (lambda (l p) l)
-                                        ;                                 (seq (match-lambda** 
-                                        ;                                       [((list "+" n) p) (->stx n p)]
-                                        ;                                       [((list "-" n) p) (->stx `(- ,n) p)])
-                                        ;                                      (list (/ (list "+" "-")) Product)))))]
-                                        ;      [Product (seq (lambda (l p) (->stx (cons '* (flatten l)) p))
-                                        ;                    (list Value (* (lambda (l p) l) 
-                                        ;                                   (seq (match-lambda** 
-                                        ;                                         [((list "*" n) p) (->stx n p)]
-                                        ;                                         [((list "/" n) p) (->stx`(/ ,n) p)])
-                                        ;                                        (list (/ (list "*" "/")) Value)))))]
-                                        ;      [Value (/ (list (rx (lambda (r p) (->stx (string->number r) p)) #rx"[0-9]+")
-                                        ;                      (seq (lambda (l p) (second l))
-                                        ;                           (list "(" Expr ")"))))]))
-                                        ;   (define t1 (p "(1+2)/3"))
-                                        ;   (displayln t1)
-                                        ;                                       ;(check-equal? (eval-syntax t1 (make-base-namespace)) 1)
-                                        ;   )
-  )
+      (check-equal? end 5))))

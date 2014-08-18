@@ -1,5 +1,5 @@
 #lang racket
-(provide parse lex)
+(provide parse lex raise-parse-error)
 (require (for-syntax syntax/parse))
 (require "../packrat.rkt" syntax/parse syntax/readerr)
 (module+ test (require rackunit))
@@ -309,7 +309,7 @@
   [BoolFromNumTop (:seq (->stx/filter parse-bool-from-numb) (list BoolFromNum))]
   [BoolFromNum
    (:seq no-op (list Numeric (:? no-op (:seq no-op (list ?WHITESPACE LGT ?WHITESPACE BoolFromNum)))))]
-  [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list "<=" ">=" ">" "<"))))]
+  [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list IS "<=" ">=" ">" "<" "="))))]
 
   [Numeric Sum]
   [Sum (:seq (->stx/filter
@@ -334,7 +334,7 @@
   [TS (:/ (list TIMES DIVIDE))]
   [TIMES "*"]
   [DIVIDE (:seq (->stx (const '/)) (list "/"))]
-  [NValue (:/ (list ID Number (:seq (->stx second) (list OPEN-PAREN Numeric CLOSE-PAREN))))]
+  [NValue (:/ (list ID Number STRING (:seq (->stx second) (list OPEN-PAREN Numeric CLOSE-PAREN))))]
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
@@ -366,7 +366,7 @@
   ;; keywords
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
-                      UNIT-RAW AND OR OP))]
+                      UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN))]
   [AND "and"]
   [OR "or"]
   [REQUIRE "require"]
@@ -384,7 +384,10 @@
   [NOT "not"]
 
   ;; basics
-  [END (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))]
+  [END (:/ (list (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
+                 (:seq no-op (list ?WHITESPACE (:& COMMENT)
+                                   (:rx no-op #px"//.*?(?=(\n|$))")
+                                   (:& (:/ (list NEWLINE :EOF)))))))]
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   [WHITESPACE (:rx no-op #rx" +")]
@@ -424,12 +427,12 @@
           (~optional (~seq #:debug d))
           (~optional (~seq #:pattern p))
           e:expr ...)
-       #`(let ([val (parse t 
-                           #,@(if (attribute d) #'(#:debug d) #'())
-                           #,@(if (attribute p) #'(#:pattern (:seq (lambda (r p) (first r)) (list p :EOF))) #'()))]
-               [res #,@(if (attribute p) 
-                           #'('e ...);; there should only be one here
-                           #'((module 'e ...)))]) 
+       #`(let-values ([(val _) (parse t 
+                              #,@(if (attribute d) #'(#:debug d) #'())
+                              #,@(if (attribute p) #'(#:pattern (:seq (lambda (r p) (first r)) (list p :EOF))) #'()))]
+                      [(res) #,@(if (attribute p) 
+                              #'('e ...) ;; there should only be one here
+                              #'((module 'e ...)))]) 
            (define (convert v)
              (cond [(syntax? v)
                     (syntax->datum v)]
@@ -724,7 +727,46 @@ handler infusion is
     e"
  (define x (make-handler (whenever-new (q qValue) e))))
 
+
+(test-parse
+ "handler x is
+  whenever new m and left is right
+    z"
+ (define x (make-handler
+            (whenever-new (m (is left right))
+                          z))))
+
+(test-parse
+ "handler heparinPttChecking is
+  Q 24 hours checkPtt
+  // this is iffy may need nested whenevers (ew)
+  whenever new change and drug is \"heparin\"
+      after 6 hours
+        checkPtt"
+  (define heparinPttChecking
+    (make-handler
+     (Q (number 24 hours) checkPtt)
+     (whenever-new (change (is drug "heparin"))
+                   (after (number 6 hours)
+                          checkPtt)))))
+(test-parse
+ "handler heparinPttChecking is
+  whenever new change and drug is \"heparin\"
+      after 6 hours
+        checkPtt"
+  (define heparinPttChecking
+    (make-handler
+     (whenever-new (change (is drug "heparin"))
+                   (after (number 6 hours)
+                          checkPtt)))))
+
+(test-parse
+ "drug is \"heparin\""
+ #:pattern Expr
+ (is drug "heparin"))
+
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
-    (check-equal? (syntax->datum (parse in))
+    (define-values (s _) (parse in))
+    (check-equal? (syntax->datum s)
                   (module '(define test (make-message a #:b c))))))

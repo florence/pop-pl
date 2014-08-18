@@ -28,10 +28,10 @@ handler infusion is
 handler heparinPttChecking is
   Q 24 hours checkPtt
   // this is iffy may need nested whenevers (ew)
-  whenever new change "heparin"
+  whenever new change and drug is "heparin"
       after 6 hours
         checkPtt
-  whenever new giveBolus "heparin"
+  whenever new giveBolus and drug is "heparin"
       after 6 hours
         checkPtt
 
