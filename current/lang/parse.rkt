@@ -102,8 +102,8 @@
 (define parse-whenever
   (match-lambda
    [(list "whenever" _ "new" _ id) `(whenever-new ,id)]
-   [(list "whenever" _ expr (list extras ...)) `(whenever ,expr ,@(flatten extras))]
-   [(list do _ "whenever" _ when) `(whenever ,do ,when)]))
+   [(list "whenever" _ expr (list* extras)) `(whenever ,expr ,@(flatten extras))]
+   [(list do _ "whenever" _ when (list* extras)) `(whenever ,when ,@(flatten extras) ,do)]))
 ;; parse a whenever that has many parts
 (define parse-whenever+parts
   (match-lambda
@@ -215,9 +215,9 @@
                 (list NEWLINE Line-Body END))))]
   [EmptyLine (:seq (lambda (r p) "")
                    (list NEWLINE END))]
-  [Line-Body (:/ (list Whenever Means Expr After))]
-  [After (:seq (->stx (match-lambda [(list "after" n) `(after ,n)])) 
-               (list AFTER Number))]
+  [Line-Body (:/ (list Whenever Means After Expr))]
+  [After (:seq (->stx (match-lambda [(list "after" _ n) `(after ,n)])) 
+               (list AFTER WHITESPACE Number))]
   [Whenever (:/
              (list (:seq (->stx parse-whenever+parts)
                          (list WHENEVER ?WHITESPACE END
@@ -288,7 +288,12 @@
   ;; infix 
 
   [Infix (:/ (list Bool Numeric Todo))]
-  [Bool AndOr]
+  [Bool Not]
+  [Not (:/ (list
+            (:seq 
+             (->stx (match-lambda [(list n _ e) (list 'not e)]))
+             (list NOT WHITESPACE Not))
+            AndOr))]
   [AndOr (:seq (->stx/filter
                 (match-lambda
                  [(list b1 (? syntax? op) b2) (list op b1 b2)]
@@ -355,6 +360,9 @@
   [OP (:/ (list "and" "or" "=" "<" ">" "+" "-" "*" "/"))]
   
   ;; keywords
+  [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
+                      WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
+                      UNIT-RAW))]
   [REQUIRE "require"]
   [MESSAGE "message"]
   [IS "is"]
@@ -367,6 +375,7 @@
   [PIPE "|"]
   [AFTER "after"]
   [FUNCTION "function"]
+  [NOT "not"]
 
   ;; basics
   [END (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))]
@@ -376,9 +385,11 @@
   [?WHITESPACE (:? no-op WHITESPACE)]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
                  (list ID-LIKE ":"))]
-  [ID (:seq (->stx first)
-            (list ID-LIKE
-                  (:/ (list (:! ":") END))))]
+  [ID (:seq (->stx second)
+            (list 
+             (:& (:! Keywords))
+             ID-LIKE
+             (:/ (list (:! ":") END))))]
   [ID-LIKE (:rx (->stx string->symbol)  #rx"[a-zA-Z][a-zA-Z0-9]*")]
   [OPEN-PAREN "("]
   [CLOSE-PAREN ")"]
@@ -391,7 +402,7 @@
   #:tokens 
   (comment LANG COMMENT) 
   (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-         OP FUNCTION NEW COMMA) 
+         OP FUNCTION NEW COMMA NOT) 
   (white-space NEWLINE WHITESPACE) 
   (constant STRING INCOMPLETE-STRING Number Unit) 
   (keyword KEYWORD)
@@ -420,7 +431,7 @@
                     (map convert v)]
                    [else v]))
            (if (not val)
-               (fail (~a "parsing \"" t "\" returned false, expected " res))
+               #,(quasisyntax/loc stx (fail (~a "parsing \"" t "\" returned false, expected " res)))
                #,(quasisyntax/loc stx
                    (check-equal? (convert val)
                                  res 
@@ -677,6 +688,30 @@ handler infusion is
          (after (number 1 hour)
                 (restart "heparin")
                 (decrease "heparin" #:by (number 3 units/kg/hour)))])))))
+
+  (test-parse 
+  "handler heparinPttChecking is
+  Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
+  Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times"
+  (define heparinPttChecking
+    (make-handler 
+     (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
+               (Q (number 6 hours) checkPtt))
+     (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
+               (Q (number 24 hours) checkPtt)))))
+(test-parse
+ "Q 6 hours checkPtt"
+ #:pattern Expr
+ (Q (number 6 hours) checkPtt))
+(test-parse "not 59 < ptt < 101"
+            #:pattern Expr
+            (not (and (< 59 ptt) (< ptt 101))))
+(test-parse
+ "Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times"
+ #:pattern Line
+ (line 0
+       (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
+                 (Q (number 6 hours) checkPtt))))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
