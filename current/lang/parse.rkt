@@ -180,7 +180,7 @@
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
               (compose
-               (lambda (b) (list* 'module 'TODO 'pop-pl b))
+               (lambda (b) (list* 'module 'TODO 'pop-pl (filter syntax? b)))
                second))
              (list 
               (:? no-op LANG)
@@ -219,7 +219,11 @@
   [After (:seq (->stx (match-lambda [(list "after" n) `(after ,n)])) 
                (list AFTER Number))]
   [Whenever (:/
-             (list (:seq (->stx parse-whenever+parts) (list WHENEVER ?WHITESPACE END (:+ (lambda (r p) (filter list? r)) (:/ (list EmptyLine (:seq no-op (list INDENTATION WheneverPart END)))))))
+             (list (:seq (->stx parse-whenever+parts)
+                         (list WHENEVER ?WHITESPACE END
+                               (:+ (lambda (r p) (filter list? r))
+                                   (:/ (list EmptyLine
+                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE NEW WHITESPACE ID))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
                    (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
@@ -591,6 +595,38 @@ initially
               #:pattern Expr
               (< x x))
   (test-parse
+   "handler infusion is
+  whenever new ptt
+    whenever
+     x < x<x | x
+
+            | x
+
+       y | z
+         | q"
+   (define infusion
+     (make-handler
+      (whenever-new ptt
+                    (whenever
+                     [(and (< x x) (< x x)) x x]
+                     [y z q])))))
+(test-parse
+   "handler infusion is
+  whenever new ptt
+    whenever
+     x < x<x | x
+
+            | x
+
+       y | after 1 hour
+         |   x"
+   (define infusion
+     (make-handler
+      (whenever-new ptt
+                    (whenever
+                     [(and (< x x) (< x x)) x x]
+                     [y (after (number 1 hour) x)])))))
+  (test-parse
 "#lang pop-pl/current
 require heparinPttChecking
 require heparinInfusion
@@ -632,13 +668,13 @@ handler infusion is
         [(and (< 45 aPtt)
               (< aPtt 59))
          (giveBolus (number 40 units/kg) #:of "heparin" #:by "iv")
-         (increase "heparin" (number 1 unit/kg/hour))]
+         (increase "heparin" #:by (number 1 unit/kg/hour))]
         [(and (< 101 aPtt)
               (< aPtt 123))
          (decrease "heparin" #:by (number 1 unit/kg/hour))]
         [(> aPtt 123)
          (hold "heparin")
-         (after (1 hour)
+         (after (number 1 hour)
                 (restart "heparin")
                 (decrease "heparin" #:by (number 3 units/kg/hour)))])))))
 
