@@ -697,7 +697,7 @@ handler infusion is
     (make-handler 
      (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
                (Q (number 6 hours) checkPtt))
-     (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
+     (whenever (and (< 59 ptt) (< ptt 101)) #:times 2
                (Q (number 24 hours) checkPtt)))))
 (test-parse
  "Q 6 hours checkPtt"
@@ -707,9 +707,9 @@ handler infusion is
             #:pattern Expr
             (not (and (< 59 ptt) (< ptt 101))))
 (test-parse
- "Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times"
+ "\n Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times"
  #:pattern Line
- (line 0
+ (line 1
        (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
                  (Q (number 6 hours) checkPtt))))
 
