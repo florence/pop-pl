@@ -340,7 +340,7 @@
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
-  [Number+Unit (:seq (->stx (lambda (s) `(number ,(first s) ,(third s)))) (list NUMBER-RAW WHITESPACE Unit))]
+  [Number+Unit (:seq (->stx (lambda (s) `(-number ,(first s) ,(third s)))) (list NUMBER-RAW WHITESPACE Unit))]
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
   [NUMBER-RAW-TOK (:rx no-op #rx"[0-9]+(\\.[0-9]*)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
@@ -462,10 +462,10 @@
   
   (test-parse "initially\n whenever x, 3 times, 1 hour apart\n  x"
               (initially
-               (whenever x #:times 3 #:apart (number 1 hour) x)))
+               (whenever x #:times 3 #:apart (-number 1 hour) x)))
   (test-parse "1 hour"
               #:pattern Number
-              (number 1 hour))
+              (-number 1 hour))
 
   (test-parse "initially\n  test"
               (initially test))
@@ -486,7 +486,7 @@
                (whenever
                 [x (whenever x y)])))
   (test-parse "initially\n after 1 hour\n  x\n  y"
-              (initially (after (number 1 hour) x y)))
+              (initially (after (-number 1 hour) x y)))
   (test-parse 
    "handler b is
   QQ
@@ -574,15 +574,15 @@ initially
   (test-parse 
    "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
    #:pattern Expr
-   (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv"))
+   (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv"))
   (test-parse
    "start 18 units/kg/hour of: \"heparin\""
    #:pattern Expr
-   (start (number 18 units/kg/hour) #:of "heparin"))
+   (start (-number 18 units/kg/hour) #:of "heparin"))
   (test-parse
    "initially 
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
-   (initially (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")))
+   (initially (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")))
   (test-parse
    "initially 
    x"
@@ -598,8 +598,8 @@ initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\""
   (initially
-    (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")
-    (start (number 18 units/kg/hour) #:of "heparin")))
+    (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+    (start (-number 18 units/kg/hour) #:of "heparin")))
   (test-parse
    "handler infusion is
   whenever new ptt
@@ -658,7 +658,7 @@ initially
       (whenever-new ptt
                     (whenever
                      [(and (< x x) (< x x)) x x]
-                     [y (after (number 1 hour) x)])))))
+                     [y (after (-number 1 hour) x)])))))
   (test-parse
 "#lang pop-pl/current
 require heparinPttChecking
@@ -688,28 +688,28 @@ handler infusion is
    (add-handler heparinInfusion)
    (add-handler ivInserted)
    (initially
-    (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")
-    (start (number 18 units/kg/hour) #:of "heparin"))
+    (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+    (start (-number 18 units/kg/hour) #:of "heparin"))
    (define infusion
      (make-handler
       (whenever-new
        ptt
        (whenever
         [(< aPtt 45)
-         (giveBolus (number 80 units/kg) #:of "heparin" #:by "iv")
-         (increase "heparin" #:by (number 3 units/kg/hour))]
+         (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 3 units/kg/hour))]
         [(and (< 45 aPtt)
               (< aPtt 59))
-         (giveBolus (number 40 units/kg) #:of "heparin" #:by "iv")
-         (increase "heparin" #:by (number 1 unit/kg/hour))]
+         (giveBolus (-number 40 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 1 unit/kg/hour))]
         [(and (< 101 aPtt)
               (< aPtt 123))
-         (decrease "heparin" #:by (number 1 unit/kg/hour))]
+         (decrease "heparin" #:by (-number 1 unit/kg/hour))]
         [(> aPtt 123)
          (hold "heparin")
-         (after (number 1 hour)
+         (after (-number 1 hour)
                 (restart "heparin")
-                (decrease "heparin" #:by (number 3 units/kg/hour)))])))))
+                (decrease "heparin" #:by (-number 3 units/kg/hour)))])))))
 
   (test-parse 
   "handler heparinPttChecking is
@@ -718,13 +718,13 @@ handler infusion is
   (define heparinPttChecking
     (make-handler 
      (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
-               (Q (number 6 hours) checkPtt))
+               (Q (-number 6 hours) checkPtt))
      (whenever (and (< 59 ptt) (< ptt 101)) #:times 2
-               (Q (number 24 hours) checkPtt)))))
+               (Q (-number 24 hours) checkPtt)))))
 (test-parse
  "Q 6 hours checkPtt"
  #:pattern Expr
- (Q (number 6 hours) checkPtt))
+ (Q (-number 6 hours) checkPtt))
 (test-parse "not 59 < ptt < 101"
             #:pattern Expr
             (not (and (< 59 ptt) (< ptt 101))))
@@ -733,7 +733,7 @@ handler infusion is
  #:pattern Line
  (line 1
        (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
-                 (Q (number 6 hours) checkPtt))))
+                 (Q (-number 6 hours) checkPtt))))
 (test-parse
  "handler x is
   whenever new q and qValue
@@ -758,9 +758,9 @@ handler infusion is
         checkPtt"
   (define heparinPttChecking
     (make-handler
-     (Q (number 24 hours) checkPtt)
+     (Q (-number 24 hours) checkPtt)
      (whenever-new (change (is drug "heparin"))
-                   (after (number 6 hours)
+                   (after (-number 6 hours)
                           checkPtt)))))
 (test-parse
  "handler heparinPttChecking is
@@ -770,7 +770,7 @@ handler infusion is
   (define heparinPttChecking
     (make-handler
      (whenever-new (change (is drug "heparin"))
-                   (after (number 6 hours)
+                   (after (-number 6 hours)
                           checkPtt)))))
 
 (test-parse
