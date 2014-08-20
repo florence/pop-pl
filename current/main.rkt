@@ -8,9 +8,9 @@ with '-' prevents access.
 (provide
  ;; from racket
  #%module-begin #%top #%app #%datum 
- define
+ define and
  ;; forward facing
- whenever whenever-new initially
+ whenever whenever-new initially after
  (rename-out
   [unit:+ +]
   [unit:- -]
@@ -36,6 +36,12 @@ with '-' prevents access.
 (define next-log null)
 (define time 0)
 
+;;; things that need to go first
+(begin-for-syntax
+  (define-syntax-class number+unit
+    #:literals (-number)
+    (pattern x:number)
+    (pattern (-number x:number y:id))))
 
 ;;; evaluator
 (define (eval msg)
@@ -118,15 +124,64 @@ with '-' prevents access.
                      [else
                       (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
                                     [apart (make-apart-filter (assoc '#:apart asc))]
-                                    [times? (make-times-filter (assoc '#:times asc))])
+                                    [times? (make-times-filter (assoc '#:times asc))]
+                                    [get-matching (make-get-matching #'t)])
                         #'(let* ([log (since-last current-log)]
-                                 [matching (get-matching-messages (lambda (m) t))]
+                                 [matching (get-matching log)]
                                  [acceptable (apart matching)])
                             (times? acceptable)))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
      #'(when q.query
          body ...)]))
+
+
+(define-for-syntax (make-since-last stx)
+  (syntax-parse stx
+    [(name args ...)
+     #'(lambda (log)
+         (for/list ([l log]
+                    #:final
+                    (match l
+                        [(message (? (lambda (l) (member l 'name))) 
+                                  (args ... _ ___)
+                                  _)
+                         #t]))
+           l))]))
+(define-for-syntax (make-apart-filter stx)
+  (syntax-parse stx
+    [n:number+unit
+     #'(lambda (log)
+         (define-values (res _)
+           (for/fold ([res null] [time 0]) ([l log])
+             (if (> (message-time l) time)
+                 (values (cons l res) (message-time l))
+                 (values res time))))
+         (reverse res))]))
+(struct failure ())
+(define-for-syntax (make-get-matching stx)
+  (syntax-parse stx
+    [e:expr 
+     (with-syntax* ([log (generate-temporary)]
+                    [pats 
+                     (for/list ([(k v) (in-dict messages)])
+                       (with-syntax ([msg (syntax-local-introduce k)])
+                         #'[k
+                            (match (first log)
+                               [(message (? (lambda (l) (member l 'k)) _)
+                                         (list* x _)
+                                         _)
+                                x]
+                               [_ (raise (failure))])]))])
+       #'(let pats
+             (lambda (log)
+               (with-handlers ([failure? #f])
+                 e))))]))
+
+(define-for-syntax (make-times-filter stx)
+  (syntax-parse stx
+   [n:number
+    #'(lambda (l) (= n (length l)))]))
 
 ;;; afters
 (define-syntax (after stx)
@@ -141,11 +196,7 @@ with '-' prevents access.
          (add-handler! n h))]))
 
 ;;; numbers
-(begin-for-syntax
-  (define-syntax-class number+unit
-    #:literals (-number)
-    (pattern x:number)
-    (pattern (-number x:number y:id))))
+
 (define-syntax (-number stx)
   (syntax-parse stx
     [(_ n:number unit:id)
