@@ -16,7 +16,10 @@
   (->stx (lambda (r) (f (filter syntax? (flatten r))))))
 (define (no-op r p) r)
 (define raw (->stx values))
-(define message-parse (match-lambda [(list _ _ id _ _ _ f _) `(define-message ,id ,f)]))
+(define message-parse
+  (match-lambda [(list _ _ id _ _ _ f _) `(define-message ,id ,f)]
+           [(list _ _ id args _ _ _ e _)
+            `(define-message ,id ,args ,e)]))
 (define message-maker
   (match-lambda
    [(list _ args _) args]))
@@ -260,15 +263,14 @@
                      (:seq (->stx message-parse)
                            (list MESSAGE WHITESPACE ID WHITESPACE IS WHITESPACE ID END))
                      (:seq (->stx message-parse)
-                           (list MESSAGE WHITESPACE ArgDef WHITESPACE IS WHITESPACE Expr END))))]
+                           (list MESSAGE WHITESPACE ID ArgDef WHITESPACE IS WHITESPACE Call END))))]
   [MessageForm (:seq  (->stx message-maker)
                       (list OPEN-BRACKET ArgList CLOSE-BRACKET))]
   
   ;; arguments
   [ArgDef (:seq (->stx second) 
                 (list OPEN-PAREN ArgList CLOSE-PAREN))]
-  [ArgList (:* (->stx (compose (curry filter syntax?)
-                               flatten))
+  [ArgList (:* (->stx/filter values)
                (:/ (list WHITESPACE
                          (:seq no-op (list KEYWORD WHITESPACE ID))
                          ID)))]
@@ -279,17 +281,30 @@
           STRING
           Call
           Infix))]
-  
+  [Expr/CallParens
+   (:/
+    (list
+     STRING
+     Call+Parens
+     Infix))]
   ;; function calls
+  [Call+Parens (:seq (->stx flatten)
+                     (list ID ArgsList+Parens))]
   [Call (:seq (->stx flatten)
               (list ID Args))]
-  [Args (:/ (list (:seq (lambda (r p) (match (flatten r) [(list _ a ... _) a])) (list OPEN-PAREN (:? no-op ArgsListCall) CLOSE-PAREN))
+  [Args (:/ (list ArgsList+Parens
                   ArgsListCall))]
+  [ArgsList+Parens (:seq
+                    (lambda (r p)
+                      (match (flatten r)
+                        [(list _ a ... _) a]))
+                    (list OPEN-PAREN (:? no-op ArgsListCall) CLOSE-PAREN))]
   [ArgsListCall
    (:+ (lambda (r p) (filter (negate string?) r)) 
        (:/ (list
-            (:seq (lambda (r p) (match r [(list _ k _ e) (list k e)])) (list WHITESPACE KEYWORD WHITESPACE Expr))
-            (:seq (->stx second) (list WHITESPACE Expr)))))]
+            (:seq (lambda (r p) (match r [(list _ k _ e) (list k e)]))
+                  (list ?WHITESPACE KEYWORD WHITESPACE Expr/CallParens))
+            (:seq (->stx second) (list ?WHITESPACE Expr/CallParens)))))]
   
   ;; infix 
 
@@ -317,11 +332,18 @@
   [Sum (:seq (->stx/filter
               (match-lambda
                [(list r) r]
+               [(list (? (lambda (l) (equal? (syntax-e l) '-))
+                         s)
+                      r)
+                (list s r)]
+               [(list* s r (? (negate null?) rest)) `(+ ,(list s r) ,@rest)]
                [(list* r rest) `(+ ,r ,@rest)]))
-             (list Product
-                   (:* no-op
-                       (:seq (->stx/filter (lambda (r) (if (null? (rest r)) (first r) r)))
-                             (list ?WHITESPACE PM ?WHITESPACE Product)))))]
+             (list 
+              (:? no-op MINUS)
+              Product
+              (:* no-op
+                  (:seq (->stx/filter (lambda (r) (if (null? (rest r)) (first r) r)))
+                        (list ?WHITESPACE PM ?WHITESPACE Product)))))]
   [PM (:/ (list PLUS MINUS))]
   [PLUS "+"]
   [MINUS (:seq (->stx (const '-)) (list "-"))]
@@ -437,11 +459,13 @@
           (~optional (~seq #:pattern p))
           e:expr ...)
        #`(let-values ([(val _) (parse t 
-                              #,@(if (attribute d) #'(#:debug d) #'())
-                              #,@(if (attribute p) #'(#:pattern (:seq (lambda (r p) (first r)) (list p :EOF))) #'()))]
+                                      #,@(if (attribute d) #'(#:debug d) #'())
+                                      #,@(if (not (attribute p))
+                                             #'()
+                                             #'(#:pattern (:seq (lambda (r p) (first r)) (list p :EOF)))))]
                       [(res) #,@(if (attribute p) 
-                              #'('e ...) ;; there should only be one here
-                              #'((module 'e ...)))]) 
+                                    #'('e ...) ;; there should only be one here
+                                    #'((module 'e ...)))]) 
            (define (convert v)
              (cond [(syntax? v)
                     (syntax->datum v)]
@@ -456,6 +480,17 @@
                                  t))))]))
   (test-parse "message test is [ a b: c ]"
               (define-message test (a #:b c)))
+  (test-parse "message decrease(drug by: c) is change(drug by: -change)"
+              (define-message decrease (drug #:by c) (change drug #:by (- change))))
+  (test-parse "change(drug by: -change)"
+              #:pattern Expr
+              (change drug #:by (- change)))
+  (test-parse "change(x)"
+              #:pattern Expr
+              (change x))
+  (test-parse "-change"
+              #:pattern Expr
+              (- change))
 
   (test-parse "handler x is\n  test"
               (define x (make-handler test)))
@@ -466,7 +501,12 @@
   (test-parse "1 hour"
               #:pattern Number
               (-number 1 hour))
-
+  (test-parse "-1"
+              #:pattern Expr
+              (- 1))
+  (test-parse "-1-1"
+              #:pattern Expr
+              (+ (- 1) (- 1)))
   (test-parse "initially\n  test"
               (initially test))
   
@@ -535,6 +575,9 @@ initially
               #:pattern Call
               (x 1 2 #:y 3 z))
   (test-parse "x 1 2 y: 3 z"
+              #:pattern Expr
+              (x 1 2 #:y 3 z))
+  (test-parse "x(1 2 y: 3 z)"
               #:pattern Expr
               (x 1 2 #:y 3 z))
   (test-parse "1+2*4"
