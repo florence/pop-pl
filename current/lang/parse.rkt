@@ -292,8 +292,7 @@
                      (list ID ArgsList+Parens))]
   [Call (:seq (->stx flatten)
               (list ID Args))]
-  [Args (:/ (list ArgsList+Parens
-                  ArgsListCall))]
+  [Args (:/ (list ArgsList+Parens ArgsListCall))]
   [ArgsList+Parens (:seq
                     (lambda (r p)
                       (match (flatten r)
