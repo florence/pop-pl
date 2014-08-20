@@ -5,7 +5,7 @@
  #%module-begin #%top #%app #%datum 
  define
  ;; forward facing
- whenever initially
+ whenever whenever-new initially
  (rename-out
   [unit:+ +]
   [unit:- -]
@@ -22,7 +22,7 @@
  -number)
 
 (require racket/stxparam)
-(require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax))
+(require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax racket/list))
 (module+ test (require rackunit))
 ;;; global state
 (define current-handlers (hash))
@@ -108,8 +108,8 @@
              #:with query
              (let ([asc 
                     (map (match-lambda [(list kw ex) (list (syntax-e kw) ex)])
-                         (map syntax->list (syntax->list #'((k e) ...))))])'
-               (cond [(empty? asc) #'t]
+                         (map syntax->list (syntax->list #'((k e) ...))))])
+               (cond [(null? asc) #'t]
                      [else
                       (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
                                     [apart (make-apart-filter (assoc '#:apart asc))]
@@ -144,7 +144,7 @@
 (define-syntax (-number stx)
   (syntax-parse stx
     [(_ n:number unit:id)
-     #'(number n 'unit)]))
+     #'(in:number n 'unit)]))
 (struct in:number (value unit) #:transparent)
 
 (define ((convert/+- f) . args)
@@ -197,14 +197,35 @@
 
 ;;; messages
 (begin-for-syntax
-  (define messages (make-free-id-table)))
+  (define messages (make-free-id-table))
+  (define message-args (make-free-id-table)))
 (struct message (tags values time))
 (define-syntax (define-message stx)
+  (define-splicing-syntax-class args
+    (pattern (~seq a:arg ...)
+             #:with names #'(a.name ...)
+             #:with flattened (flatten
+                               (map syntax->list
+                                    (syntax->list #'(a ...))))))
   (define-splicing-syntax-class arg
     (pattern x:id #:with name #'x)
     (pattern (~seq k:keyword x:id) #:with name #'x))
   (syntax-parse stx
-    [(define-message name:id arg:arg ...)
-     (dict-set! messages (syntax-local-introduce #'name) (syntax->list (syntax-local-introduce #'(arg.name ...))))
-     #'(define (name arg ...)
-         (send-message! (message '(name) (vector arg.name ...) (current-time))))]))
+    [(define-message name:id (args:args))
+     (define key (syntax-local-introduce #'name))
+     (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
+     (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
+     #`(define (name #,@#'args.flattened #:-keys [keys null])
+         (send-message! (message `(name ,@keys) (vector #,@#'args.names) (current-time))))]
+    [(define-message name:id other:id)
+     (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
+     (define args (dict-ref message-args (syntax-local-introduce #'other)))
+     (dict-set! messages (syntax-local-introduce #'name) arg-names)
+     (dict-set! message-args (syntax-local-introduce #'name) args)
+     #`(define (name #,@args #:-keys [keys null])
+         (other #,@args #:-keys `(name ,@keys)))]
+    [(define-message name:id (args:args) (super:id call ...))
+     (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
+     (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
+     #`(define (name #,@#'args.flattened #:-keys [keys null])
+         (super call ... #:-keys `(name @,keys)))]))

@@ -41,7 +41,10 @@ handler heparinPttCheckingV2 is
   Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times
 
 
-//message ptt is [ aPtt ]
-//message change is [ drug by: value ]
-//message increase is change
-//message decrease(drug by: change) is change(drug by: -change)
+message ptt is [ aPtt ]
+message change is [ drug by: value ]
+message increase is change
+message decrease(drug by: change) is change(drug by: -change)
+message start is [ amount of: drug ]
+message give is [ amount of: drug by: method ]
+message giveBolus is give
