@@ -342,8 +342,11 @@
                  NUMBER-RAW))]
   [Number+Unit (:seq (->stx (lambda (s) `(number ,(first s) ,(third s)))) (list NUMBER-RAW WHITESPACE Unit))]
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
+  [NUMBER-RAW-TOK (:rx no-op #rx"[0-9]+(\\.[0-9]*)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
               (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" UNIT-RAW))))))]
+  [UnitTok (:seq no-op 
+                 (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" (:? no-op UNIT-RAW)))))))]
   [UNIT-RAW (:/ (sort
                  (list "units"
                        "unit"
@@ -419,7 +422,7 @@
   (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
          OP FUNCTION NEW COMMA NOT TIME SINCELAST APART) 
   (white-space NEWLINE WHITESPACE) 
-  (constant STRING INCOMPLETE-STRING Number Unit) 
+  (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok) 
   (keyword KEYWORD)
   (symbol ID)
   (parenthesis OPEN-PAREN CLOSE-PAREN))
@@ -562,6 +565,10 @@ initially
               #:pattern Expr 
               (and (and (< 1 2) (< 2 3))
                    (>= 4 4)))
+  (test-parse "1<2<3and0.4>=4.0"
+              #:pattern Expr 
+              (and (and (< 1 2) (< 2 3))
+                   (>= 0.4 4.0)))
   
   ;;; the big ones
   (test-parse 
