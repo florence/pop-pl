@@ -236,7 +236,9 @@
   [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (first r)))
                                      (list NUMBER-RAW WHITESPACE TIME))
                                (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
-                                     (list Number WHITESPACE APART))))]
+                                     (list Number WHITESPACE APART))
+                               (:seq (lambda (r p) (list ((->stx values) '#:since-last p) (last r)))
+                                     (list SINCELAST WHITESPACE Call))))]
   
   [WheneverPart (:/ 
                  (list 
