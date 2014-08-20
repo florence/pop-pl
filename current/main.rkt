@@ -1,5 +1,10 @@
 #lang racket
-
+#|
+if youre wondering why some names start with '-', its because they need to be visible in a 
+pop-pl program (ie the program litteral expands, or could expand to them), 
+but we don't want users to actually access them. No pop-pl id can contain a symbol, so prefixing
+with '-' prevents access.
+|#
 (provide
  ;; from racket
  #%module-begin #%top #%app #%datum 
@@ -162,7 +167,8 @@
   ;; we're not gonna support units for now
   (for ([a args])
     (unless (number? a)
-      (error (object-name f) "does not support units yet"))))
+      (error (object-name f) "does not support units yet")))
+  (apply f args))
 (define ((convert/<>= f) . args)
   ;; for now just makes sure all units are the same. will build conversion tables later
   (define unit #f)
