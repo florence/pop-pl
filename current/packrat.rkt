@@ -218,7 +218,7 @@
              (let ([offset (position-start p)])
                (if (not r)
                    (loop (rest tt))
-                   (values "" (pat-color pat) #f offset (r:+ offset (position-span p)))))]))))
+                   (values r (pat-color pat) #f offset (r:+ offset (position-span p)))))]))))
 
 
 (module+ test

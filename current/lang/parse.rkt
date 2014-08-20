@@ -16,11 +16,10 @@
   (->stx (lambda (r) (f (filter syntax? (flatten r))))))
 (define (no-op r p) r)
 (define raw (->stx values))
-(define message-parse (match-lambda [(list _ _ id _ _ _ f _) `(define ,id ,f)]))
+(define message-parse (match-lambda [(list _ _ id _ _ _ f _) `(define-message ,id ,f)]))
 (define message-maker
   (match-lambda
-   [(list _ args _)
-    `(make-message ,@args)]))
+   [(list _ args _) args]))
 (define parse-init
   (match-lambda
    [(list _ _ lines)
@@ -182,7 +181,7 @@
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
               (compose
-               (lambda (b) (list* 'module 'TODO 'pop-pl (filter syntax? b)))
+               (lambda (b) `(module TODO pop-pl/current ,@(filter syntax? b)))
                second))
              (list 
               (:? no-op LANG)
@@ -235,9 +234,10 @@
   [WheneverExtras (:seq (lambda (r p) (fourth r))
                         (list ?WHITESPACE COMMA ?WHITESPACE WheneverExtrasStx))]
   [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (first r)))
-                                     (list NUMBER-RAW WHITESPACE "times"))
+                                     (list NUMBER-RAW WHITESPACE TIME))
                                (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
-                                     (list Number WHITESPACE "apart"))))]
+                                     (list Number WHITESPACE APART))))]
+  
   [WheneverPart (:/ 
                  (list 
                   (:seq (->stx parse-whenever-part) (list Expr ?WHITESPACE PIPE Line-Like))
@@ -366,7 +366,8 @@
   ;; keywords
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
-                      UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN))]
+                      UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN
+                      TIME SINCELAST APART))]
   [AND "and"]
   [OR "or"]
   [REQUIRE "require"]
@@ -382,6 +383,9 @@
   [AFTER "after"]
   [FUNCTION "function"]
   [NOT "not"]
+  [TIME "times"]
+  [APART "apart"]
+  [SINCELAST "since last"]
 
   ;; basics
   [END (:/ (list (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
@@ -411,7 +415,7 @@
   #:tokens 
   (comment LANG COMMENT) 
   (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-         OP FUNCTION NEW COMMA NOT) 
+         OP FUNCTION NEW COMMA NOT TIME SINCELAST APART) 
   (white-space NEWLINE WHITESPACE) 
   (constant STRING INCOMPLETE-STRING Number Unit) 
   (keyword KEYWORD)
@@ -420,7 +424,7 @@
 
 (module+ test
   (define (module . e)
-    `(module TODO pop-pl ,@e))
+    `(module TODO pop-pl/current ,@e))
   (define-syntax (test-parse stx)
     (syntax-parse stx
       [(_ t:str
@@ -446,7 +450,7 @@
                                  res 
                                  t))))]))
   (test-parse "message test is [ a b: c ]"
-              (define test (make-message a #:b c)))
+              (define-message test (a #:b c)))
 
   (test-parse "handler x is\n  test"
               (define x (make-handler test)))
@@ -769,4 +773,4 @@ handler infusion is
     (read-line in)
     (define-values (s _) (parse in))
     (check-equal? (syntax->datum s)
-                  (module '(define test (make-message a #:b c))))))
+                  (module '(define-message test (a #:b c))))))

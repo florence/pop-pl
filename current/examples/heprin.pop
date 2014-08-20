@@ -27,7 +27,6 @@ handler infusion is
 // version 1
 handler heparinPttChecking is
   Q 24 hours checkPtt
-  // this is iffy may need nested whenevers (ew)
   whenever new change and drug is "heparin"
       after 6 hours
         checkPtt
