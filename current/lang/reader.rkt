@@ -10,7 +10,4 @@
 (define (read-syntax src in)
   (read-line in)
   (define-values (r p) (parse in))
-  (file-position in 0)
-  (read-line in)
-  (displayln (port->string in))
   (if r r (raise-parse-error p "unknown parse error")))

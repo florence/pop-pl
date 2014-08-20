@@ -181,7 +181,7 @@
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
               (compose
-               (lambda (b) `(module TODO pop-pl/current ,@(filter syntax? b)))
+               (lambda (b) `(module TODO pop-pl/current/main ,@(filter syntax? b)))
                second))
              (list 
               (:? no-op LANG)
@@ -429,7 +429,7 @@
 
 (module+ test
   (define (module . e)
-    `(module TODO pop-pl/current ,@e))
+    `(module TODO pop-pl/current/main ,@e))
   (define-syntax (test-parse stx)
     (syntax-parse stx
       [(_ t:str

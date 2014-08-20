@@ -1,8 +1,8 @@
 #lang pop-pl/current
 
-require heparinPttChecking
-require heparinInfusion
-require ivInserted
+require heparinPttCheckingV2
+require infusion
+//require ivInserted
 
 initially 
    giveBolus 80 units/kg of: "heparin" by: "iv"
@@ -25,7 +25,7 @@ handler infusion is
                      |     decrease "heparin" by: 3 units/kg/hour
 
 // version 1
-handler heparinPttChecking is
+handler heparinPttCheckingV1 is
   Q 24 hours checkPtt
   whenever new change and drug is "heparin"
       after 6 hours
@@ -36,7 +36,7 @@ handler heparinPttChecking is
 
 
 //version 2
-handler heparinPttChecking is
+handler heparinPttCheckingV2 is
   Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
   Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times
 
