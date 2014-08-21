@@ -1,6 +1,5 @@
 #lang pop-pl/current
 
-
 // fentanyl section
 initially
   start 25 micrograms/hour of: "fentanyl"
@@ -20,7 +19,11 @@ handler minimalPain is
       decrease "fentanyl, on demand" by: 10 micrograms
 
 
-
-//message painscore is [ score ]
-//message checkPainScore is []
-//message notifyDoctor is []
+message change is [ drug by: amount]
+message increase is change
+message decrease(drug by: amount) is change drug by: -amount 
+message start is [ amount of: drug]
+message set is [ thing to: amount ]
+message painscore is [ score ]
+message checkPainScore is []
+message notifyDoctor is []

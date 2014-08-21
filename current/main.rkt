@@ -8,9 +8,9 @@ with '-' prevents access.
 (provide
  ;; from racket
  #%module-begin #%top #%app #%datum 
- define and
+ define and not
  ;; forward facing
- whenever whenever-new initially after
+ whenever whenever-new initially after Q
  (rename-out
   [unit:+ +]
   [unit:- -]
@@ -27,7 +27,9 @@ with '-' prevents access.
  -number)
 
 (require racket/stxparam)
-(require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax racket/list))
+(require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax racket/list
+                     unstable/sequence))
+(require (for-meta 2 racket/base syntax/parse))
 (module+ test (require rackunit))
 ;;; global state
 (define current-handlers (hash))
@@ -136,28 +138,36 @@ with '-' prevents access.
          body ...)]))
 
 
-(define-for-syntax (make-since-last stx)
-  (syntax-parse stx
-    [(name args ...)
-     #'(lambda (log)
-         (for/list ([l log]
-                    #:final
-                    (match l
-                        [(message (? (lambda (l) (member l 'name))) 
-                                  (args ... _ ___)
-                                  _)
-                         #t]))
-           l))]))
-(define-for-syntax (make-apart-filter stx)
-  (syntax-parse stx
-    [n:number+unit
-     #'(lambda (log)
-         (define-values (res _)
-           (for/fold ([res null] [time 0]) ([l log])
-             (if (> (message-time l) time)
-                 (values (cons l res) (message-time l))
-                 (values res time))))
-         (reverse res))]))
+(define-for-syntax ((maybe-filter l) maybe-stx)
+  (if (not maybe-stx)
+      #'values
+      (l (second maybe-stx))))
+(define-for-syntax make-since-last
+  (maybe-filter
+   (lambda (stx)
+     (syntax-parse stx
+       [(name args ...)
+        #'(lambda (log)
+            (for/list ([l log]
+                       #:final
+                       (match l
+                         [(message (? (lambda (l) (member l 'name))) 
+                                   (list args ... _ ___)
+                                   _)
+                          #t]))
+              l))]))))
+(define-for-syntax make-apart-filter
+  (maybe-filter
+   (lambda (stx)
+     (syntax-parse stx
+       [n:number+unit
+        #'(lambda (log)
+            (define-values (res _)
+              (for/fold ([res null] [time 0]) ([l log])
+                (if (> (message-time l) time)
+                    (values (cons l res) (message-time l))
+                    (values res time))))
+            (reverse res))]))))
 (struct failure ())
 (define-for-syntax (make-get-matching stx)
   (syntax-parse stx
@@ -166,24 +176,26 @@ with '-' prevents access.
                     [pats 
                      (for/list ([(k v) (in-dict messages)])
                        (with-syntax ([msg (syntax-local-introduce k)])
-                         #'[k
+                         #'[msg
                             (match (first log)
-                               [(message (? (lambda (l) (member l 'k)) _)
+                               [(message (? (lambda (l) (member l 'msg)) _)
                                          (list* x _)
                                          _)
                                 x]
                                [_ (raise (failure))])]))])
-       #'(let pats
-             (lambda (log)
+       #'(lambda (log)
+           (let pats
                (with-handlers ([failure? #f])
                  e))))]))
 
-(define-for-syntax (make-times-filter stx)
-  (syntax-parse stx
-   [n:number
-    #'(lambda (l) (= n (length l)))]))
+(define-for-syntax make-times-filter
+  (maybe-filter
+   (lambda (stx)
+     (syntax-parse stx
+       [n:number
+        #'(lambda (l) (= n (length l)))]))))
 
-;;; afters
+;;; things that use time
 (define-syntax (after stx)
   (syntax-parse stx
     [(after t body ...)
@@ -192,9 +204,50 @@ with '-' prevents access.
               [h (make-handler
                   (when (after? t start)
                     body ...
-                    (remove-handler! n)))])
-         (add-handler! n h))]))
+                    (remove-handler! 'n)))])
+         (add-handler! 'n h))]))
 
+;; time time -> boolean
+(define (after? diff start)
+  (> (+ (time->stamp diff) (time->stamp start)) 
+     (time->stamp (current-time))))
+
+(define (time->stamp t)
+  (match t
+    [(in:number n (or 'seconds 'second)) n]
+    [(in:number n (or 'minutes 'minute)) (* n 60)]
+    [(in:number n (or 'hours 'hour))
+     (* n
+        60 
+        (time->stamp (in:number 1 'minutes)))]
+    [(in:number n (or 'days 'day))
+     (* n
+        24
+        (time->stamp (in:number 1 'hour)))]
+    [(? number? n) n]
+    [_ (error 'time "expected time, given ~s" t)]))
+(module+ test
+  (check-equal? (time->stamp (in:number 3 'days))
+                ;; google says...
+                259200)
+  (check-equal? (time->stamp (in:number 2 'hours))
+                7200))
+
+(define-syntax (Q stx)
+  (syntax-parse stx
+    [(Q n:number+unit name:id exprs ...)
+     (with-syntax ([(args ...)
+                    (for/list ([e (in-syntax #'(exprs ...))]
+                               #:unless (keyword? (syntax-e e)))
+                      e)])
+       #'(when
+             (after? n
+                     (match current-log
+                       [(message (? (lambda (l) (member l 'name)) _)
+                                 (list args ... _ ___)
+                                 t)
+                        t]))
+           (name exprs ...)))]))
 ;;; numbers
 
 (define-syntax (-number stx)

@@ -2,10 +2,10 @@
 (provide get-info read-syntax)
 (require "parse.rkt")
 
-(define (get-info . ?)
+(define (get-info . default)
   (match-lambda**
    [('color-lexer _) lex]
-   [(_ _) #f]))
+   [(_ d) d]))
 
 (define (read-syntax src in)
   (read-line in)
