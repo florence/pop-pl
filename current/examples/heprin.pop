@@ -40,6 +40,7 @@ handler heparinPttCheckingV2 is
   Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
   Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times
 
+/// ignore this
 
 message ptt is [ aPtt ]
 message change is [ drug by: value ]
@@ -49,3 +50,5 @@ message start is [ amount of: drug ]
 message give is [ amount of: drug by: method ]
 message giveBolus is give
 message hold is [ drug ]
+message restart is [ drug ]
+message checkPtt is []

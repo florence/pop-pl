@@ -13,7 +13,7 @@ handler breakthroughPain is
       after 1 hour
          checkPainScore
 
-  notifyDoctor whenever painscore > 8, 3 times, since last "notify doctor"
+  notifyDoctor whenever painscore > 8, 3 times, since last notifyDoctor
 
 handler minimalPain is
    whenever painscore < 3, 3 times, 1 hour apart, since last decrease "fentanyl, on demand"
