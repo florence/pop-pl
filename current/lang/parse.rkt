@@ -219,7 +219,7 @@
                 (list NEWLINE Line-Body END))))]
   [EmptyLine (:seq (lambda (r p) "")
                    (list NEWLINE END))]
-  [Line-Body (:/ (list Whenever Means After Expr))]
+  [Line-Body (:/ (list Whenever Means After Expr/CallId))]
   [After (:seq (->stx (match-lambda [(list "after" _ n) `(after ,n)])) 
                (list AFTER WHITESPACE Number))]
   [Whenever (:/
@@ -232,7 +232,7 @@
                          (list WHENEVER WHITESPACE NEW WHITESPACE ID
                                (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
-                   (:seq (->stx parse-whenever) (list Expr WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
+                   (:seq (->stx parse-whenever) (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverExtras (:seq (lambda (r p) (fourth r))
                         (list ?WHITESPACE COMMA ?WHITESPACE WheneverExtrasStx))]
@@ -241,7 +241,7 @@
                                (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
                                      (list Number WHITESPACE APART))
                                (:seq (lambda (r p) (list ((->stx values) '#:since-last p) (last r)))
-                                     (list SINCELAST WHITESPACE Call))))]
+                                     (list SINCELAST WHITESPACE CallId))))]
   
   [WheneverPart (:/ 
                  (list 
@@ -287,9 +287,22 @@
      STRING
      Call+Parens
      Infix))]
+  [Expr/CallId
+   (:/
+    (list
+     STRING
+     CallId
+     Infix))]
   ;; function calls
   [Call+Parens (:seq (->stx flatten)
                      (list ID ArgsList+Parens))]
+  
+  [CallId (:seq (->stx 
+                 (lambda (r) 
+                   (match (flatten r)
+                     [(list id #t) (list id)]
+                     [v v])))
+                (list ID (:? no-op Args)))]
   [Call (:seq (->stx flatten)
               (list ID Args))]
   [Args (:/ (list ArgsList+Parens ArgsListCall))]
@@ -492,11 +505,11 @@
               (- change))
 
   (test-parse "handler x is\n  test"
-              (define x (make-handler test)))
+              (define x (make-handler (test))))
   
   (test-parse "initially\n whenever x, 3 times, 1 hour apart\n  x"
               (initially
-               (whenever x #:times 3 #:apart (-number 1 hour) x)))
+               (whenever x #:times 3 #:apart (-number 1 hour) (x))))
   (test-parse "1 hour"
               #:pattern Number
               (-number 1 hour))
@@ -506,26 +519,33 @@
   (test-parse "-1-1"
               #:pattern Expr
               (+ (- 1) (- 1)))
+  (test-parse "initially\n notifyDoctor whenever painscore > 8, 3 times, since last notifyDoctor"
+              (initially 
+               (whenever (> painscore 8) #:times 3 #:since-last (notifyDoctor)
+                         (notifyDoctor))))
   (test-parse "initially\n  test"
-              (initially test))
+              (initially (test)))
   
   (test-parse "require x"
               (add-handler x))
   (test-parse "initially\n  whenever\n   x | x\n   | n"
-              (initially (whenever (x x n))))
+              (initially (whenever (x (x) (n)))))
   (test-parse "initially\n  whenever x\n    x\n    n"
-              (initially (whenever x x n)))
+              (initially (whenever x (x) (n))))
   (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
-              (define b (make-handler (whenever x 12) x))
-              (initially x))
+              (define b (make-handler (whenever x 12) (x)))
+              (initially (x)))
   (test-parse "require m"
               (add-handler m))
   (test-parse "initially\n whenever\n x | whenever x\n |  y"
               (initially
                (whenever
-                [x (whenever x y)])))
+                [x (whenever x (y))])))
   (test-parse "initially\n after 1 hour\n  x\n  y"
-              (initially (after (-number 1 hour) x y)))
+              (initially (after (-number 1 hour) (x) (y))))
+  (test-parse "x y z"
+              #:pattern CallId
+              (x y z))
   (test-parse 
    "handler b is
   QQ
@@ -544,24 +564,24 @@
 initially
   whenever 12
     m"
- (define b (make-handler
-              QQ
+   (define b (make-handler
+              (QQ)
               (whenever t1
-                        e1
-                        e2 
-                        (whenever-new x e3 e4)
-                        (whenever (g m x) (g2 v v2))
-                        e5)))
-   (initially (whenever 12 m)))
+                        (e1)
+                        (e2) 
+                        (whenever-new x (e3) (e4))
+                        (whenever [g (m) (x)] [g2 (v) (v2)])
+                        (e5))))
+   (initially (whenever 12 (m))))
   (test-parse "\n  QQ"
               #:pattern Line
-              (line 2 QQ))
+              (line 2 (QQ)))
   (test-parse "\n whenever t1"
               #:pattern Line
               (line 1 (whenever t1)))
   (test-parse "\n    e1"
               #:pattern Line
-              (line 4 e1))
+              (line 4 (e1)))
   (test-parse "\n  whenever new x"
               #:pattern Line
               (line 2 (whenever-new x)))
@@ -628,13 +648,13 @@ initially
   (test-parse
    "initially 
    x"
-   (initially x))
+   (initially (x)))
   (test-parse "\n  x"
               #:pattern Line
-              (line 2 x))
+              (line 2 (x)))
   (test-parse "x"
               #:pattern Line-Body
-              x)
+              (x))
   (test-parse
 "initially 
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
@@ -647,25 +667,25 @@ initially
   whenever new ptt
     whenever x
      x"
-   (define infusion (make-handler (whenever-new ptt (whenever x x)))))
+   (define infusion (make-handler (whenever-new ptt (whenever x (x))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x | x"
-   (define infusion (make-handler (whenever-new ptt (whenever (x x))))))
+   (define infusion (make-handler (whenever-new ptt (whenever (x (x)))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x < x| x"
-   (define infusion (make-handler (whenever-new ptt (whenever ((< x x) x))))))
+   (define infusion (make-handler (whenever-new ptt (whenever ((< x x) (x)))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x < x<x| x"
-   (define infusion (make-handler (whenever-new ptt (whenever ((and (< x x) (< x x)) x))))))
+   (define infusion (make-handler (whenever-new ptt (whenever ((and (< x x) (< x x)) (x)))))))
   (test-parse "x < x"
               #:pattern Expr
               (< x x))
@@ -683,8 +703,8 @@ initially
      (make-handler
       (whenever-new ptt
                     (whenever
-                     [(and (< x x) (< x x)) x x]
-                     [y z q])))))
+                     [(and (< x x) (< x x)) (x) (x)]
+                     [y (z) (q)])))))
 (test-parse
    "handler infusion is
   whenever new ptt
@@ -699,8 +719,8 @@ initially
      (make-handler
       (whenever-new ptt
                     (whenever
-                     [(and (< x x) (< x x)) x x]
-                     [y (after (-number 1 hour) x)])))))
+                     [(and (< x x) (< x x)) (x) (x)]
+                     [y (after (-number 1 hour) (x))])))))
   (test-parse
 "#lang pop-pl/current
 require heparinPttChecking
@@ -780,7 +800,7 @@ handler infusion is
  "handler x is
   whenever new q and qValue
     e"
- (define x (make-handler (whenever-new (q qValue) e))))
+ (define x (make-handler (whenever-new (q qValue) (e)))))
 
 
 (test-parse
@@ -789,7 +809,7 @@ handler infusion is
     z"
  (define x (make-handler
             (whenever-new (m (is left right))
-                          z))))
+                          (z)))))
 
 (test-parse
  "handler heparinPttChecking is
@@ -803,7 +823,7 @@ handler infusion is
      (Q (-number 24 hours) checkPtt)
      (whenever-new (change (is drug "heparin"))
                    (after (-number 6 hours)
-                          checkPtt)))))
+                          (checkPtt))))))
 (test-parse
  "handler heparinPttChecking is
   whenever new change and drug is \"heparin\"
@@ -813,7 +833,7 @@ handler infusion is
     (make-handler
      (whenever-new (change (is drug "heparin"))
                    (after (-number 6 hours)
-                          checkPtt)))))
+                          (checkPtt))))))
 
 (test-parse
  "drug is \"heparin\""
