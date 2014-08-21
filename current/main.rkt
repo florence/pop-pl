@@ -46,6 +46,12 @@ with '-' prevents access.
     (pattern (-number x:number y:id))))
 
 ;;; evaluator
+(define-syntax (in:module-begin stx)
+  (syntax-parse stx
+    [(_ body ...)
+     #'(#%module-begin
+        (provide eval (struct-out message))
+        body ...)]))
 (define (eval msg)
   (for ([(_ h!) (in-hash current-handlers)])
     (h! msg cur-log))
