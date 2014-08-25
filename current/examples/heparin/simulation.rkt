@@ -1,5 +1,5 @@
 #lang racket
-(require "heparin.pop")
+(require "heprin.pop")
 
 (define (run-simulation-for time)
   (define-values (res _)
@@ -47,6 +47,9 @@
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)
-  (+ current 
-     (* continous seconds (/ 60) (/ 60))
-     (let ([number-of-halflives (/ seconds halflife)]))))
+  (+
+   ;; the amount remaining after seconds
+   (let ([number-of-halflives (/ seconds halflife)])
+       (* current (expt .05 number-of-halflives)))
+   ;; the amount injectected after x seconds
+   (* continous seconds (/ 60) (/ 60))))

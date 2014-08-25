@@ -10,7 +10,7 @@ with '-' prevents access.
  #%module-begin #%top #%app #%datum 
  define and not
  ;; forward facing
- whenever whenever-new initially after Q
+ whenever whenever-new initially after q
  (rename-out
   [unit:+ +]
   [unit:- -]
@@ -239,7 +239,7 @@ with '-' prevents access.
   (check-equal? (time->stamp (in:number 2 'hours))
                 7200))
 
-(define-syntax (Q stx)
+(define-syntax (q stx)
   (syntax-parse stx
     [(Q n:number+unit name:id exprs ...)
      (with-syntax ([(args ...)
