@@ -29,14 +29,14 @@
           [(message (list-no-order 'give _ ...) (list (in:number amt _) "heparin" _) _)
            (eval-log*  (+ amt heparin-in-system) heparin-continous)]
           [(message (list-no-order 'change _ ...) (list "heparin" (in:number amt _)) _)
-           (eval-message* heparin-in-system (+ amt heparin-continous))]
+           (eval-log* heparin-in-system (+ amt heparin-continous))]
           [(message '(start) (list (in:number amt _) "heparin") _)
-           (eval-message* heparin-in-system amt)]
+           (eval-log* heparin-in-system amt)]
           [(message '(hold) (list "heparin") _)
            (set! restart-amount heparin-continous)
-           (eval-message*  heparin-in-system 0)]
+           (eval-log*  heparin-in-system 0)]
           [(message '(restart) (list "heparin") _)
-           (eval-message* heparin-in-system restart-amount)]
+           (eval-log* heparin-in-system restart-amount)]
           [(message '(checkPtt) _ _)
            (eval-log (append (rest new-log) (new-ptt (calculate-ptt heparin-in-system)))
                      (cons msg outgoing)
@@ -45,6 +45,8 @@
 
 (define (new-ptt value)
   (eval (message '(ptt) (list value))))
+
+(define (calculate-ptt h) h)
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)
