@@ -7,8 +7,9 @@ with '-' prevents access.
 |#
 (provide
  ;; from racket
- #%module-begin #%top #%app #%datum 
+ #%top #%app #%datum 
  define and not
+ (rename-out [in:module-begin #%module-begin])
  ;; forward facing
  whenever whenever-new initially after q
  (rename-out
@@ -26,7 +27,7 @@ with '-' prevents access.
  make-handler define-message add-handler
  -number)
 
-(require racket/stxparam)
+(require racket/stxparam "private/shared.rkt")
 (require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax racket/list
                      unstable/sequence))
 (require (for-meta 2 racket/base syntax/parse))
@@ -50,7 +51,8 @@ with '-' prevents access.
   (syntax-parse stx
     [(_ body ...)
      #'(#%module-begin
-        (provide eval (struct-out message in:number))
+        (define -eval eval)
+        (provide (rename-out [-eval eval]))
         body ...)]))
 (define (eval msg)
   (for ([(_ h!) (in-hash current-handlers)])
@@ -260,7 +262,6 @@ with '-' prevents access.
   (syntax-parse stx
     [(_ n:number unit:id)
      #'(in:number n 'unit)]))
-(struct in:number (value unit) #:transparent)
 
 (define ((convert/+- f) . args)
   (define unit #f)
@@ -315,7 +316,6 @@ with '-' prevents access.
 (begin-for-syntax
   (define messages (make-free-id-table))
   (define message-args (make-free-id-table)))
-(struct message (tags values time))
 (define-syntax (define-message stx)
   (define-splicing-syntax-class args
     (pattern (~seq a:arg ...)

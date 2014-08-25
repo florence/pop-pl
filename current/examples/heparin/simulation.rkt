@@ -1,5 +1,5 @@
 #lang racket
-(require "heprin.pop")
+(require "heprin.pop" pop-pl/current/private/shared)
 
 (define (run-simulation-for time)
   (define-values (res _)
@@ -9,7 +9,8 @@
         (eval-log log outgoing heparin-in-system heparin-continous))
       (values outgoing
               (heparin-values-after heparin-in-system heparin-continous 1)
-              heparin-continous))))
+              heparin-continous)))
+  res)
 
 (define (inc-time)
   (eval (message '(time) '(1) #f)))
