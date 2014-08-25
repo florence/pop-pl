@@ -1,6 +1,9 @@
 #lang racket
 (require "heprin.pop" pop-pl/current/private/shared)
 
+(define (get-mesages time)
+  )
+
 (define (run-simulation-for time)
   (define-values (res _)
     (for/fold ([outgoing null] [heparin-in-system 0] [heparin-continous 0]) ([_ (in-range time)])
@@ -46,7 +49,9 @@
 (define (new-ptt value)
   (eval (message '(ptt) (list value))))
 
-(define (calculate-ptt h) h)
+(define (calculate-ptt h)
+  ;;TODO wut
+  h)
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)
