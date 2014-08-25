@@ -503,10 +503,11 @@
   (test-parse "-change"
               #:pattern Expr
               (- change))
-
+  
   (test-parse "handler x is\n  test"
               (define x (make-handler (test))))
-  
+  (test-parse "hanDlEr X iS\n  tEst"
+              (define x (make-handler (test))))
   (test-parse "initially\n whenever x, 3 times, 1 hour apart\n  x"
               (initially
                (whenever x #:times 3 #:apart (-number 1 hour) (x))))
@@ -521,8 +522,8 @@
               (+ (- 1) (- 1)))
   (test-parse "initially\n notifyDoctor whenever painscore > 8, 3 times, since last notifyDoctor"
               (initially 
-               (whenever (> painscore 8) #:times 3 #:since-last (notifyDoctor)
-                         (notifyDoctor))))
+               (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
+                         (notifydoctor))))
   (test-parse "initially\n  test"
               (initially (test)))
   
@@ -565,7 +566,7 @@ initially
   whenever 12
     m"
    (define b (make-handler
-              (QQ)
+              (qq)
               (whenever t1
                         (e1)
                         (e2) 
@@ -575,7 +576,7 @@ initially
    (initially (whenever 12 (m))))
   (test-parse "\n  QQ"
               #:pattern Line
-              (line 2 (QQ)))
+              (line 2 (qq)))
   (test-parse "\n whenever t1"
               #:pattern Line
               (line 1 (whenever t1)))
@@ -636,7 +637,7 @@ initially
   (test-parse 
    "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
    #:pattern Expr
-   (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv"))
+   (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv"))
   (test-parse
    "start 18 units/kg/hour of: \"heparin\""
    #:pattern Expr
@@ -644,7 +645,7 @@ initially
   (test-parse
    "initially 
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
-   (initially (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")))
+   (initially (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")))
   (test-parse
    "initially 
    x"
@@ -660,7 +661,7 @@ initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\""
   (initially
-    (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
     (start (-number 18 units/kg/hour) #:of "heparin")))
   (test-parse
    "handler infusion is
@@ -746,28 +747,28 @@ handler infusion is
                      | after 1 hour
                      |     restart \"heparin\"
                      |     decrease \"heparin\" by: 3 units/kg/hour"
-   (add-handler heparinPttChecking)
-   (add-handler heparinInfusion)
-   (add-handler ivInserted)
+   (add-handler heparinpttchecking)
+   (add-handler heparininfusion)
+   (add-handler ivinserted)
    (initially
-    (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
     (start (-number 18 units/kg/hour) #:of "heparin"))
    (define infusion
      (make-handler
       (whenever-new
        ptt
        (whenever
-        [(< aPtt 45)
-         (giveBolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+        [(< aptt 45)
+         (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
          (increase "heparin" #:by (-number 3 units/kg/hour))]
-        [(and (< 45 aPtt)
-              (< aPtt 59))
-         (giveBolus (-number 40 units/kg) #:of "heparin" #:by "iv")
+        [(and (< 45 aptt)
+              (< aptt 59))
+         (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
          (increase "heparin" #:by (-number 1 unit/kg/hour))]
-        [(and (< 101 aPtt)
-              (< aPtt 123))
+        [(and (< 101 aptt)
+              (< aptt 123))
          (decrease "heparin" #:by (-number 1 unit/kg/hour))]
-        [(> aPtt 123)
+        [(> aptt 123)
          (hold "heparin")
          (after (-number 1 hour)
                 (restart "heparin")
@@ -777,16 +778,16 @@ handler infusion is
   "handler heparinPttChecking is
   Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
   Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times"
-  (define heparinPttChecking
+  (define heparinpttchecking
     (make-handler 
      (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
-               (Q (-number 6 hours) checkPtt))
+               (q (-number 6 hours) checkptt))
      (whenever (and (< 59 ptt) (< ptt 101)) #:times 2
-               (Q (-number 24 hours) checkPtt)))))
+               (q (-number 24 hours) checkptt)))))
 (test-parse
  "Q 6 hours checkPtt"
  #:pattern Expr
- (Q (-number 6 hours) checkPtt))
+ (q (-number 6 hours) checkptt))
 (test-parse "not 59 < ptt < 101"
             #:pattern Expr
             (not (and (< 59 ptt) (< ptt 101))))
@@ -795,12 +796,12 @@ handler infusion is
  #:pattern Line
  (line 1
        (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
-                 (Q (-number 6 hours) checkPtt))))
+                 (q (-number 6 hours) checkptt))))
 (test-parse
  "handler x is
   whenever new q and qValue
     e"
- (define x (make-handler (whenever-new (q qValue) (e)))))
+ (define x (make-handler (whenever-new (q qvalue) (e)))))
 
 
 (test-parse
@@ -818,22 +819,22 @@ handler infusion is
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-  (define heparinPttChecking
+  (define heparinpttchecking
     (make-handler
-     (Q (-number 24 hours) checkPtt)
+     (q (-number 24 hours) checkptt)
      (whenever-new (change (is drug "heparin"))
                    (after (-number 6 hours)
-                          (checkPtt))))))
+                          (checkptt))))))
 (test-parse
  "handler heparinPttChecking is
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-  (define heparinPttChecking
+  (define heparinpttchecking
     (make-handler
      (whenever-new (change (is drug "heparin"))
                    (after (-number 6 hours)
-                          (checkPtt))))))
+                          (checkptt))))))
 
 (test-parse
  "drug is \"heparin\""

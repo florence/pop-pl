@@ -50,7 +50,7 @@ with '-' prevents access.
   (syntax-parse stx
     [(_ body ...)
      #'(#%module-begin
-        (provide eval (struct-out message))
+        (provide eval (struct-out message in:number))
         body ...)]))
 (define (eval msg)
   (for ([(_ h!) (in-hash current-handlers)])

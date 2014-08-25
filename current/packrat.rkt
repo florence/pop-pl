@@ -76,7 +76,7 @@
              [name (pattern 'name r)] ...)
             (values (lambda (in #:debug [debug #f] #:pattern [pattern top])
                       (define t (make-hasheq))
-                      (define-values (res p) (parse pattern in t #:debug debug))
+                      (define-values (res p) (parse* pattern in t #:debug debug))
                       (when (and debug (not res))
                         (write `(failed at ,p with table ,t))
                         (write "\n"))
@@ -96,9 +96,14 @@
          (syntax-parameterize ([reset (make-rename-transformer #'r)])
            body ...))]))
 (define tab-count (make-parameter 0))
-(define (parse pat i [table (make-hasheq)] #:debug [a:debug #f])
-  (define in (if (string? i) (open-input-string i) i))
+
+(define (parse* pat i [table (make-hasheq)] #:debug [a:debug #f])
+  (define s (if (string? i) i (port->string i)))
+  (define in (open-input-string s))
   (port-count-lines! in)
+  (parse pat in table #:debug a:debug))
+
+(define (parse pat in [table (make-hasheq)] #:debug [a:debug #f])
   (define start (make-location in))
 
   (define (get-pos) (make-position start (make-location in) in))
@@ -133,7 +138,7 @@
               [(app string? #t)
                (parse* (lit (const pat) pat))]
               [(lit f pat)
-               (parse* (rx f (regexp-quote pat)))]
+               (parse* (rx f (regexp-quote pat #f)))]
               [(rx f reg)
                (define locs (regexp-match-peek-positions* reg in))
                (define has (and locs (assoc 0 locs)))
@@ -142,7 +147,7 @@
                (debug `(,reg matched ,locs))
                (if (not end)
                    (fail (get-pos))
-                   (values (f (read-string end in) (get-pos)) (get-pos)))]
+                   (values (f (string-downcase (read-string end in)) (get-pos)) (get-pos)))]
               [(/ (list* pats))
                (let loop ([pats pats] [pos (get-pos)]) 
                  (cond [(null? pats)
