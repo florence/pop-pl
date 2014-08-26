@@ -55,12 +55,19 @@ with '-' prevents access.
         (provide (rename-out [-eval eval]))
         body ...)]))
 (define (eval msg)
+  (maybe-update-time! msg)
   (for ([(_ h!) (in-hash current-handlers)])
     (h! msg cur-log))
   (set! current-handlers (hash->immutable-hash next-handlers))
   (set! cur-log (append next-log cur-log))
   (set! next-log null)
   next-log)
+
+(define (maybe-update-time! msg)
+  (match msg
+    [(message '(time) (list n) #f)
+     (set! time (+ n time))]
+    [else (void)]))
 
 (define (hash->immutable-hash hash)
   (for/hash ([(k h) (in-hash hash)]) (values k h)))
@@ -109,16 +116,17 @@ with '-' prevents access.
                      (whenever e body ...))]
     [(whenever-new id:id
                    body:expr ...)
-     (when (not (dict-has-key? messages #'id))
+     (unless (dict-has-key? messages (syntax-local-introduce #'id))
        (raise-syntax-error 'messages "the name of a message needs to go here" #'id))
      (define names (map syntax-local-introduce (dict-ref messages (syntax-local-introduce #'id))))
      (with-syntax ([(name ...) names]
                    [(value ...)
                     (for/list ([n (in-range (length names))])
                       #`(vector-ref (message-values current-message) #,n))])
-       #'(when (member 'id (message-tags current-message))
-           (let ([name value] ...)
-             body ...)))]))
+       #'(begin
+           (when (member 'id (message-tags current-message))
+             (let ([name value] ...)
+               body ...))))]))
 (define-syntax (whenever stx)
   (define-syntax-class query-name
     (pattern #:times)
@@ -185,16 +193,21 @@ with '-' prevents access.
                      (for/list ([(k v) (in-dict messages)])
                        (with-syntax ([msg (syntax-local-introduce k)])
                          #'[msg
-                            (match (first log)
-                               [(message (? (lambda (l) (member l 'msg)) _)
-                                         (list* x _)
-                                         _)
-                                x]
-                               [_ (raise (failure))])]))])
+                            (lambda (stx)
+                              (syntax-parse stx
+                                [name:id
+                                 #'(if (null? log) 
+                                       (raise (failure))
+                                       (match (first log)
+                                         [(message (? (lambda (l) (member l 'msg)) _)
+                                                   (list* x _)
+                                                   _)
+                                          x]
+                                         [_ (raise (failure))]))]))]))])
        #'(lambda (log)
-           (let pats
-               (with-handlers ([failure? #f])
-                 e))))]))
+           (let-syntax pats
+             (with-handlers ([failure? (const null)])
+               e))))]))
 
 (define-for-syntax make-times-filter
   (maybe-filter
