@@ -15,15 +15,17 @@
     (for*/fold ([heparin-continous null] [heparin-bolus null] [measured null])
                ([m log])
       (match m 
-        [(message (list-no-order 'change _ ...) (list "heparin" (in:number amount _)) t)
+        [(message (list-no-order 'change _ ...) (vector "heparin" (in:number amount _)) t)
+         ;; TODO: needs to sum
          (values (cons (vector t amount) heparin-continous)
                  heparin-bolus
                  measured)]
-        [(message (list-no-order 'give _ ...) (list (in:number amount _) "heparin" _) t)
+        ;; TODO: needs to handle start and restart
+        [(message (list-no-order 'give _ ...) (vector (in:number amount _) "heparin" _) t)
          (values heparin-continous
                  (cons (vector t amount) heparin-bolus)
                  measured)]
-        [(message '(ptt) (list v) t)
+        [(message '(ptt) (vector v) t)
          (values heparin-continous
                  heparin-bolus
                  (cons (vector t v) measured))]
@@ -39,9 +41,9 @@
       (define log (inc-time))
       (define-values (o his hc)
         (eval-log log outgoing heparin-in-system heparin-continous))
-      (values outgoing
-              (heparin-values-after heparin-in-system heparin-continous 1)
-              heparin-continous)))
+      (values o
+              (heparin-values-after his hc 1)
+              hc)))
   res)
 
 (define (inc-time)
@@ -58,16 +60,18 @@
       (values outgoing heparin-in-system heparin-continous)
       (let ([msg (first new-log)])
         (match msg
-          [(message (list-no-order 'give _ ...) (list (in:number amt _) "heparin" _) _)
+          [(message (list-no-order 'give _ ...) (vector (in:number amt _) "heparin" _) _)
            (eval-log*  (+ amt heparin-in-system) heparin-continous)]
-          [(message (list-no-order 'change _ ...) (list "heparin" (in:number amt _)) _)
+          [(message (list-no-order 'change _ ...) (vector "heparin" (in:number amt _)) _)
            (eval-log* heparin-in-system (+ amt heparin-continous))]
-          [(message '(start) (list (in:number amt _) "heparin") _)
+          [(message '(start) (vector (in:number amt _) "heparin") _)
            (eval-log* heparin-in-system amt)]
-          [(message '(hold) (list "heparin") _)
+          [(message '(hold) (vector "heparin") _)
            (set! restart-amount heparin-continous)
            (eval-log*  heparin-in-system 0)]
-          [(message '(restart) (list "heparin") _)
+          [(message '(start) (vector (in:number n _) "heparin") t)
+           (eval-log* heparin-in-system n)]
+          [(message '(restart) (vector "heparin") _)
            (eval-log* heparin-in-system restart-amount)]
           [(message '(checkPtt) _ t)
            (eval-log (append (rest new-log) (new-ptt (calculate-ptt heparin-in-system) t))

@@ -60,8 +60,9 @@ with '-' prevents access.
     (h! msg cur-log))
   (set! current-handlers (hash->immutable-hash next-handlers))
   (set! cur-log (append next-log cur-log))
+  (define res next-log)
   (set! next-log null)
-  next-log)
+  res)
 
 (define (maybe-update-time! msg)
   (match msg
@@ -92,7 +93,7 @@ with '-' prevents access.
     [(_ body ...)
      (with-syntax ([id (generate-temporary)])
        #'(let ()
-           (define id (make-handler body ...))
+           (define id (make-handler body ... (remove-handler! 'id)))
            (add-handler id)))]))
 
 (define-syntax (make-handler stx)
@@ -143,11 +144,16 @@ with '-' prevents access.
                       (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
                                     [apart (make-apart-filter (assoc '#:apart asc))]
                                     [times? (make-times-filter (assoc '#:times asc))]
-                                    [get-matching (make-get-matching #'t)])
+                                    [get-matching (make-get-matching #'t)]
+                                    [n
+                                     (syntax-parse #'t
+                                       #:literals (not)
+                                       [(not e) #'not]
+                                       [_ #'values])])
                         #'(let* ([log (since-last current-log)]
                                  [matching (get-matching log)]
                                  [acceptable (apart matching)])
-                            (times? acceptable)))]))))
+                            (n (times? acceptable))))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
      #'(when q.query
@@ -216,6 +222,8 @@ with '-' prevents access.
        [n:number
         #'(lambda (l) (= n (length l)))]))))
 
+
+
 ;;; things that use time
 (define-syntax (after stx)
   (syntax-parse stx
@@ -262,12 +270,16 @@ with '-' prevents access.
                                #:unless (keyword? (syntax-e e)))
                       e)])
        #'(when
-             (after? n
-                     (match current-log
-                       [(message (? (lambda (l) (member l 'name)) _)
-                                 (list args ... _ ___)
-                                 t)
-                        t]))
+             (let ([m (match current-log
+                        [(list 
+                          _ ___
+                          (message (? (lambda (l) (member 'name l)) _)
+                                   (list args ... _ ___)
+                                   t)
+                          _ ___)
+                         t]
+                        [_ #f])])
+               (and m  (after? n m)))
            (name exprs ...)))]))
 ;;; numbers
 
