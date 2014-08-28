@@ -11,7 +11,7 @@ with '-' prevents access.
  define and not
  (rename-out [in:module-begin #%module-begin])
  ;; forward facing
- whenever whenever-new initially after q
+ whenever whenever-new initially after q whenever-cond
  (rename-out
   [unit:+ +]
   [unit:- -]
@@ -33,6 +33,7 @@ with '-' prevents access.
 (require (for-meta 2 racket/base syntax/parse))
 (module+ test (require rackunit))
 ;;; global state
+(define last-message-time-cache (make-hash))
 (define current-handlers (hash))
 (define next-handlers (make-hash))
 (define cur-log null)
@@ -59,10 +60,10 @@ with '-' prevents access.
   (for ([(_ h!) (in-hash current-handlers)])
     (h! msg cur-log))
   (set! current-handlers (hash->immutable-hash next-handlers))
-  (set! cur-log (append next-log cur-log))
+  (set! cur-log (append next-log (list msg) cur-log))
   (define res next-log)
   (set! next-log null)
-  res)
+  (append res (list msg)))
 
 (define (maybe-update-time! msg)
   (match msg
@@ -74,6 +75,9 @@ with '-' prevents access.
   (for/hash ([(k h) (in-hash hash)]) (values k h)))
 
 (define (send-message! m)
+  (define t (message-time m))
+  (for ([n (message-tags m)])
+    (hash-set! last-message-time-cache n t))
   (set! next-log (cons m next-log)))
 
 (define (add-handler! n f)
@@ -109,6 +113,7 @@ with '-' prevents access.
      #'(add-handler! 'id (lambda x (apply id x)))]))
 
 ;;; whenevers
+(define-syntax whenever-cond (make-rename-transformer #'cond))
 (define-syntax (whenever-new stx)
   (syntax-parse stx
     [(whenever-new (id:id e:expr)
@@ -123,7 +128,7 @@ with '-' prevents access.
      (with-syntax ([(name ...) names]
                    [(value ...)
                     (for/list ([n (in-range (length names))])
-                      #`(vector-ref (message-values current-message) #,n))])
+                      #`(list-ref (message-values current-message) #,n))])
        #'(begin
            (when (member 'id (message-tags current-message))
              (let ([name value] ...)
@@ -148,16 +153,21 @@ with '-' prevents access.
                                     [n
                                      (syntax-parse #'t
                                        #:literals (not)
-                                       [(not e) #'not]
+                                       [(not e)
+                                        #'not]
                                        [_ #'values])])
-                        #'(let* ([log (since-last current-log)]
-                                 [matching (get-matching log)]
-                                 [acceptable (apart matching)])
-                            (n (times? acceptable))))]))))
+                        (syntax/loc 
+                            #'t
+                            (with-handlers ([failure? (const (n #t))])
+                              (let* ([log (since-last current-log)]
+                                     [matching (get-matching log)]
+                                     [acceptable (apart matching)])
+                                (times? acceptable)))))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
-     #'(when q.query
-         body ...)]))
+     (syntax/loc stx (when q.query body ...))]))
+
+
 
 
 (define-for-syntax ((maybe-filter l) maybe-stx)
@@ -169,58 +179,65 @@ with '-' prevents access.
    (lambda (stx)
      (syntax-parse stx
        [(name args ...)
-        #'(lambda (log)
+        (syntax/loc stx
+          (lambda (log)
             (for/list ([l log]
                        #:final
                        (match l
                          [(message (? (lambda (l) (member l 'name))) 
                                    (list args ... _ ___)
                                    _)
-                          #t]))
-              l))]))))
+                          #t]
+                         [_ #f]))
+              l)))]))))
 (define-for-syntax make-apart-filter
   (maybe-filter
    (lambda (stx)
      (syntax-parse stx
        [n:number+unit
-        #'(lambda (log)
+        (syntax/loc stx
+          (lambda (log)
             (define-values (res _)
               (for/fold ([res null] [time 0]) ([l log])
                 (if (> (message-time l) time)
                     (values (cons l res) (message-time l))
                     (values res time))))
-            (reverse res))]))))
+            (reverse res)))]))))
 (struct failure ())
 (define-for-syntax (make-get-matching stx)
   (syntax-parse stx
     [e:expr 
-     (with-syntax* ([log (generate-temporary)]
+     (with-syntax* ([msg (generate-temporary)]
                     [pats 
                      (for/list ([(k v) (in-dict messages)])
                        (with-syntax ([msg (syntax-local-introduce k)])
-                         #'[msg
-                            (lambda (stx)
-                              (syntax-parse stx
-                                [name:id
-                                 #'(if (null? log) 
-                                       (raise (failure))
-                                       (match (first log)
-                                         [(message (? (lambda (l) (member l 'msg)) _)
-                                                   (list* x _)
-                                                   _)
-                                          x]
-                                         [_ (raise (failure))]))]))]))])
-       #'(lambda (log)
-           (let-syntax pats
-             (with-handlers ([failure? (const null)])
-               e))))]))
+                         (syntax/loc
+                             #'msg
+                             [msg
+                              (lambda (stx)
+                                (syntax-parse stx
+                                  [name:id
+                                   #'(if (null? log) 
+                                         (raise (failure))
+                                         (match msg 
+                                           [(message (? (lambda (l) (member 'msg l)) _)
+                                                     (list* x _)
+                                                     _)
+                                            x]
+                                           [_ (raise (failure))]))]))])))])
+       (syntax/loc stx
+         (lambda (log)
+           (filter (lambda (msg)
+                     (let-syntax pats e))
+                   log))))]))
 
-(define-for-syntax make-times-filter
-  (maybe-filter
-   (lambda (stx)
-     (syntax-parse stx
-       [n:number
-        #'(lambda (l) (= n (length l)))]))))
+(define-for-syntax (make-times-filter maybe-stx)
+  (if (not maybe-stx)
+      #'(lambda (l) (cons? l))
+      (let ([stx (second maybe-stx)])
+        (syntax-parse stx
+            [n:number
+             (syntax/loc stx (lambda (l) (= n (length l))))]))))
 
 
 
@@ -228,17 +245,18 @@ with '-' prevents access.
 (define-syntax (after stx)
   (syntax-parse stx
     [(after t body ...)
-     #'(let* ([n (gensym)]
-              [start (current-time)]
-              [h (make-handler
-                  (when (after? t start)
-                    body ...
-                    (remove-handler! 'n)))])
-         (add-handler! 'n h))]))
+     (with-syntax ([n (generate-temporary)])
+       (syntax/loc stx
+         (let* ([start (current-time)]
+                [h (make-handler
+                    (when (after? t start)
+                      body ...
+                      (remove-handler! 'n)))])
+           (add-handler! 'n h))))]))
 
 ;; time time -> boolean
 (define (after? diff start)
-  (> (+ (time->stamp diff) (time->stamp start)) 
+  (< (+ (time->stamp diff) (time->stamp start)) 
      (time->stamp (current-time))))
 
 (define (time->stamp t)
@@ -264,22 +282,14 @@ with '-' prevents access.
 
 (define-syntax (q stx)
   (syntax-parse stx
-    [(Q n:number+unit name:id exprs ...)
+    [(q n:number+unit name:id exprs ...)
      (with-syntax ([(args ...)
                     (for/list ([e (in-syntax #'(exprs ...))]
                                #:unless (keyword? (syntax-e e)))
                       e)])
        #'(when
-             (let ([m (match current-log
-                        [(list 
-                          _ ___
-                          (message (? (lambda (l) (member 'name l)) _)
-                                   (list args ... _ ___)
-                                   t)
-                          _ ___)
-                         t]
-                        [_ #f])])
-               (and m  (after? n m)))
+             (let ([m (hash-ref last-message-time-cache 'name #f)])
+               (implies m (after? n m)))
            (name exprs ...)))]))
 ;;; numbers
 
@@ -357,7 +367,7 @@ with '-' prevents access.
      (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
      (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
      #`(define (name #,@#'args.flattened #:-keys [keys null])
-         (send-message! (message `(name ,@keys) (vector #,@#'args.names) (current-time))))]
+         (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time))))]
     [(define-message name:id other:id)
      (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
      (define args (dict-ref message-args (syntax-local-introduce #'other)))

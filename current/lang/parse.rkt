@@ -49,7 +49,7 @@
 ;;; joining things to the right depth
 (define (join-lines lines)
   (define-syntax-class scope-introducer
-    #:datum-literals (after whenever whenever-new)
+    #:datum-literals (after whenever whenever-new whenever-cond)
     (pattern (~or whenever whenever-new after)))
   (define (join* lines depth [results null])
     (cond [(null? lines) 
@@ -57,17 +57,17 @@
           [else
            (define line (first lines))
            (match line
-             [(list 'line inner-depth e)
+             [(list 'line inner-depth l)
               (if (<= inner-depth depth)
                   (let ()
                     (define-values (res b) (join* lines (sub1 depth)))
                     (values results (append res b)))
-                  (syntax-parse e
+                  (syntax-parse l
                     [(i:scope-introducer e ...) 
                      (define-values (next rst) (join* (rest lines) inner-depth))
-                     (values (append results (list #`(i e ... #,@next)) rst) null)]
+                     (values (append results (list (quasisyntax/loc l (i e ... #,@next))) rst) null)]
                     [_ 
-                     (join* (rest lines) depth (append results (list e)))]))]
+                     (join* (rest lines) depth (append results (list l)))]))]
              [(? syntax? line)
               (join* (rest lines) depth (append results (list line)))]
              [_ (join* (rest lines) depth results)])]))
@@ -112,7 +112,7 @@
 (define parse-whenever+parts
   (match-lambda
    [(list "whenever" _ _ (list (list _ part _) ...))
-    `(whenever  ,@(flatten-parts part))]))
+    `(whenever-cond  ,@(flatten-parts part))]))
 ;; condense the line-by-line whenever into a series of clauses
 (define (flatten-parts parts [results null])
   (cond [(null? parts) (reverse results)]
@@ -530,7 +530,7 @@
   (test-parse "require x"
               (add-handler x))
   (test-parse "initially\n  whenever\n   x | x\n   | n"
-              (initially (whenever (x (x) (n)))))
+              (initially (whenever-cond (x (x) (n)))))
   (test-parse "initially\n  whenever x\n    x\n    n"
               (initially (whenever x (x) (n))))
   (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
@@ -540,7 +540,7 @@
               (add-handler m))
   (test-parse "initially\n whenever\n x | whenever x\n |  y"
               (initially
-               (whenever
+               (whenever-cond
                 [x (whenever x (y))])))
   (test-parse "initially\n after 1 hour\n  x\n  y"
               (initially (after (-number 1 hour) (x) (y))))
@@ -571,7 +571,7 @@ initially
                         (e1)
                         (e2) 
                         (whenever-new x (e3) (e4))
-                        (whenever [g (m) (x)] [g2 (v) (v2)])
+                        (whenever-cond [g (m) (x)] [g2 (v) (v2)])
                         (e5))))
    (initially (whenever 12 (m))))
   (test-parse "\n  QQ"
@@ -674,19 +674,19 @@ initially
   whenever new ptt
     whenever
      x | x"
-   (define infusion (make-handler (whenever-new ptt (whenever (x (x)))))))
+   (define infusion (make-handler (whenever-new ptt (whenever-cond (x (x)))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x < x| x"
-   (define infusion (make-handler (whenever-new ptt (whenever ((< x x) (x)))))))
+   (define infusion (make-handler (whenever-new ptt (whenever-cond ((< x x) (x)))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x < x<x| x"
-   (define infusion (make-handler (whenever-new ptt (whenever ((and (< x x) (< x x)) (x)))))))
+   (define infusion (make-handler (whenever-new ptt (whenever-cond ((and (< x x) (< x x)) (x)))))))
   (test-parse "x < x"
               #:pattern Expr
               (< x x))
@@ -703,7 +703,7 @@ initially
    (define infusion
      (make-handler
       (whenever-new ptt
-                    (whenever
+                    (whenever-cond
                      [(and (< x x) (< x x)) (x) (x)]
                      [y (z) (q)])))))
 (test-parse
@@ -719,7 +719,7 @@ initially
    (define infusion
      (make-handler
       (whenever-new ptt
-                    (whenever
+                    (whenever-cond
                      [(and (< x x) (< x x)) (x) (x)]
                      [y (after (-number 1 hour) (x))])))))
   (test-parse
@@ -757,7 +757,7 @@ handler infusion is
      (make-handler
       (whenever-new
        ptt
-       (whenever
+       (whenever-cond
         [(< aptt 45)
          (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
          (increase "heparin" #:by (-number 3 units/kg/hour))]
