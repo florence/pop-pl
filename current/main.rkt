@@ -258,28 +258,6 @@ with '-' prevents access.
 (define (after? diff start)
   (< (+ (time->stamp diff) (time->stamp start)) 
      (time->stamp (current-time))))
-
-(define (time->stamp t)
-  (match t
-    [(in:number n (or 'seconds 'second)) n]
-    [(in:number n (or 'minutes 'minute)) (* n 60)]
-    [(in:number n (or 'hours 'hour))
-     (* n
-        60 
-        (time->stamp (in:number 1 'minutes)))]
-    [(in:number n (or 'days 'day))
-     (* n
-        24
-        (time->stamp (in:number 1 'hour)))]
-    [(? number? n) n]
-    [_ (error 'time "expected time, given ~s" t)]))
-(module+ test
-  (check-equal? (time->stamp (in:number 3 'days))
-                ;; google says...
-                259200)
-  (check-equal? (time->stamp (in:number 2 'hours))
-                7200))
-
 (define-syntax (q stx)
   (syntax-parse stx
     [(q n:number+unit name:id exprs ...)
