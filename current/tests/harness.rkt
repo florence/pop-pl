@@ -20,7 +20,7 @@
 
 (define-syntax (prescription-test stx)
   (define-syntax-class test-clause
-    #:datum-literals (=> message advance start)
+    #:datum-literals (=> advance start)
     (pattern (=> start 
                  m:pat ...)
              #:with parsed
@@ -36,7 +36,7 @@
              #:with parsed
              #'(check-match (advance (in:number t 'u))
                             (list-no-order m.pat ...)))
-    (pattern (=> (message mes:id e ...)
+    (pattern (=> (mes:id e ...)
                  m:pat ...)
              #:with parsed
              #'(check-match (send (message '(mes) (list e ...) #f))
@@ -44,7 +44,11 @@
   (define-syntax-class pat
     (pattern (m:id e:expr ...)
              #:with pat
-             #'(message (list-no-order m _ ___) (list e ...) _)))
+             #'(message (list-no-order m _ ___) (list e ...) _))
+    #;
+    (pattern ((m:id ...) e:expr ...)
+             #:with pat
+             #'(message (list-no-order 'm ... _ ___) (list e ...) _)))
   (syntax-parse stx
     [(_ path t:test-clause ...)
      #'(parameterize ([current-eval (dynamic-require 'path 'eval)])

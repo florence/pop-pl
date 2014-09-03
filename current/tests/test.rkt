@@ -6,5 +6,10 @@
  (=> start 
      (givebolus _ "heparin" "iv")
      (start _ "heparin")
+     (checkptt))
+ (=> (ptt 40)
+     (givebolus _ "heparin" "iv")
+     (decease "heparin" _))
+ (=> (advance 7 hours)
      (checkptt)))
 
