@@ -158,7 +158,7 @@ with '-' prevents access.
                                        [_ #'values])])
                         (syntax/loc 
                             #'t
-                            (with-handlers ([failure? (const (n #t))])
+                            (with-handlers ([failure? (const (n #f))])
                               (let* ([log (since-last current-log)]
                                      [matching (get-matching log)]
                                      [acceptable (apart matching)])
