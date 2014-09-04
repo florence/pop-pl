@@ -46,6 +46,20 @@ with '-' prevents access.
     #:literals (-number)
     (pattern x:number)
     (pattern (-number x:number y:id))))
+;; to guard against function misuse
+(define-syntax (define/func stx)
+  (syntax-parse stx
+    [(_ (n:id a ...) b ...)
+     #'(define/func n (lambda (a ...) b ...))]
+    [(_ n:id b)
+     (with-syntax ([real (generate-temporary)])
+       #'(begin
+           (define real b)
+           (define-syntax (n stx)
+             (syntax-parse stx
+               [n:id (raise-syntax-error 'function "a function cannot be used as an argument" #'x)]
+               [(n:id a (... ...))
+                #'(real a (... ...))]))))]))
 
 ;;; evaluator
 (define-syntax (in:module-begin stx)
@@ -306,7 +320,7 @@ with '-' prevents access.
   (and all-same? (apply f (strip-units args))))
 
 ;; listof (U number number+unit) -> listof number
-(module+ test (check-equal? (strip-units (list (in:number 4 'y) 2 (in:number 3 'x) 4)) '(1 2 3 4)))
+(module+ test (check-equal? (strip-units (list (in:number 1 'y) 2 (in:number 3 'x) 4)) '(1 2 3 4)))
 (define (strip-units ns)
   (for/list ([n ns])
     (if (number? n)
@@ -362,18 +376,3 @@ with '-' prevents access.
      #`(define/func (name #,@#'args.flattened #:-keys [keys null])
          (super call ... #:-keys `(name ,@keys)))]))
 
-;;; to guard against function misuse
-
-(define-syntax (define/func stx)
-  (syntax-parse stx
-    [(_ (n:id a ...) b ...)
-     #'(define/func n (lambda (a ...) b ...))]
-    [(_ n:id b)
-     (with-syntax ([real (generate-temporary)])
-       #'(begin
-           (define real b)
-           (define-syntax (x stx)
-             (syntax-parse stx
-               [x:id (raise-syntax-error 'function "a function cannot be used as an argument" #'x)]
-               [(x:id a (... ...))
-                #'(real a (... ...))]))))]))
