@@ -227,6 +227,12 @@
 
 
 (module+ test
+  (define-syntax (check-equal?/1 stx)
+    (syntax-parse stx
+      [(_ t v)
+       #'(begin
+           (define-values (p _) t)
+           (check-equal? p v))]))
   (let ()
     (define-parser/colorer (p l)
       [Top (seq (lambda (r p) (first r))
@@ -247,23 +253,23 @@
       [Value (/ (list (rx (lambda (r p) (string->number r)) #rx"[0-9]+")
                       (seq (lambda (l p) (second l))
                            (list "(" Expr ")"))))])
-    (check-equal? (p "1") 1)
-    (check-equal? (p "1+2") 3)
-    (check-equal? (p "1+2/2") 2)
-    (check-equal? (p "(1+2)/2") 3/2))
+    (check-equal?/1 (p "1") 1)
+    (check-equal?/1 (p "1+2") 3)
+    (check-equal?/1 (p "1+2/2") 2)
+    (check-equal?/1 (p "(1+2)/2") 3/2))
   ;; test that * is greedy
   (let ()
     (define-parser/colorer (p l)
       [X (* (lambda (r p) r) (rx (lambda (r p) r) #rx"."))])
-    (check-equal? (p "abc")
-                  (list "a" "b" "c")))
+    (check-equal?/1 (p "abc")
+                    (list "a" "b" "c")))
   ;; test that we reset correctly in :/
   (let ()
     (define-parser/colorer (p l)
       [X (/ (list (seq (lambda (r c) r)
                        (list "c" "a"))
                   "c"))])
-    (check-equal? (p "c")
+    (check-equal?/1 (p "c")
                   "c"))
   (let ()
     (define-parser/colorer (p l)

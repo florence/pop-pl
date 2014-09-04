@@ -313,17 +313,17 @@ with '-' prevents access.
         n
         (in:number-value n))))
 
-(define unit:+ (convert/+- +))
-(define unit:- (convert/+- -))
-(define unit:* (convert/*/ *))
-(define unit:/ (convert/*/ /))
-(define unit:> (convert/<>= >))
-(define unit:>= (convert/<>= >=))
-(define unit:< (convert/<>= <))
-(define unit:<= (convert/<>= <=))
-(define unit:= (convert/<>= =))
+(define/func unit:+ (convert/+- +))
+(define/func unit:- (convert/+- -))
+(define/func unit:* (convert/*/ *))
+(define/func unit:/ (convert/*/ /))
+(define/func unit:> (convert/<>= >))
+(define/func unit:>= (convert/<>= >=))
+(define/func unit:< (convert/<>= <))
+(define/func unit:<= (convert/<>= <=))
+(define/func unit:= (convert/<>= =))
 
-(define is equal?)
+(define/func is equal?)
 
 ;;; messages
 (begin-for-syntax
@@ -345,7 +345,7 @@ with '-' prevents access.
      (define key (syntax-local-introduce #'name))
      (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
      (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
-     #`(define (name #,@#'args.flattened #:-keys [keys null])
+     #`(define/func (name #,@#'args.flattened #:-keys [keys null])
          (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time))))]
     ;; define from other message
     [(define-message name:id other:id)
@@ -353,11 +353,27 @@ with '-' prevents access.
      (define args (dict-ref message-args (syntax-local-introduce #'other)))
      (dict-set! messages (syntax-local-introduce #'name) arg-names)
      (dict-set! message-args (syntax-local-introduce #'name) args)
-     #`(define (name #,@args #:-keys [keys null])
+     #`(define/func (name #,@args #:-keys [keys null])
          (other #,@args #:-keys `(name ,@keys)))]
     ;; define from function
     [(define-message name:id (args:args) (super:id call ...))
      (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
      (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
-     #`(define (name #,@#'args.flattened #:-keys [keys null])
+     #`(define/func (name #,@#'args.flattened #:-keys [keys null])
          (super call ... #:-keys `(name ,@keys)))]))
+
+;;; to guard against function misuse
+
+(define-syntax (define/func stx)
+  (syntax-parse stx
+    [(_ (n:id a ...) b ...)
+     #'(define/func n (lambda (a ...) b ...))]
+    [(_ n:id b)
+     (with-syntax ([real (generate-temporary)])
+       #'(begin
+           (define real b)
+           (define-syntax (x stx)
+             (syntax-parse stx
+               [x:id (raise-syntax-error 'function "a function cannot be used as an argument" #'x)]
+               [(x:id a (... ...))
+                #'(real a (... ...))]))))]))

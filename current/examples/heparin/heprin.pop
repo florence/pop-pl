@@ -6,7 +6,7 @@ require infusion
 
 initially 
    giveBolus 80 units/kg of: "heparin" by: "iv"
-   start 18 units/kg/hour of: "heparin"
+   start 18 units/kg/hour of: "heparin" by: "iv"
 
 handler infusion is
   whenever new ptt
@@ -46,7 +46,7 @@ message ptt is [ aPtt ]
 message change is [ drug by: value ]
 message increase is change
 message decrease(drug by: value) is change(drug by: -value)
-message start is [ amount of: drug ]
+message start is [ amount of: drug by: method]
 message give is [ amount of: drug by: method ]
 message giveBolus is give
 message hold is [ drug ]

@@ -30,11 +30,11 @@
 (define parse-handler
   (match-lambda
    [(list _ _ name _ _ _ _ lines)
-    `(define ,name (make-handler ,@(join-lines lines)))]))
+    `(define/func ,name (make-handler ,@(join-lines lines)))]))
 (module+ test
   (let ([s #'(line 0 2)])
     (check-equal? (parse-handler (list "handler" " " 'x "is" " " #t "\n" `(,s ,42)))
-                  `(define x (make-handler ,s)))))
+                  `(define/func x (make-handler ,s)))))
 (define parse-line
   (match-lambda
    [(list indent expr _)
@@ -505,9 +505,9 @@
               (- change))
   
   (test-parse "handler x is\n  test"
-              (define x (make-handler (test))))
+              (define/func x (make-handler (test))))
   (test-parse "hanDlEr X iS\n  tEst"
-              (define x (make-handler (test))))
+              (define/func x (make-handler (test))))
   (test-parse "initially\n whenever x, 3 times, 1 hour apart\n  x"
               (initially
                (whenever x #:times 3 #:apart (-number 1 hour) (x))))
@@ -534,7 +534,7 @@
   (test-parse "initially\n  whenever x\n    x\n    n"
               (initially (whenever x (x) (n))))
   (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
-              (define b (make-handler (whenever x 12) (x)))
+              (define/func b (make-handler (whenever x 12) (x)))
               (initially (x)))
   (test-parse "require m"
               (add-handler m))
@@ -565,7 +565,7 @@
 initially
   whenever 12
     m"
-   (define b (make-handler
+   (define/func b (make-handler
               (qq)
               (whenever t1
                         (e1)
@@ -668,25 +668,25 @@ initially
   whenever new ptt
     whenever x
      x"
-   (define infusion (make-handler (whenever-new ptt (whenever x (x))))))
+   (define/func infusion (make-handler (whenever-new ptt (whenever x (x))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x | x"
-   (define infusion (make-handler (whenever-new ptt (whenever-cond (x (x)))))))
+   (define/func infusion (make-handler (whenever-new ptt (whenever-cond (x (x)))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x < x| x"
-   (define infusion (make-handler (whenever-new ptt (whenever-cond ((< x x) (x)))))))
+   (define/func infusion (make-handler (whenever-new ptt (whenever-cond ((< x x) (x)))))))
   (test-parse
    "handler infusion is
   whenever new ptt
     whenever
      x < x<x| x"
-   (define infusion (make-handler (whenever-new ptt (whenever-cond ((and (< x x) (< x x)) (x)))))))
+   (define/func infusion (make-handler (whenever-new ptt (whenever-cond ((and (< x x) (< x x)) (x)))))))
   (test-parse "x < x"
               #:pattern Expr
               (< x x))
@@ -700,7 +700,7 @@ initially
 
        y | z
          | q"
-   (define infusion
+   (define/func infusion
      (make-handler
       (whenever-new ptt
                     (whenever-cond
@@ -716,7 +716,7 @@ initially
 
        y | after 1 hour
          |   x"
-   (define infusion
+   (define/func infusion
      (make-handler
       (whenever-new ptt
                     (whenever-cond
@@ -753,7 +753,7 @@ handler infusion is
    (initially
     (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
     (start (-number 18 units/kg/hour) #:of "heparin"))
-   (define infusion
+   (define/func infusion
      (make-handler
       (whenever-new
        ptt
@@ -778,7 +778,7 @@ handler infusion is
   "handler heparinPttChecking is
   Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
   Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times"
-  (define heparinpttchecking
+  (define/func heparinpttchecking
     (make-handler 
      (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
                (q (-number 6 hours) checkptt))
@@ -801,14 +801,14 @@ handler infusion is
  "handler x is
   whenever new q and qValue
     e"
- (define x (make-handler (whenever-new (q qvalue) (e)))))
+ (define/func x (make-handler (whenever-new (q qvalue) (e)))))
 
 
 (test-parse
  "handler x is
   whenever new m and left is right
     z"
- (define x (make-handler
+ (define/func x (make-handler
             (whenever-new (m (is left right))
                           (z)))))
 
@@ -819,7 +819,7 @@ handler infusion is
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-  (define heparinpttchecking
+  (define/func heparinpttchecking
     (make-handler
      (q (-number 24 hours) checkptt)
      (whenever-new (change (is drug "heparin"))
@@ -830,7 +830,7 @@ handler infusion is
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-  (define heparinpttchecking
+  (define/func heparinpttchecking
     (make-handler
      (whenever-new (change (is drug "heparin"))
                    (after (-number 6 hours)
