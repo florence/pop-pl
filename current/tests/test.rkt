@@ -11,5 +11,7 @@
      (givebolus _ "heparin" "iv")
      (decease "heparin" _))
  (=> (advance 7 hours)
-     (checkptt)))
+     (checkptt))
+ (=> (ptt 120)
+     (decrease "heparin" _)))
 

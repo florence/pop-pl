@@ -3,7 +3,15 @@
          (struct-out message)
          time->stamp)
 (module+ test (require rackunit))
-(struct in:number (value unit) #:transparent)
+(struct in:number (value unit) #:transparent
+        #:methods gen:custom-write
+        [(define (write-proc n port mode)
+           (define p
+             (case mode
+               [(#t) write]
+               [(#f) display]
+               [else (lambda (p port) (print p port mode))]))
+           (p (~a (in:number-value n) " " (in:number-unit n))))])
 (struct message (tags values time) #:transparent)
 
 (define (time->stamp t)

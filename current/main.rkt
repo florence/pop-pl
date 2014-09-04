@@ -340,12 +340,14 @@ with '-' prevents access.
     (pattern x:id #:with name #'x)
     (pattern (~seq k:keyword x:id) #:with name #'x))
   (syntax-parse stx
+    ;; basic define
     [(define-message name:id (args:args))
      (define key (syntax-local-introduce #'name))
      (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
      (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
      #`(define (name #,@#'args.flattened #:-keys [keys null])
          (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time))))]
+    ;; define from other message
     [(define-message name:id other:id)
      (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
      (define args (dict-ref message-args (syntax-local-introduce #'other)))
@@ -353,8 +355,9 @@ with '-' prevents access.
      (dict-set! message-args (syntax-local-introduce #'name) args)
      #`(define (name #,@args #:-keys [keys null])
          (other #,@args #:-keys `(name ,@keys)))]
+    ;; define from function
     [(define-message name:id (args:args) (super:id call ...))
      (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
      (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
      #`(define (name #,@#'args.flattened #:-keys [keys null])
-         (super call ... #:-keys `(name @,keys)))]))
+         (super call ... #:-keys `(name ,@keys)))]))
