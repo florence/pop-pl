@@ -24,7 +24,7 @@ with '-' prevents access.
   [unit:= =])
  is
  ;; internal
- make-handler define-message add-handler
+ make-handler define-message add-handler define-handler
  -number)
 
 (require racket/stxparam "private/shared.rkt")
@@ -47,6 +47,7 @@ with '-' prevents access.
     (pattern x:number)
     (pattern (-number x:number y:id))))
 ;; to guard against function misuse
+
 (define-syntax (define/func stx)
   (syntax-parse stx
     [(_ (n:id a ...) b ...)
@@ -57,7 +58,8 @@ with '-' prevents access.
            (define real b)
            (define-syntax (n stx)
              (syntax-parse stx
-               [n:id (raise-syntax-error 'function "a function cannot be used as an argument" #'x)]
+               [n:id #'(error 'silly "thing") #;(raise-syntax-error 'function "a function cannot be used as an argument" #'n)
+                ]
                [(n:id a (... ...))
                 #'(real a (... ...))]))))]))
 
@@ -110,9 +112,15 @@ with '-' prevents access.
   (syntax-parse stx
     [(_ body ...)
      (with-syntax ([id (generate-temporary)])
-       #'(let ()
-           (define id (make-handler body ... (remove-handler! 'id)))
-           (add-handler id)))]))
+       #'(define-handler id body ... (remove-handler! 'id)))]))
+
+(define-syntax (define-handler stx)
+  (syntax-parse stx
+    [(_ n:id body ...)
+     (syntax/loc stx
+       (begin
+         (define/func n (make-handler body ...))
+         (add-handler n)))]))
 
 (define-syntax (make-handler stx)
   (syntax-parse stx
@@ -124,7 +132,7 @@ with '-' prevents access.
 (define-syntax (add-handler stx)
   (syntax-parse stx
     [(add-handler id)
-     #'(add-handler! 'id (lambda x (apply id x)))]))
+     #'(add-handler! 'id (lambda (a b) (id a b)))]))
 
 ;;; whenevers
 (define-syntax whenever-cond (make-rename-transformer #'cond))

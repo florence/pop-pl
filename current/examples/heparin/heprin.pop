@@ -1,9 +1,5 @@
 #lang pop-pl/current
 
-require heparinPttCheckingV2
-require infusion
-//require ivInserted
-
 initially 
    giveBolus 80 units/kg of: "heparin" by: "iv"
    start 18 units/kg/hour of: "heparin" by: "iv"
