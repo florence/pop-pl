@@ -58,8 +58,8 @@ with '-' prevents access.
            (define real b)
            (define-syntax (n stx)
              (syntax-parse stx
-               [n:id #'(error 'thing "stuff") #;(raise-syntax-error 'function "a function cannot be used as an argument" #'n)]
-               [(n:id a (... ...))
+               [na:id (raise-syntax-error 'function "a function cannot be used as an argument" stx)]
+               [(na:id a (... ...))
                 #'(real a (... ...))]))))]))
 
 ;;; evaluator
@@ -171,7 +171,11 @@ with '-' prevents access.
                       (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
                                     [apart (make-apart-filter (assoc '#:apart asc))]
                                     [times? (make-times-filter (assoc '#:times asc))]
-                                    [get-matching (make-get-matching #'t)]
+                                    [get-matching (make-get-matching 
+                                                   (syntax-parse #'t
+                                                     #:literals (not)
+                                                     [(not e) #'e]
+                                                     [_ #'t]))]
                                     [n
                                      (syntax-parse #'t
                                        #:literals (not)
@@ -180,11 +184,10 @@ with '-' prevents access.
                                        [_ #'values])])
                         (syntax/loc 
                             #'t
-                            (with-handlers ([failure? (const (n #f))])
-                              (let* ([log (since-last current-log)]
-                                     [matching (get-matching log)]
-                                     [acceptable (apart matching)])
-                                (times? acceptable)))))]))))
+                          (n (let* ([log (since-last current-log)]
+                                    [matching (get-matching log)]
+                                    [acceptable (apart matching)])
+                               (times? acceptable)))))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
      (syntax/loc stx (when q.query body ...))]))
@@ -232,25 +235,24 @@ with '-' prevents access.
      (with-syntax* ([msg (generate-temporary)]
                     [pats 
                      (for/list ([(k v) (in-dict messages)])
-                       (with-syntax ([msg (syntax-local-introduce k)])
+                       (with-syntax ([name (syntax-local-introduce k)])
                          (syntax/loc
-                             #'msg
-                             [msg
+                             stx
+                             [name
                               (lambda (stx)
                                 (syntax-parse stx
                                   [name:id
-                                   #'(if (null? log) 
-                                         (raise (failure))
-                                         (match msg 
-                                           [(message (? (lambda (l) (member 'msg l)) _)
-                                                     (list* x _)
-                                                     _)
-                                            x]
-                                           [_ (raise (failure))]))]))])))])
+                                   #'(match msg 
+                                       [(message (? (lambda (l) (member 'msg l)) _)
+                                                 (list* x _)
+                                                 _)
+                                        x]
+                                       [_ (raise (failure))])]))])))])
        (syntax/loc stx
          (lambda (log)
            (filter (lambda (msg)
-                     (let-syntax pats e))
+                     (with-handlers ([failure? (const #f)])
+                       (let-syntax pats e)))
                    log))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
@@ -367,20 +369,23 @@ with '-' prevents access.
      (define key (syntax-local-introduce #'name))
      (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
      (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
-     #`(define/func (name #,@#'args.flattened #:-keys [keys null])
-         (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time))))]
+     (quasisyntax/loc stx
+       (define/func (name #,@#'args.flattened #:-keys [keys null])
+         (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time)))))]
     ;; define from other message
     [(define-message name:id other:id)
      (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
      (define args (dict-ref message-args (syntax-local-introduce #'other)))
      (dict-set! messages (syntax-local-introduce #'name) arg-names)
      (dict-set! message-args (syntax-local-introduce #'name) args)
-     #`(define/func (name #,@args #:-keys [keys null])
-         (other #,@args #:-keys `(name ,@keys)))]
+     (quasisyntax/loc stx
+       (define/func (name #,@args #:-keys [keys null])
+         (other #,@args #:-keys `(name ,@keys))))]
     ;; define from function
     [(define-message name:id (args:args) (super:id call ...))
      (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
      (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
-     #`(define/func (name #,@#'args.flattened #:-keys [keys null])
-         (super call ... #:-keys `(name ,@keys)))]))
+     (quasisyntax/loc stx 
+       (define/func (name #,@#'args.flattened #:-keys [keys null])
+         (super call ... #:-keys `(name ,@keys))))]))
 

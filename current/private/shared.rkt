@@ -4,14 +4,15 @@
          time->stamp)
 (module+ test (require rackunit))
 (struct in:number (value unit) #:transparent
-        #:methods gen:custom-write
+        ;#:methods gen:custom-write
+        #;
         [(define (write-proc n port mode)
            (define p
              (case mode
-               [(#t) write]
+               [(#t) display]
                [(#f) display]
                [else (lambda (p port) (print p port mode))]))
-           (p (~a (in:number-value n) " " (in:number-unit n))))])
+           (p (~a "%("(in:number-value n) " " (in:number-unit n) ")")))])
 (struct message (tags values time) #:transparent)
 
 (define (time->stamp t)

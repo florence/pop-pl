@@ -5,7 +5,7 @@
  "../examples/heparin/heprin.pop"
  (=> start 
      (givebolus _ "heparin" "iv")
-     (start _ "heparin")
+     (start _ "heparin" "iv")
      (checkptt))
  (=> (ptt 40)
      (givebolus _ "heparin" "iv")
