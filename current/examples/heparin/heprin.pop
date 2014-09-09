@@ -7,18 +7,18 @@ initially
 handler infusion is
   whenever new ptt
     whenever
-    aPtt < 45        | giveBolus 80 units/kg of: "heparin" by: "iv"
-                     | increase "heparin" by: 3 units/kg/hour
+    aPtt < 45          | giveBolus 80 units/kg of: "heparin" by: "iv"
+                       | increase "heparin" by: 3 units/kg/hour
 
-    45 < aPtt < 59   | giveBolus 40 units/kg of: "heparin" by: "iv"
-                     | increase "heparin" by: 1 unit/kg/hour
+    aPtt in 45 to 59   | giveBolus 40 units/kg of: "heparin" by: "iv"
+                       | increase "heparin" by: 1 unit/kg/hour
 
-    101 < aPtt < 123 | decrease "heparin" by: 1 unit/kg/hour
+    aPtt in 101 to 123 | decrease "heparin" by: 1 unit/kg/hour
 
-    aPtt > 123       | hold "heparin"
-                     | after 1 hour
-                     |     restart "heparin"
-                     |     decrease "heparin" by: 3 units/kg/hour
+    aPtt > 123         | hold "heparin"
+                       | after 1 hour
+                       |     restart "heparin"
+                       |     decrease "heparin" by: 3 units/kg/hour
 
 // version 1
 handler heparinPttCheckingV1 is
@@ -33,8 +33,8 @@ handler heparinPttCheckingV1 is
 
 //version 2
 handler heparinPttCheckingV2 is
-  Q 6 hours checkPtt whenever not 59 < ptt < 101, x2
-  Q 24 hours checkPtt whenever 59 < ptt < 101, x2
+  Q 6 hours checkPtt whenever not ptt in 59 to 101, x2
+  Q 24 hours checkPtt whenever ptt in 59 to 101, x2
 
 /// ignore this
 

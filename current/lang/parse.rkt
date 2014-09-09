@@ -173,7 +173,10 @@
   (check-equal? (parse-bool-from-numb '(1 (< (3 < 4))))
                 '(and (< 1 3)
                   (< 3 4))))
-
+(define (parse-in-range l)
+    (match l
+      [(list e _ _ _ _ _ o _ _ _ c)
+       `(in-range ,e ,o ,c)]))
 (define (raise-parse-error p m)
   (raise-read-error m
                     (position-source p)
@@ -293,6 +296,10 @@
      STRING
      CallId
      Infix))]
+  
+  
+  
+    
   ;; function calls
   [Call+Parens (:seq (->stx flatten)
                      (list ID ArgsList+Parens))]
@@ -335,12 +342,23 @@
   [ANDOR (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list AND OR))))]
 
   
+
+
+  
   [BoolFromNumTop (:seq (->stx/filter parse-bool-from-numb) (list BoolFromNum))]
   [BoolFromNum
-   (:seq no-op (list Numeric (:? no-op (:seq no-op (list ?WHITESPACE LGT ?WHITESPACE BoolFromNum)))))]
+   (:seq no-op (list Range (:? no-op (:seq no-op (list ?WHITESPACE LGT ?WHITESPACE BoolFromNum)))))]
   [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list IS "<=" ">=" ">" "<" "="))))]
 
+  [Range (:/ (list
+              (:seq (->stx parse-in-range)
+                    (list Numeric WHITESPACE
+                          IN WHITESPACE (:? no-op RANGE) ?WHITESPACE
+                          Numeric WHITESPACE TO WHITESPACE Numeric))
+              Numeric))]
+
   [Numeric Sum]
+  
   [Sum (:seq (->stx/filter
               (match-lambda
                [(list r) r]
@@ -406,7 +424,8 @@
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
                       UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN
-                      SINCELAST APART))]
+                      SINCELAST APART
+                      IN RANGE TO))]
   [AND "and"]
   [OR "or"]
   [REQUIRE "require"]
@@ -425,6 +444,9 @@
   [X "x"]
   [APART "apart"]
   [SINCELAST "since last"]
+  [IN "in"]
+  [RANGE "range"]
+  [TO "to"]
 
   ;; basics
   [END (:/ (list (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
@@ -454,7 +476,7 @@
   #:tokens 
   (comment LANG COMMENT) 
   (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-         OP FUNCTION NEW COMMA NOT X SINCELAST APART) 
+         OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO) 
   (white-space NEWLINE WHITESPACE) 
   (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok) 
   (keyword KEYWORD)
@@ -614,6 +636,9 @@ initially
   (test-parse "1<2"
               #:pattern Expr
               (< 1 2))
+  (test-parse "x<2"
+              #:pattern Expr
+              (< x 2))
   (test-parse "1<2<3"
               #:pattern Expr
               (and (< 1 2) (< 2 3)))
@@ -632,7 +657,25 @@ initially
               #:pattern Expr 
               (and (and (< 1 2) (< 2 3))
                    (>= 0.4 4.0)))
-  
+  ;; ranges
+  (test-parse "x in 5 to z"
+              #:pattern Expr
+              (in-range x 5 z))
+  (test-parse "x"
+              #:pattern Sum
+              x)
+  (test-parse "x in 5 to z"
+              #:pattern Range
+              (in-range x 5 z))
+  (test-parse "x in 5 to 5"
+              #:pattern Range
+              (in-range x 5 5))
+  (test-parse "5 in range 5 to z"
+              #:pattern Range
+              (in-range 5 5 z))
+  (test-parse "1 in range 5 to 12"
+              #:pattern Expr
+              (in-range 1 5 12))
   ;;; the big ones
   (test-parse 
    "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
@@ -773,10 +816,10 @@ handler infusion is
 
   (test-parse 
    "handler heparinPttChecking is
-  Q 6 hours checkPtt whenever not 59 < ptt < 101, x2
+  Q 6 hours checkPtt whenever not ptt in range 59 to 101, x2
   Q 24 hours checkPtt whenever 59 < ptt < 101, x2"
    (define-handler heparinpttchecking
-     (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
+     (whenever (not (in-range ptt 59 101)) #:times 2
                (q (-number 6 hours) checkptt))
      (whenever (and (< 59 ptt) (< ptt 101)) #:times 2
                (q (-number 24 hours) checkptt))))

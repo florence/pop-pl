@@ -21,7 +21,8 @@ with '-' prevents access.
   [unit:>= >=]
   [unit:< <]
   [unit:<= <=]
-  [unit:= =])
+  [unit:= =]
+  [in:in-range in-range])
  is
  ;; internal
  make-handler define-message add-handler define-handler
@@ -346,6 +347,9 @@ with '-' prevents access.
 (define/func unit:< (convert/<>= <))
 (define/func unit:<= (convert/<>= <=))
 (define/func unit:= (convert/<>= =))
+(define/func (in:in-range n start end)
+  (and (unit:<= start n)
+       (unit:< n end)))
 
 (define/func is equal?)
 
