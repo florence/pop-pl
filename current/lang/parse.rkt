@@ -236,8 +236,8 @@
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverExtras (:seq (lambda (r p) (fourth r))
                         (list ?WHITESPACE COMMA ?WHITESPACE WheneverExtrasStx))]
-  [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (first r)))
-                                     (list NUMBER-RAW WHITESPACE TIME))
+  [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (third r)))
+                                     (list X ?WHITESPACE NUMBER-RAW))
                                (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
                                      (list Number WHITESPACE APART))
                                (:seq (lambda (r p) (list ((->stx values) '#:since-last p) (last r)))
@@ -406,7 +406,7 @@
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
                       UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN
-                      TIME SINCELAST APART))]
+                      SINCELAST APART))]
   [AND "and"]
   [OR "or"]
   [REQUIRE "require"]
@@ -422,7 +422,7 @@
   [AFTER "after"]
   [FUNCTION "function"]
   [NOT "not"]
-  [TIME "times"]
+  [X "x"]
   [APART "apart"]
   [SINCELAST "since last"]
 
@@ -454,7 +454,7 @@
   #:tokens 
   (comment LANG COMMENT) 
   (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-         OP FUNCTION NEW COMMA NOT TIME SINCELAST APART) 
+         OP FUNCTION NEW COMMA NOT X SINCELAST APART) 
   (white-space NEWLINE WHITESPACE) 
   (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok) 
   (keyword KEYWORD)
@@ -508,7 +508,7 @@
               (define-handler x (test)))
   (test-parse "hanDlEr X iS\n  tEst"
               (define-handler x (test)))
-  (test-parse "initially\n whenever x, 3 times, 1 hour apart\n  x"
+  (test-parse "initially\n whenever x, x3, 1 hour apart\n  x"
               (initially
                (whenever x #:times 3 #:apart (-number 1 hour) (x))))
   (test-parse "1 hour"
@@ -520,7 +520,7 @@
   (test-parse "-1-1"
               #:pattern Expr
               (+ (- 1) (- 1)))
-  (test-parse "initially\n notifyDoctor whenever painscore > 8, 3 times, since last notifyDoctor"
+  (test-parse "initially\n notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
               (initially 
                (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
                          (notifydoctor))))
@@ -773,8 +773,8 @@ handler infusion is
 
   (test-parse 
    "handler heparinPttChecking is
-  Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
-  Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times"
+  Q 6 hours checkPtt whenever not 59 < ptt < 101, x2
+  Q 24 hours checkPtt whenever 59 < ptt < 101, x2"
    (define-handler heparinpttchecking
      (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
                (q (-number 6 hours) checkptt))
@@ -788,7 +788,7 @@ handler infusion is
               #:pattern Expr
               (not (and (< 59 ptt) (< ptt 101))))
   (test-parse
-   "\n Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times"
+   "\n Q 6 hours checkPtt whenever not 59 < ptt < 101, x2"
    #:pattern Line
    (line 1
          (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2

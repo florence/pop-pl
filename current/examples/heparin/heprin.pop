@@ -33,8 +33,8 @@ handler heparinPttCheckingV1 is
 
 //version 2
 handler heparinPttCheckingV2 is
-  Q 6 hours checkPtt whenever not 59 < ptt < 101, 2 times
-  Q 24 hours checkPtt whenever 59 < ptt < 101, 2 times
+  Q 6 hours checkPtt whenever not 59 < ptt < 101, x2
+  Q 24 hours checkPtt whenever 59 < ptt < 101, x2
 
 /// ignore this
 
