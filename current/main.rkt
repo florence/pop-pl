@@ -58,8 +58,7 @@ with '-' prevents access.
            (define real b)
            (define-syntax (n stx)
              (syntax-parse stx
-               [n:id #'(error 'silly "thing") #;(raise-syntax-error 'function "a function cannot be used as an argument" #'n)
-                ]
+               [n:id #'(error 'thing "stuff") #;(raise-syntax-error 'function "a function cannot be used as an argument" #'n)]
                [(n:id a (... ...))
                 #'(real a (... ...))]))))]))
 
@@ -71,6 +70,7 @@ with '-' prevents access.
         (define -eval eval)
         (provide (rename-out [-eval eval]))
         body ...)]))
+
 (define (eval msg)
   (maybe-update-time! msg)
   (for ([(_ h!) (in-hash current-handlers)])

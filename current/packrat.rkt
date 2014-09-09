@@ -19,8 +19,8 @@
   (if (and (not l) c)
       (location 0 c p)
       (location l c p)))
-(define (make-position l1 l2 [name #f])
-  (position (object-name name)
+(define (make-position l1 l2 name)
+  (position name
             (location-line l1)
             (location-col l1)
             (location-pos l1)
@@ -74,9 +74,9 @@
            (shared 
             ([top (pattern 'top s)]
              [name (pattern 'name r)] ...)
-            (values (lambda (in #:debug [debug #f] #:pattern [pattern top])
+            (values (lambda (in #:debug [debug #f] #:pattern [pattern top] #:name [nme #f])
                       (define t (make-hasheq))
-                      (define-values (res p) (parse* pattern in t #:debug debug))
+                      (define-values (res p) (parse* pattern in (if nme nme (object-name in)) t #:debug debug))
                       (when (and debug (not res))
                         (write `(failed at ,p with table ,t))
                         (write "\n"))
@@ -97,17 +97,17 @@
            body ...))]))
 (define tab-count (make-parameter 0))
 
-(define (parse* pat i [table (make-hasheq)] #:debug [a:debug #f])
+(define (parse* pat i name [table (make-hasheq)] #:debug [a:debug #f])
   (define s (if (string? i) i (port->string i)))
   (define in (open-input-string s))
   (port-count-lines! in)
-  (parse pat in table #:debug a:debug))
+  (parse pat in name table #:debug a:debug))
 
-(define (parse pat in [table (make-hasheq)] #:debug [a:debug #f])
+(define (parse pat in [name #f] [table (make-hasheq)] #:debug [a:debug #f])
   (define start (make-location in))
 
-  (define (get-pos) (make-position start (make-location in) in))
-  (define (parse* pat) (parse pat in table #:debug a:debug))
+  (define (get-pos) (make-position start (make-location in) name))
+  (define (parse* pat) (parse pat in name table #:debug a:debug))
   (define (memoize val)
     ;;FIXME
     (define sub (hash-ref! table in (make-hash)))

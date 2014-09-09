@@ -8,5 +8,5 @@
    [(_ d) d]))
 
 (define (read-syntax src in)
-  (define-values (r p) (parse in))
+  (define-values (r p) (parse in #:name src))
   (if r r (raise-parse-error p "unknown parse error")))
