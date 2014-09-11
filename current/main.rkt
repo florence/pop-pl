@@ -95,6 +95,8 @@ with '-' prevents access.
   (define t (message-time m))
   (for ([n (message-tags m)])
     (hash-set! last-message-time-cache n t))
+  (for ([! message-matchers])
+    (! m))
   (set! next-log (cons m next-log)))
 
 (define (add-handler! n f)
@@ -185,9 +187,9 @@ with '-' prevents access.
                                        [_ #'values])])
                         (syntax/loc 
                             #'t
-                          (n (let* ([log (since-last current-log)]
-                                    [matching (get-matching log)]
-                                    [acceptable (apart matching)])
+                          (n (let* ([matching (get-matching)]
+                                    [since (since-last matching)]
+                                    [acceptable (apart since)])
                                (times? acceptable)))))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
@@ -229,10 +231,15 @@ with '-' prevents access.
                     (values (cons l res) (message-time l))
                     (values res time))))
             (reverse res)))]))))
+
 (struct failure ())
+(define message-matchers null)
+(define message-match-lists (make-hash))
+(define (add-matcher! f)
+  (set! message-matchers (cons f message-matchers)))
 (define-for-syntax (make-get-matching stx)
   (syntax-parse stx
-    [e:expr 
+    [e:expr
      (with-syntax* ([msg (generate-temporary)]
                     [pats 
                      (for/list ([(k v) (in-dict messages)])
@@ -249,12 +256,20 @@ with '-' prevents access.
                                                  _)
                                         x]
                                        [_ (raise (failure))])]))])))])
-       (syntax/loc stx
-         (lambda (log)
-           (filter (lambda (msg)
-                     (with-handlers ([failure? (const #f)])
-                       (let-syntax pats e)))
-                   log))))]))
+       
+       (with-syntax* ([key (generate-temporary)])
+         (syntax-local-lift-expression
+          #'(begin
+              (add-matcher!
+               (lambda (msg) 
+                 (with-handlers ([failure? void])
+                   (when (let-syntax pats e)
+                     (hash-set! message-match-lists
+                                'key
+                                (cons msg (hash-ref message-match-lists 'key)))))))
+              (hash-set! message-match-lists 'key null)))
+         (syntax/loc stx
+           (lambda () (hash-ref message-match-lists 'key)))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
   (if (not maybe-stx)
