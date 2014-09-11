@@ -1,17 +1,20 @@
 #lang racket
-(provide simulate)
-(require "heprin.pop" pop-pl/current/private/shared)
 
 
-;; Natural (in days) [Real] -> (Listof (list Natural Natural)) (Listof (listatural Natural)) (Listof (list Natural Natural))
+;; Natural (in days) [Real] -> (Listof (vector Natural Natural)) (Listof (vector natural Natural)) (Listof (vector Natural Real))
 ;; takes the number of days to run the simulation and returns:
 ;; 1. Time x heparin infusion rate (units/kg/hour). Each point is when the infusion changes
 ;; 2. Time x Heparin bolus (units/kg). Each point is when the bolus is given, and how much
 ;; 3. Time x aPtt count (seconds). Each point is when the test was asked for, and what the results are be
 ;; all lists are ordered by time
 
+(provide simulate)
+
+(require "heprin.pop" pop-pl/current/private/shared)
+
 (define (simulate days [factor 5])
-  (define log (run-simulation-for (* days 24 60 60) factor))
+  (define fulltime (* days 24 60 60))
+  (define log (run-simulation-for fulltime factor))
   (define restart-value 0)
   (define-values (hc hb m _)
     (for*/fold ([heparin-continous null] [heparin-bolus null] [measured null] [count 0])
@@ -23,7 +26,6 @@
                  heparin-bolus
                  measured
                  new-count)]
-        ;; TODO: needs to handle stop and restart
         [(message (list-no-order 'start _ ...) (list (in:number amount _) "heparin") t)
          (values (cons (vector t amount) heparin-continous)
                  heparin-bolus
@@ -51,7 +53,8 @@
                  (cons (vector t v) measured)
                  count)]
         [else (values heparin-continous heparin-bolus measured count)])))
-  (values (reverse hc) (reverse hb) (reverse m)))
+  (define last (vector fulltime (vector-ref (first hc) 0)))
+  (values (reverse (cons last hc)) (reverse hb) (reverse m)))
 
 (define time-advance 60);in seconds
 (define (run-simulation-for time factor)
@@ -112,7 +115,7 @@
   (message '(ptt) (list value) (add1 time)))
 
 (define (calculate-ptt h factor)
-  (/ h factor))
+  (* h factor))
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)
