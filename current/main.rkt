@@ -33,14 +33,6 @@ with '-' prevents access.
                      unstable/sequence))
 (require (for-meta 2 racket/base syntax/parse))
 (module+ test (require rackunit))
-;;; global state
-(define last-message-time-cache (make-hash))
-(define current-handlers (hash))
-(define next-handlers (make-hash))
-(define cur-log null)
-(define next-log null)
-(define time 0)
-
 ;;; things that need to go first
 (begin-for-syntax
   (define-syntax-class number+unit
@@ -63,49 +55,73 @@ with '-' prevents access.
                [(na:id a (... ...))
                 #'(real a (... ...))]))))]))
 
+(define (current-time) (ctime))
+(define ctime (make-parameter 0))
+(define next-handlers (make-parameter #f))
+(define-for-syntax -time (generate-temporary))
+(define-for-syntax -next-handlers (generate-temporary))
+(define-for-syntax -last-message-time-cache (generate-temporary))
+(define-for-syntax -send-message! (generate-temporary))
+(define-for-syntax -add-matcher! (generate-temporary))
+(define-for-syntax -message-match-lists (generate-temporary))
 ;;; evaluator
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
-     #'(#%module-begin
-        (define -eval eval)
-        (provide (rename-out [-eval eval]))
-        body ...)]))
+     (with-syntax ([-time (syntax-local-introduce -time)]
+                   [-next-handlers (syntax-local-introduce -next-handlers)]
+                   [-last-message-time-cache (syntax-local-introduce -last-message-time-cache)]
+                   [send-message! (syntax-local-introduce -send-message!)]
+                   [-add-matcher! (syntax-local-introduce -add-matcher!)]
+                   [-message-match-lists (syntax-local-introduce -message-match-lists)])
+       #`(#%module-begin
+          (provide (rename-out [-eval eval]))
 
-(define (eval msg)
-  (maybe-update-time! msg)
-  (for ([(_ h!) (in-hash current-handlers)])
-    (h! msg cur-log))
-  (set! current-handlers (hash->immutable-hash next-handlers))
-  (set! cur-log (append next-log (list msg) cur-log))
-  (define res next-log)
-  (set! next-log null)
-  (append res (list msg)))
+          ;; global state
+          (define -last-message-time-cache (make-hash))
+          (define current-handlers (hash))
+          (define -next-handlers (make-hash))
+          (define cur-log null)
+          (define next-log null)
+          (define -time 0)
+          (define message-matchers null)
+          (define -message-match-lists (make-hash))
 
-(define (maybe-update-time! msg)
-  (match msg
-    [(message '(time) (list n) #f)
-     (set! time (+ n time))]
-    [else (void)]))
+          (define (-add-matcher! f)
+            (set! message-matchers (cons f message-matchers)))
+
+          (define (-eval msg)
+            (maybe-update-time! msg)
+            (for ([(_ h!) (in-hash current-handlers)])
+              (h! msg cur-log))
+            (set! current-handlers (hash->immutable-hash -next-handlers))
+            (set! cur-log (append next-log (list msg) cur-log))
+            (define res next-log)
+            (set! next-log null)
+            (append res (list msg)))
+          (define (maybe-update-time! msg)
+            (match msg
+              [(message '(time) (list n) #f)
+               (set! -time (+ n -time))]
+              [else (void)]))
+          (define (send-message! m)
+            (define t (message-time m))
+            (for ([n (message-tags m)])
+              (hash-set! -last-message-time-cache n t))
+            (for ([! message-matchers])
+              (! m))
+            (set! next-log (cons m next-log)))
+
+
+          body ...))]))
 
 (define (hash->immutable-hash hash)
   (for/hash ([(k h) (in-hash hash)]) (values k h)))
 
-(define (send-message! m)
-  (define t (message-time m))
-  (for ([n (message-tags m)])
-    (hash-set! last-message-time-cache n t))
-  (for ([! message-matchers])
-    (! m))
-  (set! next-log (cons m next-log)))
-
 (define (add-handler! n f)
-  (hash-set! next-handlers n f))
+  (hash-set! (next-handlers) n f))
 (define (remove-handler! n)
-  (hash-remove! next-handlers n))
-
-(define (current-time) time)
-
+  (hash-remove! (next-handlers) n))
 
 ;;; handlers
 (define-syntax-parameter current-message (make-rename-transformer #'void))
@@ -120,18 +136,24 @@ with '-' prevents access.
 (define-syntax (define-handler stx)
   (syntax-parse stx
     [(_ n:id body ...)
-     (syntax/loc stx
-       (begin
-         (define/func n (make-handler body ...))
-         (add-handler n)))]))
+     (with-syntax ([-next-handlers (syntax-local-introduce -next-handlers)])
+       (syntax/loc stx
+         (begin
+           (define/func n (make-handler body ...))
+           (parameterize ([next-handlers -next-handlers])
+             (add-handler n)))))]))
 
 (define-syntax (make-handler stx)
   (syntax-parse stx
     [(make-handler body ...)
-     #`(lambda (event log)
-         (syntax-parameterize ([current-message (make-rename-transformer #'event)]
-                               [current-log (make-rename-transformer #'log)])
-           body ...))]))
+     (with-syntax ([-time (syntax-local-introduce -time)]
+                   [-next-handlers (syntax-local-introduce -next-handlers)])
+       #`(lambda (event log)
+           (syntax-parameterize ([current-message (make-rename-transformer #'event)]
+                                 [current-log (make-rename-transformer #'log)])
+             (parameterize ([ctime -time]
+                            [next-handlers -next-handlers])
+               body) ...)))]))
 (define-syntax (add-handler stx)
   (syntax-parse stx
     [(add-handler id)
@@ -233,10 +255,7 @@ with '-' prevents access.
             (reverse res)))]))))
 
 (struct failure ())
-(define message-matchers null)
-(define message-match-lists (make-hash))
-(define (add-matcher! f)
-  (set! message-matchers (cons f message-matchers)))
+
 (define-for-syntax (make-get-matching stx)
   (syntax-parse stx
     [e:expr
@@ -255,7 +274,9 @@ with '-' prevents access.
                                                  (list* x _)
                                                  _)
                                         x]
-                                       [_ (raise (failure))])]))])))])
+                                       [_ (raise (failure))])]))])))]
+                    [message-match-lists (syntax-local-introduce -message-match-lists)]
+                    [add-matcher! (syntax-local-introduce -add-matcher!)])
        
        (with-syntax* ([key (generate-temporary)])
          (syntax-local-lift-expression
@@ -304,9 +325,10 @@ with '-' prevents access.
      (with-syntax ([(args ...)
                     (for/list ([e (in-syntax #'(exprs ...))]
                                #:unless (keyword? (syntax-e e)))
-                      e)])
+                      e)]
+                   [-last-message-time-cache (syntax-local-introduce -last-message-time-cache)])
        #'(when
-             (let ([m (hash-ref last-message-time-cache 'name #f)])
+             (let ([m (hash-ref -last-message-time-cache 'name #f)])
                (implies m (after? n m)))
            (name exprs ...)))]))
 ;;; numbers
@@ -373,38 +395,39 @@ with '-' prevents access.
   (define messages (make-free-id-table))
   (define message-args (make-free-id-table)))
 (define-syntax (define-message stx)
-  (define-splicing-syntax-class args
-    (pattern (~seq a:arg ...)
-             #:with names #'(a.name ...)
-             #:with flattened (flatten
-                               (map syntax->list
-                                    (syntax->list #'(a ...))))))
-  (define-splicing-syntax-class arg
-    (pattern x:id #:with name #'x)
-    (pattern (~seq k:keyword x:id) #:with name #'x))
-  (syntax-parse stx
-    ;; basic define
-    [(define-message name:id (args:args))
-     (define key (syntax-local-introduce #'name))
-     (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
-     (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
-     (quasisyntax/loc stx
-       (define/func (name #,@#'args.flattened #:-keys [keys null])
-         (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time)))))]
-    ;; define from other message
-    [(define-message name:id other:id)
-     (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
-     (define args (dict-ref message-args (syntax-local-introduce #'other)))
-     (dict-set! messages (syntax-local-introduce #'name) arg-names)
-     (dict-set! message-args (syntax-local-introduce #'name) args)
-     (quasisyntax/loc stx
-       (define/func (name #,@args #:-keys [keys null])
-         (other #,@args #:-keys `(name ,@keys))))]
-    ;; define from function
-    [(define-message name:id (args:args) (super:id call ...))
-     (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
-     (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
-     (quasisyntax/loc stx 
-       (define/func (name #,@#'args.flattened #:-keys [keys null])
-         (super call ... #:-keys `(name ,@keys))))]))
+  (with-syntax ([send-message! (syntax-local-introduce -send-message!)])
+    (define-splicing-syntax-class args
+      (pattern (~seq a:arg ...)
+               #:with names #'(a.name ...)
+               #:with flattened (flatten
+                                 (map syntax->list
+                                      (syntax->list #'(a ...))))))
+    (define-splicing-syntax-class arg
+      (pattern x:id #:with name #'x)
+      (pattern (~seq k:keyword x:id) #:with name #'x))
+    (syntax-parse stx
+      ;; basic define
+      [(define-message name:id (args:args))
+       (define key (syntax-local-introduce #'name))
+       (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
+       (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
+       (quasisyntax/loc stx
+         (define/func (name #,@#'args.flattened #:-keys [keys null])
+           (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time)))))]
+      ;; define from other message
+      [(define-message name:id other:id)
+       (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
+       (define args (dict-ref message-args (syntax-local-introduce #'other)))
+       (dict-set! messages (syntax-local-introduce #'name) arg-names)
+       (dict-set! message-args (syntax-local-introduce #'name) args)
+       (quasisyntax/loc stx
+         (define/func (name #,@args #:-keys [keys null])
+           (other #,@args #:-keys `(name ,@keys))))]
+      ;; define from function
+      [(define-message name:id (args:args) (super:id call ...))
+       (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
+       (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
+       (quasisyntax/loc stx 
+         (define/func (name #,@#'args.flattened #:-keys [keys null])
+           (super call ... #:-keys `(name ,@keys))))])))
 
