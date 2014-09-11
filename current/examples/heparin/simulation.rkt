@@ -3,15 +3,15 @@
 (require "heprin.pop" pop-pl/current/private/shared)
 
 
-;; Natural (in days) -> (Listof (list Natural Natural)) (Listof (listatural Natural)) (Listof (list Natural Natural))
+;; Natural (in days) [Real] -> (Listof (list Natural Natural)) (Listof (listatural Natural)) (Listof (list Natural Natural))
 ;; takes the number of days to run the simulation and returns:
 ;; 1. Time x heparin infusion rate (units/kg/hour). Each point is when the infusion changes
 ;; 2. Time x Heparin bolus (units/kg). Each point is when the bolus is given, and how much
 ;; 3. Time x aPtt count (seconds). Each point is when the test was asked for, and what the results are be
 ;; all lists are ordered by time
 
-(define (simulate days)
-  (define log (run-simulation-for (* days 24 60 60)))
+(define (simulate days [factor 5])
+  (define log (run-simulation-for (* days 24 60 60) factor))
   (define restart-value 0)
   (define-values (hc hb m _)
     (for*/fold ([heparin-continous null] [heparin-bolus null] [measured null] [count 0])
@@ -54,7 +54,7 @@
   (values (reverse hc) (reverse hb) (reverse m)))
 
 (define time-advance 60);in seconds
-(define (run-simulation-for time)
+(define (run-simulation-for time factor)
   (define-values (res _in-system _cont-dosage _next)
     (for/fold ([outgoing null] [heparin-in-system 0] [heparin-continous 0] [next null]) ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
@@ -63,7 +63,7 @@
                 (for/fold ([r null]) ([msg next])
                   (append r (eval msg)))))
       (define-values (o his hc n)
-        (eval-log log outgoing heparin-in-system heparin-continous))
+        (eval-log log outgoing heparin-in-system heparin-continous factor))
       (values o
               (heparin-values-after his hc time-advance)
               hc
@@ -74,12 +74,13 @@
   (eval (message '(time) (list time-advance) #f)))
 
 (define restart-amount 0)
-(define (eval-log new-log outgoing heparin-in-system heparin-continous [handle-next null])
+(define (eval-log new-log outgoing heparin-in-system heparin-continous factor [handle-next null])
   (define (eval-log* is hc)
     (eval-log (rest new-log)
               (cons (first new-log) outgoing)
               is
               hc
+              factor
               handle-next))
   (if (null? new-log)
       (values outgoing heparin-in-system heparin-continous handle-next)
@@ -103,15 +104,15 @@
                      (cons msg outgoing)
                      heparin-in-system
                      heparin-continous
-                     (cons (new-ptt (calculate-ptt heparin-in-system) t) handle-next))]
+                     factor
+                     (cons (new-ptt (calculate-ptt heparin-in-system factor) t) handle-next))]
           [else (eval-log* heparin-in-system heparin-continous)]))))
 
 (define (new-ptt value time)
   (message '(ptt) (list value) (add1 time)))
 
-(define (calculate-ptt h)
-  ;;TODO wut
-  h)
+(define (calculate-ptt h factor)
+  (/ h factor))
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)
