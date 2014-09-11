@@ -1,0 +1,34 @@
+#lang pop-pl/current
+
+//http://www.hospitalmedicine.org/Web/Quality_Innovation/Implementation_Toolkits/Glycemic_Control/Web/Quality___Innovation/Implementation_Toolkit/Glycemic/Clinical_Tools/Insulin_Orders_Infusions.aspx
+// North Caroline Protocol
+
+initially
+  begin eq2
+
+
+handler eq1 is
+  whenever new BG 
+    a
+handler eq2 is
+  whenever new BG 
+
+handler eq3 is
+  whenever new BG 
+
+handler eq4 is
+  whenever new BG 
+
+handler eq5 is
+  whenever new BG 
+
+handler eq6 is
+  whenever new BG 
+
+handler monitoring is 
+  Q 1 hour checkBG
+  
+
+message BG is [ value ]
+message checkBG is []
+message set is [ drug to: amount ]
