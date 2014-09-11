@@ -71,6 +71,7 @@
               (heparin-values-after his hc time-advance)
               hc
               n)))
+  (reset!)
   res)
 
 (define (inc-time)

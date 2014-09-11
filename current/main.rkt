@@ -58,12 +58,12 @@ with '-' prevents access.
 (define (current-time) (ctime))
 (define ctime (make-parameter 0))
 (define next-handlers (make-parameter #f))
-(define-for-syntax -time (generate-temporary))
-(define-for-syntax -next-handlers (generate-temporary))
-(define-for-syntax -last-message-time-cache (generate-temporary))
-(define-for-syntax -send-message! (generate-temporary))
-(define-for-syntax -add-matcher! (generate-temporary))
-(define-for-syntax -message-match-lists (generate-temporary))
+(define-for-syntax -time (generate-temporary '-))
+(define-for-syntax -next-handlers (generate-temporary '-))
+(define-for-syntax -last-message-time-cache (generate-temporary '-))
+(define-for-syntax -send-message! (generate-temporary '-))
+(define-for-syntax -add-matcher! (generate-temporary '-))
+(define-for-syntax -message-match-lists (generate-temporary '-))
 ;;; evaluator
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
@@ -75,7 +75,7 @@ with '-' prevents access.
                    [-add-matcher! (syntax-local-introduce -add-matcher!)]
                    [-message-match-lists (syntax-local-introduce -message-match-lists)])
        #`(#%module-begin
-          (provide (rename-out [-eval eval]))
+          (provide (rename-out [-eval eval] [-reset! reset!]))
 
           ;; global state
           (define -last-message-time-cache (make-hash))
@@ -86,6 +86,15 @@ with '-' prevents access.
           (define -time 0)
           (define message-matchers null)
           (define -message-match-lists (make-hash))
+          
+          (define (-reset!)
+            (set! -last-message-time-cache (make-hash))
+            (set! current-handlers (hash))
+            (set! -next-handlers (hash-copy initial-handlers))
+            (set! cur-log null)
+            (set! next-log null)
+            (set! -time 0)
+            (set! -message-match-lists (hash-copy initial-match-lists)))
 
           (define (-add-matcher! f)
             (set! message-matchers (cons f message-matchers)))
@@ -111,9 +120,12 @@ with '-' prevents access.
             (for ([! message-matchers])
               (! m))
             (set! next-log (cons m next-log)))
+          
+          
 
-
-          body ...))]))
+          body ...
+          (define initial-handlers (hash->immutable-hash -next-handlers))
+          (define initial-match-lists (hash->immutable-hash -message-match-lists))))]))
 
 (define (hash->immutable-hash hash)
   (for/hash ([(k h) (in-hash hash)]) (values k h)))
