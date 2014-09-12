@@ -101,6 +101,10 @@ with '-' prevents access.
 
           (define (-eval msg)
             (maybe-update-time! msg)
+            (for ([n (message-tags msg)])
+              (hash-set! -last-message-time-cache n -time))
+            (for ([! message-matchers])
+              (! msg))
             (for ([(_ h!) (in-hash current-handlers)])
               (h! msg cur-log))
             (set! current-handlers (hash->immutable-hash -next-handlers))
@@ -282,7 +286,7 @@ with '-' prevents access.
                                 (syntax-parse stx
                                   [name:id
                                    #'(match msg 
-                                       [(message (? (lambda (l) (member 'msg l)) _)
+                                       [(message (? (lambda (l) (member 'name l)) _)
                                                  (list* x _)
                                                  _)
                                         x]

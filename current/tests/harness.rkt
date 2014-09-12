@@ -1,10 +1,11 @@
 #lang racket
 (provide prescription-test)
 (require (for-syntax syntax/parse))
-(require pop-pl/current/private/shared rackunit)
+(require pop-pl/current/private/shared rackunit rackunit/text-ui)
 
 (define TIME-ADVANCE 60)
 (define current-eval (make-parameter (lambda _ (error 'test "no eval set"))))
+(define current-reset (make-parameter (lambda _ (error 'test "no reset set"))))
 
 (define (advance time)
   (define t (time->stamp time))
@@ -51,7 +52,13 @@
              #'(message (list-no-order 'm ... _ ___) (list e ...) _)))
   (syntax-parse stx
     [(_ path t:test-clause ...)
-     #'(parameterize ([current-eval (dynamic-require 'path 'eval)])
-         (test-case
-          'path
-          t.parsed ...))]))
+     #'(parameterize ([current-eval (dynamic-require 'path 'eval)]
+                      [current-reset (dynamic-require 'path 'reset!)])
+         (void
+          (run-tests
+           (test-suite
+            (~a 'path)
+            #:after (current-reset)
+            (test-case
+             'path
+             t.parsed ...)))))]))
