@@ -17,24 +17,26 @@
 (define (no-op r p) r)
 (define raw (->stx values))
 (define message-parse
-  (match-lambda [(list _ _ id _ _ _ f _) `(define-message ,id ,f)]
-           [(list _ _ id args _ _ _ e _)
-            `(define-message ,id ,args ,e)]))
+  (match-lambda [(list m _ id _ _ _ f _) `(,(datum->syntax #f 'define-message m) ,id ,f)]
+           [(list m _ id args _ _ _ e _)
+            `(,(datum->syntax #f 'define-message m) ,id ,args ,e)]))
 (define message-maker
   (match-lambda
    [(list _ args _) args]))
 (define parse-init
   (match-lambda
-   [(list _ _ lines)
-    `(initially ,@(join-lines lines))]))
+   [(list i _ lines)
+    `(,i ,@(join-lines lines))]))
 (define parse-handler
   (match-lambda
-   [(list _ _ name _ _ _ _ lines)
-    `(define-handler ,name ,@(join-lines lines))]))
+   [(list h _ name _ _ _ _ lines)
+    `(,(datum->syntax #f 'define-handler h) ,name ,@(join-lines lines))]))
 (module+ test
-  (let ([s #'(line 0 2)])
-    (check-equal? (parse-handler (list "handler" " " 'x "is" " " #t "\n" `(,s ,42)))
-                  `(define-handler x ,s))))
+  #;
+  (let ([h #'handler]
+        [s #'(line 0 2)])
+    (check-equal? (parse-handler (list h " " 'x "is" " " #t "\n" `(,s ,42)))
+                  `(,(datum->syntax h 'define-handler) x ,s))))
 (define parse-line
   (match-lambda
    [(list indent expr _)
@@ -103,16 +105,16 @@
 ;; parse an whenever header
 (define parse-whenever
   (match-lambda
-   [(list "whenever" _ "new" _ id #t) `(whenever-new ,id)]
-   [(list "whenever" _ "new" _ id (list _ _ _ e))
-    `(whenever-new (,id ,e))]
-   [(list "whenever" _ expr (list* extras)) `(whenever ,expr ,@(flatten extras))]
-   [(list do _ "whenever" _ when (list* extras)) `(whenever ,when ,@(flatten extras) ,do)]))
+   [(list w _ "new" _ id #t) `(,(datum->syntax #f 'whenever-new w) ,id)]
+   [(list w _ "new" _ id (list _ _ _ e))
+    `(,(datum->syntax #f 'whenever-new w) (,id ,e))]
+   [(list w _ expr (list* extras)) `(,w ,expr ,@(flatten extras))]
+   [(list do _ w _ when (list* extras)) `(,w ,when ,@(flatten extras) ,do)]))
 ;; parse a whenever that has many parts
 (define parse-whenever+parts
   (match-lambda
-   [(list "whenever" _ _ (list (list _ part _) ...))
-    `(whenever-cond  ,@(flatten-parts part))]))
+   [(list w _ _ (list (list _ part _) ...))
+    `(,(datum->syntax #f 'whenever-cond w)  ,@(flatten-parts part))]))
 ;; condense the line-by-line whenever into a series of clauses
 (define (flatten-parts parts [results null])
   (cond [(null? parts) (reverse results)]
@@ -154,8 +156,8 @@
    [(list id _ _ _ expr) `(define ,id ,expr)]))
 (define parse-require
   (match-lambda
-   [(list _ _ name _ _)
-    `(add-handler ,name)]))
+   [(list r _ name _ _)
+    `(,(datum->syntax #f 'add-handler r) ,name)]))
 
 ;;; infix
 (define (parse-bool-from-numb l)
@@ -223,7 +225,7 @@
   [EmptyLine (:seq (lambda (r p) "")
                    (list NEWLINE END))]
   [Line-Body (:/ (list Whenever Means After Expr/CallId))]
-  [After (:seq (->stx (match-lambda [(list "after" _ n) `(after ,n)])) 
+  [After (:seq (->stx (match-lambda [(list a _ n) `(,a ,n)])) 
                (list AFTER WHITESPACE Number))]
   [Whenever (:/
              (list (:seq (->stx parse-whenever+parts)
@@ -331,7 +333,7 @@
   [Bool Not]
   [Not (:/ (list
             (:seq 
-             (->stx (match-lambda [(list n _ e) (list 'not e)]))
+             (->stx (match-lambda [(list n _ e) (list n e)]))
              (list NOT WHITESPACE Not))
             AndOr))]
   [AndOr (:seq (->stx/filter
@@ -428,19 +430,19 @@
                       IN RANGE TO))]
   [AND "and"]
   [OR "or"]
-  [REQUIRE "require"]
-  [MESSAGE "message"]
+  [REQUIRE (:lit (->stx string->symbol) "require")]
+  [MESSAGE (:lit (->stx string->symbol) "message")]
   [IS "is"]
   [OPEN-BRACKET "["]
   [CLOSE-BRACKET "]"]
-  [WHENEVER "whenever"]
-  [HANDLER "handler"]
-  [INITIALLY "initially"]
+  [WHENEVER (:lit (->stx string->symbol) "whenever")]
+  [HANDLER (:lit (->stx string->symbol) "handler")]
+  [INITIALLY (:lit (->stx string->symbol) "initially")]
   [MEANS "means"]
   [PIPE "|"]
-  [AFTER "after"]
+  [AFTER (:lit (->stx string->symbol) "after")]
   [FUNCTION "function"]
-  [NOT "not"]
+  [NOT (:lit (->stx string->symbol) "not")]
   [X "x"]
   [APART "apart"]
   [SINCELAST "since last"]

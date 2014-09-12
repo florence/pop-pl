@@ -98,9 +98,11 @@
 (define tab-count (make-parameter 0))
 
 (define (parse* pat i name [table (make-hasheq)] #:debug [a:debug #f])
+  (define-values (a b c) (if (string? i) (values #f #f #f) (port-next-location i)))
   (define s (if (string? i) i (port->string i)))
   (define in (open-input-string s))
   (port-count-lines! in)
+  (set-port-next-location! in (or a 1) (or b 0) (or c 1))
   (parse pat in name table #:debug a:debug))
 
 (define (parse pat in [name #f] [table (make-hasheq)] #:debug [a:debug #f])
