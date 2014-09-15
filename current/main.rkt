@@ -26,7 +26,8 @@ with '-' prevents access.
  is
  ;; internal
  make-handler define-message add-handler define-handler
- -number)
+ -number
+ (rename-out [require -require]))
 
 (require racket/stxparam "private/shared.rkt")
 (require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax racket/list
@@ -76,7 +77,7 @@ with '-' prevents access.
                    [-message-match-lists (syntax-local-introduce -message-match-lists)])
        #`(#%module-begin
           (provide (rename-out [-eval eval] [-reset! reset!]))
-
+          #,(datum->syntax stx '(-require pop-pl/current/constants))
           ;; global state
           (define -last-message-time-cache (make-hash))
           (define current-handlers (hash))

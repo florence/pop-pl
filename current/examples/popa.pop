@@ -2,21 +2,21 @@
 
 // fentanyl section
 initially
-  start 25 micrograms/hour of: "fentanyl"
-  set "fentanyl, on demand" to: 25 micrograms
+  start 25 micrograms/hour of: fentanyl
+  set onDemandFentanyl to: 25 micrograms
 
 handler breakthroughPain is 
   // and will need to bind forward i think
   whenever new painscore and score > 8 cm
-      increase "fentanyl, on demand" by: 10 micrograms
+      increase onDemandFentanyl by: 10 micrograms
       after 1 hour
          checkPainScore
 
-  notifyDoctor whenever painscore > 8, 3 times, since last notifyDoctor
+  notifyDoctor whenever painscore > 8, x3, since last notifyDoctor
 
 handler minimalPain is
-   whenever painscore < 3, 3 times, 1 hour apart, since last decrease "fentanyl, on demand"
-      decrease "fentanyl, on demand" by: 10 micrograms
+   whenever painscore < 3, x2, 1 hour apart, since last decrease onDemandFentanyl
+      decrease onDemandFentanyl by: 10 micrograms
 
 
 message change is [ drug by: amount]

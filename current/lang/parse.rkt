@@ -879,6 +879,13 @@ handler infusion is
    "drug is \"heparin\""
    #:pattern Expr
    (is drug "heparin"))
+  
+  (test-parse 
+   "handler t is\n  notifyDoctor whenever painscore > 8, 3 times, since last notifyDoctor"
+   #:debug #t
+   (define-handler t
+     (whenever (> painscore 3) #:times 3 #:since-last notifydoctor
+               (notifydoctor))))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])
     (read-line in)
