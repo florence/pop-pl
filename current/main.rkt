@@ -189,11 +189,14 @@ with '-' prevents access.
      (unless (dict-has-key? messages (syntax-local-introduce #'id))
        (raise-syntax-error 'messages "the name of a message needs to go here" #'id))
      (define names (map syntax-local-introduce (dict-ref messages (syntax-local-introduce #'id))))
-     (with-syntax ([(name ...) names]
+     (with-syntax ([(name ...)
+                    (for/list ([n names])
+                      (datum->syntax n (syntax->datum n) #'id #'id))]
                    [(value ...)
                     (for/list ([n (in-range (length names))])
                       #`(list-ref (message-values current-message) #,n))])
-       #'(begin
+       #`(begin
+           (and #f (id))
            (when (member 'id (message-tags current-message))
              (let ([name value] ...)
                body ...))))]))
@@ -410,15 +413,16 @@ with '-' prevents access.
 ;;; messages
 (begin-for-syntax
   (define messages (make-free-id-table))
-  (define message-args (make-free-id-table)))
+  (define in:messages (make-free-id-table))
+  (define message-args (make-free-id-table))
+  (define message-name-stx-prop (datum->syntax #f 'prop)))
 (define-syntax (define-message stx)
   (with-syntax ([send-message! (syntax-local-introduce -send-message!)])
     (define-splicing-syntax-class args
       (pattern (~seq a:arg ...)
-               #:with names #'(a.name ...)
-               #:with flattened (flatten
-                                 (map syntax->list
-                                      (syntax->list #'(a ...))))))
+               #:with cleannames #'(a.name ...)
+               #:with names (datum->syntax message-name-stx-prop (syntax->datum #'(a.name ...)))
+               #:with flattened (datum->syntax message-name-stx-prop (flatten (syntax->datum #'(a ...))))))
     (define-splicing-syntax-class arg
       (pattern x:id #:with name #'x)
       (pattern (~seq k:keyword x:id) #:with name #'x))
@@ -426,16 +430,19 @@ with '-' prevents access.
       ;; basic define
       [(define-message name:id (args:args))
        (define key (syntax-local-introduce #'name))
-       (dict-set! messages key (syntax->list (syntax-local-introduce #'args.names)))
+       (dict-set! messages key (syntax->list (syntax-local-introduce #'args.cleannames)))
+       (dict-set! in:messages key (syntax->list (syntax-local-introduce #'args.names)))
        (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
        (quasisyntax/loc stx
          (define/func (name #,@#'args.flattened #:-keys [keys null])
            (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time)))))]
       ;; define from other message
       [(define-message name:id other:id)
-       (define arg-names (dict-ref messages (syntax-local-introduce #'other)))
-       (define args (dict-ref message-args (syntax-local-introduce #'other)))
-       (dict-set! messages (syntax-local-introduce #'name) arg-names)
+       (define key (syntax-local-introduce #'other))
+       (define arg-names (dict-ref in:messages key))
+       (define args (dict-ref message-args key))
+       (dict-set! messages (syntax-local-introduce #'name) (dict-ref messages key))
+       (dict-set! in:messages (syntax-local-introduce #'name) arg-names)
        (dict-set! message-args (syntax-local-introduce #'name) args)
        (quasisyntax/loc stx
          (define/func (name #,@args #:-keys [keys null])
@@ -444,7 +451,11 @@ with '-' prevents access.
       [(define-message name:id (args:args) (super:id call ...))
        (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
        (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
-       (quasisyntax/loc stx 
-         (define/func (name #,@#'args.flattened #:-keys [keys null])
-           (super call ... #:-keys `(name ,@keys))))])))
+       (dict-set! in:messages #'name (dict-ref in:messages (syntax-local-introduce #'super)))
+       (with-syntax ([(old ...) #'args.cleannames]
+                     [(new ...) #'args.names])
+         (quasisyntax/loc stx 
+           (define/func (name #,@#'args.flattened #:-keys [keys null])
+             (let-syntax ([old (make-rename-transformer #'new)] ...)
+               (super call ... #:-keys `(name ,@keys))))))])))
 
