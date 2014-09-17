@@ -4,7 +4,7 @@ initially
    giveBolus 80 units/kg of: HEParin by: "iv"
    start 18 units/kg/hour of: HEParin by: "iv"
 
-handler infusion is
+infusion:
   whenever new ptt
     whenever
     aPtt < 45          | giveBolus 80 units/kg of: HEParin by: "iv"
@@ -13,6 +13,8 @@ handler infusion is
     aPtt in 45 to 59   | giveBolus 40 units/kg of: HEParin by: "iv"
                        | increase HEParin by: 1 unit/kg/hour
 
+ // aPTt in 59 to 101  | Continue current HEParin dose
+
     aPtt in 101 to 123 | decrease HEParin by: 1 unit/kg/hour
 
     aPtt > 123         | hold HEParin
@@ -20,9 +22,10 @@ handler infusion is
                        |     restart HEParin
                        |     decrease HEParin by: 3 units/kg/hour
 
-handler heparinPttCheckingV2 is
+heparinPttChecking:
   Q 6 hours checkPtt whenever not ptt in 59 to 101, x2
   Q 24 hours checkPtt whenever ptt in 59 to 101, x2
+  
 
 /// ignore this
 

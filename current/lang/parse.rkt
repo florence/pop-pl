@@ -30,7 +30,10 @@
 (define parse-handler
   (match-lambda
    [(list h _ name _ _ _ _ lines)
-    `(,(datum->syntax #f 'define-handler h) ,name ,@(join-lines lines))]))
+    `(,(datum->syntax #f 'define-handler h) ,name ,@(join-lines lines))]
+   [(list kn _ _ lines)
+    (define name (datum->syntax kn (string->symbol (keyword->string (syntax->datum kn)))))
+    `(,(datum->syntax #f 'define-handler kn) ,name ,@(join-lines lines))]))
 (module+ test
   #;
   (let ([h #'handler]
@@ -210,8 +213,13 @@
   [Initially (:seq (->stx parse-init)
                    (list INITIALLY END (:+ no-op Line)))]
   
-  [Handler (:seq (->stx parse-handler)
-                 (list HANDLER WHITESPACE ID WHITESPACE IS (:? no-op WHITESPACE) END (:+ no-op Line)))]
+  [Handler
+   (:/
+    (list
+     (:seq (->stx parse-handler)
+           (list HANDLER WHITESPACE ID WHITESPACE IS (:? no-op WHITESPACE) END (:+ no-op Line)))
+     (:seq (->stx parse-handler)
+           (list KEYWORD ?WHITESPACE END (:+ no-op Line)))))]
   
   [Line (:/ 
          (list
@@ -475,11 +483,26 @@
   [Todo (:! (:? no-op (:rx no-op #rx".")))]
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
-  #:tokens 
+  [Other (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
+                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO))]
+  [Other+End
+   (:/
+    (list
+     X
+     OP
+     OPEN-PAREN
+     OPEN-BRACKET
+     CLOSE-PAREN
+     CLOSE-BRACKET
+     (:seq
+      no-op
+      (list
+       Other 
+       (:& (:/ (list WHITESPACE END)))))))]
+  #:tokens
   (comment LANG COMMENT) 
-  (keyword KEYWORD)
-  (other REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-         OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO) 
+  (hash-colon-keyword KEYWORD)
+  (other Other+End) 
   (white-space NEWLINE WHITESPACE) 
   (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok) 
   (symbol ID)
@@ -815,7 +838,56 @@ handler infusion is
         (after (-number 1 hour)
                (restart "heparin")
                (decrease "heparin" #:by (-number 3 units/kg/hour)))]))))
+(test-parse
+   "#lang pop-pl/current
+require heparinPttChecking
+require heparinInfusion
+require ivInserted
 
+initially 
+   giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+   start 18 units/kg/hour of: \"heparin\"
+
+infusion:
+  whenever new ptt
+    whenever
+    aPtt < 45        | giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+                     | increase \"heparin\" by: 3 units/kg/hour
+
+    45 < aPtt < 59   | giveBolus 40 units/kg of: \"heparin\" by: \"iv\"
+                     | increase \"heparin\" by: 1 unit/kg/hour
+
+    101 < aPtt < 123 | decrease \"heparin\" by: 1 unit/kg/hour
+
+    aPtt > 123       | hold \"heparin\"
+                     | after 1 hour
+                     |     restart \"heparin\"
+                     |     decrease \"heparin\" by: 3 units/kg/hour"
+   (add-handler heparinpttchecking)
+   (add-handler heparininfusion)
+   (add-handler ivinserted)
+   (initially
+    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+    (start (-number 18 units/kg/hour) #:of "heparin"))
+   (define-handler infusion
+     (whenever-new
+      ptt
+      (whenever-cond
+       [(< aptt 45)
+        (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+        (increase "heparin" #:by (-number 3 units/kg/hour))]
+       [(and (< 45 aptt)
+             (< aptt 59))
+        (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
+        (increase "heparin" #:by (-number 1 unit/kg/hour))]
+       [(and (< 101 aptt)
+             (< aptt 123))
+        (decrease "heparin" #:by (-number 1 unit/kg/hour))]
+       [(> aptt 123)
+        (hold "heparin")
+        (after (-number 1 hour)
+               (restart "heparin")
+               (decrease "heparin" #:by (-number 3 units/kg/hour)))]))))
   (test-parse 
    "handler heparinPttChecking is
   Q 6 hours checkPtt whenever not ptt in range 59 to 101, x2
@@ -844,7 +916,13 @@ handler infusion is
     e"
    (define-handler x (whenever-new (q qvalue) (e))))
 
-
+(test-parse
+   "x:
+  whenever new m and left is right
+    z"
+   (define-handler x 
+     (whenever-new (m (is left right))
+                   (z))))
   (test-parse
    "handler x is
   whenever new m and left is right
