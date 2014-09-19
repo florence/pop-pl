@@ -23,7 +23,7 @@ infusion:
                        |     decrease HEParin by: 3 units/kg/hour
 
 heparinPttChecking:
-  Q 6 hours checkPtt whenever not ptt in 59 to 101, x2
+  Q 6 hours checkPtt whenever ptt outside of 59 to 101, x2
   Q 24 hours checkPtt whenever ptt in 59 to 101, x2
   
 

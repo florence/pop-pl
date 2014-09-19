@@ -182,6 +182,10 @@
     (match l
       [(list e _ _ _ _ _ o _ _ _ c)
        `(in-range ,e ,o ,c)]))
+(define parse-outside
+    (match-lambda
+     [(list n _ _ _ _ _ _ _ lower _ _ _ upper)
+      `(not (in-range ,n ,lower ,upper))]))
 (define (raise-parse-error p m)
   (raise-read-error m
                     (position-source p)
@@ -360,10 +364,15 @@
    (:seq no-op (list Range (:? no-op (:seq no-op (list ?WHITESPACE LGT ?WHITESPACE BoolFromNum)))))]
   [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list IS "<=" ">=" ">" "<" "="))))]
 
+  
   [Range (:/ (list
               (:seq (->stx parse-in-range)
                     (list Numeric WHITESPACE
                           IN WHITESPACE (:? no-op RANGE) ?WHITESPACE
+                          Numeric WHITESPACE TO WHITESPACE Numeric))
+              (:seq (->stx parse-outside)
+                    (list Numeric WHITESPACE
+                          OUTSIDE WHITESPACE (:? no-op OF) ?WHITESPACE (:? no-op RANGE) ?WHITESPACE
                           Numeric WHITESPACE TO WHITESPACE Numeric))
               Numeric))]
 
@@ -435,7 +444,7 @@
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
                       UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN
                       SINCELAST APART
-                      IN RANGE TO))]
+                      IN RANGE TO OF OUTSIDE))]
   [AND "and"]
   [OR "or"]
   [REQUIRE (:lit (->stx string->symbol) "require")]
@@ -457,6 +466,8 @@
   [IN "in"]
   [RANGE "range"]
   [TO "to"]
+  [OUTSIDE "outside"]
+  [OF "of"]
 
   ;; basics
   [END (:/ (list (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
@@ -484,7 +495,7 @@
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
   [Other (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO))]
+                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO OUTSIDE OF))]
   [Other+End
    (:/
     (list
@@ -701,6 +712,21 @@ initially
   (test-parse "1 in range 5 to 12"
               #:pattern Expr
               (in-range 1 5 12))
+  (test-parse "1 outside of 5 to 12"
+              #:pattern Expr
+              (not (in-range 1 5 12)))
+  (test-parse "1 outside 5 to 12"
+              #:pattern Expr
+              (not (in-range 1 5 12)))
+  (test-parse "ptt outside of 59 to 101"
+              #:pattern Expr
+              (not (in-range ptt 59 101)))
+  (test-parse "ptt outside of range 59 to 101"
+              #:pattern Expr
+              (not (in-range ptt 59 101)))
+  (test-parse "ptt outside 59 to 101"
+              #:pattern Expr
+              (not (in-range ptt 59 101)))
   ;;; the big ones
   (test-parse 
    "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
