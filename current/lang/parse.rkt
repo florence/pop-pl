@@ -105,6 +105,9 @@
                      (line 0 ,#'y)))))
                 '(x (whenever y x (whenever z m) z y))))
 ;;; parsing whenevers
+;; parse whenever part lines
+(define parse-iwpe
+    (lambda (r p) (filter list? r)))
 ;; parse an whenever header
 (define parse-whenever
   (match-lambda
@@ -114,16 +117,21 @@
    [(list w _ expr (list* extras)) `(,w ,expr ,@(flatten extras))]
    [(list do _ w _ when (list* extras)) `(,w ,when ,@(flatten extras) ,do)]))
 ;; parse a whenever that has many parts
-(define parse-whenever+parts
-  (match-lambda
-   [(list w _ _ (list (list _ part _) ...))
-    `(,(datum->syntax #f 'whenever-cond w)  ,@(flatten-parts part))]))
+(define (parse-whenever+parts l)
+  (match l
+   [(list w _ 'END (list (list _ part _) ...))
+    `(,(datum->syntax #f 'whenever-cond w)  ,@(flatten-parts part))]
+   [(list w ... _ 'END (list (list _ part _) ...))
+    `(,@(parse-whenever w)
+      (,(datum->syntax #f 'whenever-cond (first w))
+       ,@(flatten-parts part)))]))
 ;; condense the line-by-line whenever into a series of clauses
 (define (flatten-parts parts [results null])
   (cond [(null? parts) (reverse results)]
         [else
          (define-values (next rest) (get-next-clause parts))
          (flatten-parts rest (cons next results))]))
+
 ;; take a line-by-line parse of a multipart whenever and get the next full clause and whats after
 (define (get-next-clause parts)
   (define start 
@@ -239,12 +247,34 @@
   [Line-Body (:/ (list Whenever Means After Expr/CallId))]
   [After (:seq (->stx (match-lambda [(list a _ n) `(,a ,n)])) 
                (list AFTER WHITESPACE Number))]
+  
   [Whenever (:/
              (list (:seq (->stx parse-whenever+parts)
                          (list WHENEVER ?WHITESPACE END
-                               (:+ (lambda (r p) (filter list? r))
+                               (:+ parse-iwpe 
                                    (:/ (list EmptyLine
                                              (:seq no-op (list INDENTATION WheneverPart END)))))))
+
+                   (:seq (->stx parse-whenever+parts)
+                         (list WHENEVER WHITESPACE NEW WHITESPACE ID
+                               (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))
+                               ?WHITESPACE END
+                               (:+ parse-iwpe
+                                   (:/ (list EmptyLine
+                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
+                   (:seq (->stx parse-whenever+parts)
+                         (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
+                               ?WHITESPACE END
+                               (:+ parse-iwpe 
+                                   (:/ (list EmptyLine
+                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
+                   (:seq (->stx parse-whenever+parts)
+                         (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
+                               ?WHITESPACE END
+                               (:+ parse-iwpe
+                                   (:/ (list EmptyLine
+                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
+
                    (:seq (->stx parse-whenever)
                          (list WHENEVER WHITESPACE NEW WHITESPACE ID
                                (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))))
@@ -470,10 +500,11 @@
   [OF "of"]
 
   ;; basics
-  [END (:/ (list (:seq no-op (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
-                 (:seq no-op (list ?WHITESPACE (:& COMMENT)
-                                   (:rx no-op #px"//.*?(?=(\n|$))")
-                                   (:& (:/ (list NEWLINE :EOF)))))))]
+  [END (:/ (list (:seq (const 'END) (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
+                 (:seq (const 'END)
+                       (list ?WHITESPACE (:& COMMENT)
+                             (:rx no-op #px"//.*?(?=(\n|$))")
+                             (:& (:/ (list NEWLINE :EOF)))))))]
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   [WHITESPACE (:rx no-op #rx" +")]
@@ -528,7 +559,8 @@
           (~optional (~seq #:debug d))
           (~optional (~seq #:pattern p))
           e:expr ...)
-       #`(let-values ([(val _) (parse t 
+       (quasisyntax/loc stx
+         (let-values ([(val _) (parse t 
                                       #,@(if (attribute d) #'(#:debug d) #'())
                                       #,@(if (not (attribute p))
                                              #'()
@@ -547,66 +579,82 @@
                #,(quasisyntax/loc stx
                    (check-equal? (convert val)
                                  res 
-                                 t))))]))
-  (test-parse "message test is [ a b: c ]"
-              (define-message test (a #:b c)))
-  (test-parse "message decrease(drug by: c) is change(drug by: -change)"
-              (define-message decrease (drug #:by c) (change drug #:by (- change))))
-  (test-parse "change(drug by: -change)"
-              #:pattern Expr
-              (change drug #:by (- change)))
-  (test-parse "change(x)"
-              #:pattern Expr
-              (change x))
-  (test-parse "-change"
-              #:pattern Expr
-              (- change))
-  
-  (test-parse "handler x is\n  test"
-              (define-handler x (test)))
-  (test-parse "hanDlEr X iS\n  tEst"
-              (define-handler x (test)))
-  (test-parse "initially\n whenever x, x3, 1 hour apart\n  x"
-              (initially
-               (whenever x #:times 3 #:apart (-number 1 hour) (x))))
-  (test-parse "1 hour"
-              #:pattern Number
-              (-number 1 hour))
-  (test-parse "-1"
-              #:pattern Expr
-              (- 1))
-  (test-parse "-1-1"
-              #:pattern Expr
-              (+ (- 1) (- 1)))
-  (test-parse "initially\n notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
-              (initially 
-               (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
-                         (notifydoctor))))
-  (test-parse "initially\n  test"
-              (initially (test)))
-  
-  (test-parse "require x"
-              (add-handler x))
-  (test-parse "initially\n  whenever\n   x | x\n   | n"
-              (initially (whenever-cond (x (x) (n)))))
-  (test-parse "initially\n  whenever x\n    x\n    n"
-              (initially (whenever x (x) (n))))
-  (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
-              (define-handler b (whenever x 12) (x))
-              (initially (x)))
-  (test-parse "require m"
-              (add-handler m))
-  (test-parse "initially\n whenever\n x | whenever x\n |  y"
-              (initially
-               (whenever-cond
-                [x (whenever x (y))])))
+                                 t)))))]))
+  (test-case
+   "Begin"
+   (test-parse "message test is [ a b: c ]"
+               (define-message test (a #:b c)))
+   (test-parse "message decrease(drug by: c) is change(drug by: -change)"
+               (define-message decrease (drug #:by c) (change drug #:by (- change))))
+   (test-parse "change(drug by: -change)"
+               #:pattern Expr
+               (change drug #:by (- change)))
+   (test-parse "change(x)"
+               #:pattern Expr
+               (change x))
+   (test-parse "-change"
+               #:pattern Expr
+               (- change))
+   
+   (test-parse "handler x is\n  test"
+               (define-handler x (test)))
+   (test-parse "hanDlEr X iS\n  tEst"
+               (define-handler x (test)))
+   (test-parse "initially\n whenever x, x3, 1 hour apart\n  x"
+               (initially
+                (whenever x #:times 3 #:apart (-number 1 hour) (x)))))
+  (test-case
+   "Second"
+   (test-parse "1 hour"
+               #:pattern Number
+               (-number 1 hour))
+   (test-parse "-1"
+               #:pattern Expr
+               (- 1))
+   (test-parse "-1-1"
+               #:pattern Expr
+               (+ (- 1) (- 1)))
+   (test-parse "initially\n notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
+               (initially 
+                (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
+                          (notifydoctor))))
+   (test-parse "initially\n  test"
+               (initially (test)))
+   
+   (test-parse "require x"
+               (add-handler x))
+   (test-parse "initially\n  whenever\n   x | x\n   | n"
+               (initially (whenever-cond (x (x) (n)))))
+   (test-parse "initially\n  whenever x\n    x\n    n"
+               (initially (whenever x (x) (n))))
+   (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
+               (define-handler b (whenever x 12) (x))
+               (initially (x)))
+   (test-parse "require m"
+               (add-handler m))
+   ;; uuggg.... do i really care?
+   #;
+   (test-parse "initially
+whenever
+ x | whenever x
+ |  y"
+               (initially
+                (whenever-cond
+                 [x (whenever x (y))]))))
+  (test-parse
+   "initially
+  whenever new x
+      y | y"
+   (initially (whenever-new x (whenever-cond (y (y))))))
   (test-parse "initially\n after 1 hour\n  x\n  y"
               (initially (after (-number 1 hour) (x) (y))))
   (test-parse "x y z"
               #:pattern CallId
               (x y z))
-  (test-parse 
-   "handler b is
+  (test-case
+   "collect"
+   (test-parse 
+    "handler b is
   QQ
   whenever t1
     e1
@@ -623,169 +671,177 @@
 initially
   whenever 12
     m"
-   (define-handler b
-     (qq)
-     (whenever t1
-               (e1)
-               (e2) 
-               (whenever-new x (e3) (e4))
-               (whenever-cond [g (m) (x)] [g2 (v) (v2)])
-               (e5)))
-   (initially (whenever 12 (m))))
-  (test-parse "\n  QQ"
-              #:pattern Line
-              (line 2 (qq)))
-  (test-parse "\n whenever t1"
-              #:pattern Line
-              (line 1 (whenever t1)))
-  (test-parse "\n    e1"
-              #:pattern Line
-              (line 4 (e1)))
-  (test-parse "\n  whenever new x"
-              #:pattern Line
-              (line 2 (whenever-new x)))
-  
+    (define-handler b
+      (qq)
+      (whenever t1
+                (e1)
+                (e2) 
+                (whenever-new x (e3) (e4))
+                (whenever-cond [g (m) (x)] [g2 (v) (v2)])
+                (e5)))
+    (initially (whenever 12 (m))))
+   (test-parse "\n  QQ"
+               #:pattern Line
+               (line 2 (qq)))
+   (test-parse "\n whenever t1"
+               #:pattern Line
+               (line 1 (whenever t1)))
+   (test-parse "\n    e1"
+               #:pattern Line
+               (line 4 (e1)))
+   (test-parse "\n  whenever new x"
+               #:pattern Line
+               (line 2 (whenever-new x)))
+   
   ;;; expressions
-  (test-parse "x"
-              #:pattern Expr
-              x)
-  (test-parse "x 1 2 y: 3 z"
-              #:pattern Call
-              (x 1 2 #:y 3 z))
-  (test-parse "x 1 2 y: 3 z"
-              #:pattern Expr
-              (x 1 2 #:y 3 z))
-  (test-parse "x(1 2 y: 3 z)"
-              #:pattern Expr
-              (x 1 2 #:y 3 z))
-  (test-parse "1+2*4"
-              #:pattern Expr
-              (+ 1 (* 2 4)))
-  (test-parse "x 1+4*3 by: 3*z z"
-              #:pattern Expr
-              (x (+ 1 (* 4 3)) #:by (* 3 z) z))
-  (test-parse "x \"m\" by: z"
-              #:pattern Expr
-              (x "m" #:by z))
+   (test-parse "x"
+               #:pattern Expr
+               x)
+   (test-parse "x 1 2 y: 3 z"
+               #:pattern Call
+               (x 1 2 #:y 3 z))
+   (test-parse "x 1 2 y: 3 z"
+               #:pattern Expr
+               (x 1 2 #:y 3 z))
+   (test-parse "x(1 2 y: 3 z)"
+               #:pattern Expr
+               (x 1 2 #:y 3 z))
+   (test-parse "1+2*4"
+               #:pattern Expr
+               (+ 1 (* 2 4)))
+   (test-parse "x 1+4*3 by: 3*z z"
+               #:pattern Expr
+               (x (+ 1 (* 4 3)) #:by (* 3 z) z))
+   (test-parse "x \"m\" by: z"
+               #:pattern Expr
+               (x "m" #:by z)))
   
   ;; infix
-  (test-parse "1<2"
-              #:pattern Expr
-              (< 1 2))
-  (test-parse "x<2"
-              #:pattern Expr
-              (< x 2))
-  (test-parse "1<2<3"
-              #:pattern Expr
-              (and (< 1 2) (< 2 3)))
-  (test-parse "4>=4"
-              #:pattern Expr
-              (>= 4 4))
-  (test-parse "1 < 2 < 3 and 4 >= 4"
-              #:pattern Expr 
-              (and (and (< 1 2) (< 2 3))
-                   (>= 4 4)))
-  (test-parse "1<2<3and4>=4"
-              #:pattern Expr 
-              (and (and (< 1 2) (< 2 3))
-                   (>= 4 4)))
-  (test-parse "1<2<3and0.4>=4.0"
-              #:pattern Expr 
-              (and (and (< 1 2) (< 2 3))
-                   (>= 0.4 4.0)))
+  (test-case
+   "infix"
+   (test-parse "1<2"
+               #:pattern Expr
+               (< 1 2))
+   (test-parse "x<2"
+               #:pattern Expr
+               (< x 2))
+   (test-parse "1<2<3"
+               #:pattern Expr
+               (and (< 1 2) (< 2 3)))
+   (test-parse "4>=4"
+               #:pattern Expr
+               (>= 4 4))
+   (test-parse "1 < 2 < 3 and 4 >= 4"
+               #:pattern Expr 
+               (and (and (< 1 2) (< 2 3))
+                    (>= 4 4)))
+   (test-parse "1<2<3and4>=4"
+               #:pattern Expr 
+               (and (and (< 1 2) (< 2 3))
+                    (>= 4 4)))
+   (test-parse "1<2<3and0.4>=4.0"
+               #:pattern Expr 
+               (and (and (< 1 2) (< 2 3))
+                    (>= 0.4 4.0))))
   ;; ranges
-  (test-parse "x in 5 to z"
-              #:pattern Expr
-              (in-range x 5 z))
-  (test-parse "x"
-              #:pattern Sum
-              x)
-  (test-parse "x in 5 to z"
-              #:pattern Range
-              (in-range x 5 z))
-  (test-parse "x in 5 to 5"
-              #:pattern Range
-              (in-range x 5 5))
-  (test-parse "5 in range 5 to z"
-              #:pattern Range
-              (in-range 5 5 z))
-  (test-parse "1 in range 5 to 12"
-              #:pattern Expr
-              (in-range 1 5 12))
-  (test-parse "1 outside of 5 to 12"
-              #:pattern Expr
-              (not (in-range 1 5 12)))
-  (test-parse "1 outside 5 to 12"
-              #:pattern Expr
-              (not (in-range 1 5 12)))
-  (test-parse "ptt outside of 59 to 101"
-              #:pattern Expr
-              (not (in-range ptt 59 101)))
-  (test-parse "ptt outside of range 59 to 101"
-              #:pattern Expr
-              (not (in-range ptt 59 101)))
-  (test-parse "ptt outside 59 to 101"
-              #:pattern Expr
-              (not (in-range ptt 59 101)))
+  (test-case
+   "range"
+   (test-parse "x in 5 to z"
+               #:pattern Expr
+               (in-range x 5 z))
+   (test-parse "x"
+               #:pattern Sum
+               x)
+   (test-parse "x in 5 to z"
+               #:pattern Range
+               (in-range x 5 z))
+   (test-parse "x in 5 to 5"
+               #:pattern Range
+               (in-range x 5 5))
+   (test-parse "5 in range 5 to z"
+               #:pattern Range
+               (in-range 5 5 z))
+   (test-parse "1 in range 5 to 12"
+               #:pattern Expr
+               (in-range 1 5 12))
+   (test-parse "1 outside of 5 to 12"
+               #:pattern Expr
+               (not (in-range 1 5 12)))
+   (test-parse "1 outside 5 to 12"
+               #:pattern Expr
+               (not (in-range 1 5 12)))
+   (test-parse "ptt outside of 59 to 101"
+               #:pattern Expr
+               (not (in-range ptt 59 101)))
+   (test-parse "ptt outside of range 59 to 101"
+               #:pattern Expr
+               (not (in-range ptt 59 101)))
+   (test-parse "ptt outside 59 to 101"
+               #:pattern Expr
+               (not (in-range ptt 59 101))))
   ;;; the big ones
-  (test-parse 
-   "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
-   #:pattern Expr
-   (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv"))
-  (test-parse
-   "start 18 units/kg/hour of: \"heparin\""
-   #:pattern Expr
-   (start (-number 18 units/kg/hour) #:of "heparin"))
-  (test-parse
-   "initially 
+  (test-case
+   "big1"
+   (test-parse 
+    "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
+    #:pattern Expr
+    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv"))
+   (test-parse
+    "start 18 units/kg/hour of: \"heparin\""
+    #:pattern Expr
+    (start (-number 18 units/kg/hour) #:of "heparin"))
+   (test-parse
+    "initially 
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
-   (initially (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")))
-  (test-parse
-   "initially 
+    (initially (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")))
+   (test-parse
+    "initially 
    x"
-   (initially (x)))
-  (test-parse "\n  x"
-              #:pattern Line
-              (line 2 (x)))
-  (test-parse "x"
-              #:pattern Line-Body
-              (x))
-  (test-parse
-   "initially 
+    (initially (x)))
+   (test-parse "\n  x"
+               #:pattern Line
+               (line 2 (x)))
+   (test-parse "x"
+               #:pattern Line-Body
+               (x))
+   (test-parse
+    "initially 
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\""
-   (initially
-    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
-    (start (-number 18 units/kg/hour) #:of "heparin")))
-  (test-parse
-   "handler infusion is
+    (initially
+     (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+     (start (-number 18 units/kg/hour) #:of "heparin")))
+   (test-parse
+    "handler infusion is
   whenever new ptt
     whenever x
      x"
-   (define-handler infusion (whenever-new ptt (whenever x (x)))))
-  (test-parse
-   "handler infusion is
+    (define-handler infusion (whenever-new ptt (whenever x (x))))))
+  (test-case 
+   "big2"
+   (test-parse
+    "handler infusion is
   whenever new ptt
     whenever
      x | x"
-   (define-handler infusion (whenever-new ptt (whenever-cond (x (x))))))
-  (test-parse
-   "handler infusion is
+    (define-handler infusion (whenever-new ptt (whenever-cond (x (x))))))
+   (test-parse
+    "handler infusion is
   whenever new ptt
     whenever
      x < x| x"
-   (define-handler infusion (whenever-new ptt (whenever-cond ((< x x) (x))))))
-  (test-parse
-   "handler infusion is
+    (define-handler infusion (whenever-new ptt (whenever-cond ((< x x) (x))))))
+   (test-parse
+    "handler infusion is
   whenever new ptt
     whenever
      x < x<x| x"
-   (define-handler  infusion (whenever-new ptt (whenever-cond ((and (< x x) (< x x)) (x))))))
-  (test-parse "x < x"
-              #:pattern Expr
-              (< x x))
-  (test-parse
-   "handler infusion is
+    (define-handler  infusion (whenever-new ptt (whenever-cond ((and (< x x) (< x x)) (x))))))
+   (test-parse "x < x"
+               #:pattern Expr
+               (< x x))
+   (test-parse
+    "handler infusion is
   whenever new ptt
     whenever
      x < x<x | x
@@ -794,13 +850,15 @@ initially
 
        y | z
          | q"
-   (define-handler infusion
-     (whenever-new ptt
-                   (whenever-cond
-                    [(and (< x x) (< x x)) (x) (x)]
-                    [y (z) (q)]))))
-  (test-parse
-   "handler infusion is
+    (define-handler infusion
+      (whenever-new ptt
+                    (whenever-cond
+                     [(and (< x x) (< x x)) (x) (x)]
+                     [y (z) (q)])))))
+  (test-case 
+   "big3"
+   (test-parse
+    "handler infusion is
   whenever new ptt
     whenever
      x < x<x | x
@@ -809,13 +867,13 @@ initially
 
        y | after 1 hour
          |   x"
-   (define-handler infusion
-     (whenever-new ptt
-                   (whenever-cond
-                    [(and (< x x) (< x x)) (x) (x)]
-                    [y (after (-number 1 hour) (x))]))))
-  (test-parse
-   "#lang pop-pl/current
+    (define-handler infusion
+      (whenever-new ptt
+                    (whenever-cond
+                     [(and (< x x) (< x x)) (x) (x)]
+                     [y (after (-number 1 hour) (x))]))))
+   (test-parse
+    "#lang pop-pl/current
 require heparinPttChecking
 require heparinInfusion
 require ivInserted
@@ -839,33 +897,33 @@ handler infusion is
                      | after 1 hour
                      |     restart \"heparin\"
                      |     decrease \"heparin\" by: 3 units/kg/hour"
-   (add-handler heparinpttchecking)
-   (add-handler heparininfusion)
-   (add-handler ivinserted)
-   (initially
-    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
-    (start (-number 18 units/kg/hour) #:of "heparin"))
-   (define-handler infusion
-     (whenever-new
-      ptt
-      (whenever-cond
-       [(< aptt 45)
-        (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
-        (increase "heparin" #:by (-number 3 units/kg/hour))]
-       [(and (< 45 aptt)
-             (< aptt 59))
-        (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
-        (increase "heparin" #:by (-number 1 unit/kg/hour))]
-       [(and (< 101 aptt)
-             (< aptt 123))
-        (decrease "heparin" #:by (-number 1 unit/kg/hour))]
-       [(> aptt 123)
-        (hold "heparin")
-        (after (-number 1 hour)
-               (restart "heparin")
-               (decrease "heparin" #:by (-number 3 units/kg/hour)))]))))
-(test-parse
-   "#lang pop-pl/current
+    (add-handler heparinpttchecking)
+    (add-handler heparininfusion)
+    (add-handler ivinserted)
+    (initially
+     (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+     (start (-number 18 units/kg/hour) #:of "heparin"))
+    (define-handler infusion
+      (whenever-new
+       ptt
+       (whenever-cond
+        [(< aptt 45)
+         (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 3 units/kg/hour))]
+        [(and (< 45 aptt)
+              (< aptt 59))
+         (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 1 unit/kg/hour))]
+        [(and (< 101 aptt)
+              (< aptt 123))
+         (decrease "heparin" #:by (-number 1 unit/kg/hour))]
+        [(> aptt 123)
+         (hold "heparin")
+         (after (-number 1 hour)
+                (restart "heparin")
+                (decrease "heparin" #:by (-number 3 units/kg/hour)))]))))
+   (test-parse
+    "#lang pop-pl/current
 require heparinPttChecking
 require heparinInfusion
 require ivInserted
@@ -889,100 +947,152 @@ infusion:
                      | after 1 hour
                      |     restart \"heparin\"
                      |     decrease \"heparin\" by: 3 units/kg/hour"
-   (add-handler heparinpttchecking)
-   (add-handler heparininfusion)
-   (add-handler ivinserted)
-   (initially
-    (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
-    (start (-number 18 units/kg/hour) #:of "heparin"))
-   (define-handler infusion
-     (whenever-new
-      ptt
-      (whenever-cond
-       [(< aptt 45)
-        (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
-        (increase "heparin" #:by (-number 3 units/kg/hour))]
-       [(and (< 45 aptt)
-             (< aptt 59))
-        (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
-        (increase "heparin" #:by (-number 1 unit/kg/hour))]
-       [(and (< 101 aptt)
-             (< aptt 123))
-        (decrease "heparin" #:by (-number 1 unit/kg/hour))]
-       [(> aptt 123)
-        (hold "heparin")
-        (after (-number 1 hour)
-               (restart "heparin")
-               (decrease "heparin" #:by (-number 3 units/kg/hour)))]))))
-  (test-parse 
-   "handler heparinPttChecking is
+    (add-handler heparinpttchecking)
+    (add-handler heparininfusion)
+    (add-handler ivinserted)
+    (initially
+     (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+     (start (-number 18 units/kg/hour) #:of "heparin"))
+    (define-handler infusion
+      (whenever-new
+       ptt
+       (whenever-cond
+        [(< aptt 45)
+         (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 3 units/kg/hour))]
+        [(and (< 45 aptt)
+              (< aptt 59))
+         (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 1 unit/kg/hour))]
+        [(and (< 101 aptt)
+              (< aptt 123))
+         (decrease "heparin" #:by (-number 1 unit/kg/hour))]
+        [(> aptt 123)
+         (hold "heparin")
+         (after (-number 1 hour)
+                (restart "heparin")
+                (decrease "heparin" #:by (-number 3 units/kg/hour)))]))))
+   (test-parse
+    "#lang pop-pl/current
+require heparinPttChecking
+require heparinInfusion
+require ivInserted
+
+initially 
+   giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+   start 18 units/kg/hour of: \"heparin\"
+
+infusion:
+  whenever new ptt
+    aPtt < 45        | giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
+                     | increase \"heparin\" by: 3 units/kg/hour
+
+    45 < aPtt < 59   | giveBolus 40 units/kg of: \"heparin\" by: \"iv\"
+                     | increase \"heparin\" by: 1 unit/kg/hour
+
+    101 < aPtt < 123 | decrease \"heparin\" by: 1 unit/kg/hour
+
+    aPtt > 123       | hold \"heparin\"
+                     | after 1 hour
+                     |     restart \"heparin\"
+                     |     decrease \"heparin\" by: 3 units/kg/hour"
+    (add-handler heparinpttchecking)
+    (add-handler heparininfusion)
+    (add-handler ivinserted)
+    (initially
+     (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+     (start (-number 18 units/kg/hour) #:of "heparin"))
+    (define-handler infusion
+      (whenever-new
+       ptt
+       (whenever-cond
+        [(< aptt 45)
+         (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 3 units/kg/hour))]
+        [(and (< 45 aptt)
+              (< aptt 59))
+         (givebolus (-number 40 units/kg) #:of "heparin" #:by "iv")
+         (increase "heparin" #:by (-number 1 unit/kg/hour))]
+        [(and (< 101 aptt)
+              (< aptt 123))
+         (decrease "heparin" #:by (-number 1 unit/kg/hour))]
+        [(> aptt 123)
+         (hold "heparin")
+         (after (-number 1 hour)
+                (restart "heparin")
+                (decrease "heparin" #:by (-number 3 units/kg/hour)))])))))
+  (test-case
+   "big4"
+   (test-parse 
+    "handler heparinPttChecking is
   Q 6 hours checkPtt whenever not ptt in range 59 to 101, x2
   Q 24 hours checkPtt whenever 59 < ptt < 101, x2"
-   (define-handler heparinpttchecking
-     (whenever (not (in-range ptt 59 101)) #:times 2
-               (q (-number 6 hours) checkptt))
-     (whenever (and (< 59 ptt) (< ptt 101)) #:times 2
-               (q (-number 24 hours) checkptt))))
-  (test-parse
-   "Q 6 hours checkPtt"
-   #:pattern Expr
-   (q (-number 6 hours) checkptt))
-  (test-parse "not 59 < ptt < 101"
-              #:pattern Expr
-              (not (and (< 59 ptt) (< ptt 101))))
-  (test-parse
-   "\n Q 6 hours checkPtt whenever not 59 < ptt < 101, x2"
-   #:pattern Line
-   (line 1
-         (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
-                   (q (-number 6 hours) checkptt))))
-  (test-parse
-   "handler x is
+    (define-handler heparinpttchecking
+      (whenever (not (in-range ptt 59 101)) #:times 2
+                (q (-number 6 hours) checkptt))
+      (whenever (and (< 59 ptt) (< ptt 101)) #:times 2
+                (q (-number 24 hours) checkptt))))
+   (test-parse
+    "Q 6 hours checkPtt"
+    #:pattern Expr
+    (q (-number 6 hours) checkptt))
+   (test-parse "not 59 < ptt < 101"
+               #:pattern Expr
+               (not (and (< 59 ptt) (< ptt 101))))
+   (test-parse
+    "\n Q 6 hours checkPtt whenever not 59 < ptt < 101, x2"
+    #:pattern Line
+    (line 1
+          (whenever (not (and (< 59 ptt) (< ptt 101))) #:times 2
+                    (q (-number 6 hours) checkptt))))
+   (test-parse
+    "handler x is
   whenever new q and qValue
     e"
-   (define-handler x (whenever-new (q qvalue) (e))))
+    (define-handler x (whenever-new (q qvalue) (e))))
 
-(test-parse
-   "x:
+   (test-parse
+    "x:
   whenever new m and left is right
     z"
-   (define-handler x 
-     (whenever-new (m (is left right))
-                   (z))))
-  (test-parse
-   "handler x is
+    (define-handler x 
+      (whenever-new (m (is left right))
+                    (z))))
+   (test-parse
+    "handler x is
   whenever new m and left is right
     z"
-   (define-handler x 
-     (whenever-new (m (is left right))
-                   (z))))
-
-  (test-parse
-   "handler heparinPttChecking is
+    (define-handler x 
+      (whenever-new (m (is left right))
+                    (z)))))
+(test-case
+ "big5"
+ (test-parse
+  "handler heparinPttChecking is
   Q 24 hours checkPtt
   // this is iffy may need nested whenevers (ew)
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-   (define-handler heparinpttchecking
-     (q (-number 24 hours) checkptt)
-     (whenever-new (change (is drug "heparin"))
-                   (after (-number 6 hours)
-                          (checkptt)))))
-  (test-parse
-   "handler heparinPttChecking is
+  (define-handler heparinpttchecking
+    (q (-number 24 hours) checkptt)
+    (whenever-new (change (is drug "heparin"))
+                  (after (-number 6 hours)
+                         (checkptt)))))
+ (test-parse
+  "handler heparinPttChecking is
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-   (define-handler heparinpttchecking
-     (whenever-new (change (is drug "heparin"))
-                   (after (-number 6 hours)
-                          (checkptt)))))
+  (define-handler heparinpttchecking
+    (whenever-new (change (is drug "heparin"))
+                  (after (-number 6 hours)
+                         (checkptt)))))
 
-  (test-parse
-   "drug is \"heparin\""
-   #:pattern Expr
-   (is drug "heparin"))
+ (test-parse
+  "drug is \"heparin\""
+  #:pattern Expr
+  (is drug "heparin")))
   
   (test-parse 
    "handler t is\n  notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
