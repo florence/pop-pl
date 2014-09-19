@@ -304,10 +304,11 @@ with '-' prevents access.
               (add-matcher!
                (lambda (msg) 
                  (with-handlers ([failure? void])
-                   (when (let-syntax pats e)
-                     (hash-set! message-match-lists
-                                'key
-                                (cons msg (hash-ref message-match-lists 'key)))))))
+                   (if (not (let-syntax pats e))
+                       (hash-set! message-match-lists 'key null)
+                       (hash-set! message-match-lists
+                                  'key
+                                  (cons msg (hash-ref message-match-lists 'key)))))))
               (hash-set! message-match-lists 'key null)))
          (syntax/loc stx
            (lambda () (hash-ref message-match-lists 'key)))))]))
@@ -317,8 +318,8 @@ with '-' prevents access.
       #'(lambda (l) (cons? l))
       (let ([stx (second maybe-stx)])
         (syntax-parse stx
-            [n:number
-             (syntax/loc stx (lambda (l) (= n (length l))))]))))
+          [n:number
+           (syntax/loc stx (lambda (l) (n . <= . (length l))))]))))
 
 
 
