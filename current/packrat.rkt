@@ -140,7 +140,7 @@
               [(app string? #t)
                (parse* (lit (const pat) pat))]
               [(lit f pat)
-               (parse* (rx f (regexp-quote pat #f)))]
+               (parse* (rx f (pregexp (regexp-quote pat #f))))]
               [(rx f reg)
                (define locs (regexp-match-peek-positions* reg in))
                (define has (and locs (assoc 0 locs)))
@@ -149,7 +149,8 @@
                (debug `(,reg matched ,locs))
                (if (not end)
                    (fail (get-pos))
-                   (values (f (string-downcase (read-string end in)) (get-pos)) (get-pos)))]
+                   (values (f (string-downcase (bytes->string/locale (read-bytes end in)))
+                              (get-pos)) (get-pos)))]
               [(/ (list* pats))
                (let loop ([pats pats] [pos (get-pos)]) 
                  (cond [(null? pats)

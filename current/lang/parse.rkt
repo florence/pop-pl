@@ -201,10 +201,18 @@
                     (position-col p)
                     (position-start p)
                     (position-span p)))
+(define (empty-syntax id)
+  (datum->syntax 
+   #f
+   id
+   #f))
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
               (compose
-               (lambda (b) `(,#'module ,#'TODO ,#'pop-pl/current/main ,@(filter syntax? b)))
+               (lambda (b) `(,(empty-syntax'module) 
+                        ,(empty-syntax 'TODO) 
+                        ,(empty-syntax 'pop-pl/current/main)
+                        ,@(filter syntax? b)))
                second))
              (list 
               (:? no-op LANG)
@@ -508,7 +516,7 @@
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   ;; handle non-breaking spaces for scribble
-  [WHITESPACE (:/ (list (:rx no-op #rx" +") "\xA0"))]
+  [WHITESPACE (:rx no-op #px"( |\xA0)+")]
   [?WHITESPACE (:? no-op WHITESPACE)]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
                  (list ID-LIKE ":"))]
