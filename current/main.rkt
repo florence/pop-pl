@@ -100,8 +100,8 @@ with '-' prevents access.
           (define (-add-matcher! f)
             (set! message-matchers (cons f message-matchers)))
 
-          (define (-eval msg)
-            (maybe-update-time! msg)
+          (define (-eval m)
+            (define msg (msg-fill/update-time! m))
             (for ([n (message-tags msg)])
               (hash-set! -last-message-time-cache n -time))
             (for ([! message-matchers])
@@ -113,11 +113,14 @@ with '-' prevents access.
             (define res next-log)
             (set! next-log null)
             (append res (list msg)))
-          (define (maybe-update-time! msg)
-            (match msg
+          (define (msg-fill/update-time! m)
+            (match m
               [(message '(time) (list n) #f)
-               (set! -time (+ n -time))]
-              [else (void)]))
+               (set! -time (+ n -time))
+               m]
+              [(message types values #f)
+               (message types values -time)]
+              [_ m]))
           (define (send-message! m)
             (define t (message-time m))
             (for ([n (message-tags m)])
@@ -254,7 +257,7 @@ with '-' prevents access.
             (for/list ([l log]
                        #:final
                        (match l
-                         [(message (? (lambda (l) (member l 'name))) 
+                         [(message (? (lambda (l) (member 'name l))) 
                                    (list args ... _ ___)
                                    _)
                           #t]
