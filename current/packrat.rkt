@@ -216,7 +216,7 @@
   (with-reset in
     (let loop ([tt tok->type])
       (cond [(null? tt) 
-             (cond [(eof-object? (peek-byte in)) (values #f 'eof #f #f #f)]
+             (cond [(eof-object? (peek-byte in)) (values r:eof 'eof #f #f #f)]
                    [else (values (read-char in) 'error #f start (add1 start))])]
             [else
              (reset)
