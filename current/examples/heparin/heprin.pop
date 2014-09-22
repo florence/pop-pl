@@ -1,15 +1,15 @@
 #lang pop-pl/current
 
 initially 
-   giveBolus 80 units/kg of: HEParin by: "iv"
-   start 18 units/kg/hour of: HEParin by: "iv"
+   giveBolus 80 units/kg of: HEParin by: iv
+   start 18 units/kg/hour of: HEParin by: iv
 
 infusion:
   whenever new ptt
-    aPtt < 45          | giveBolus 80 units/kg of: HEParin by: "iv"
+    aPtt < 45          | giveBolus 80 units/kg of: HEParin by: iv
                        | increase HEParin by: 3 units/kg/hour
 
-    aPtt in 45 to 59   | giveBolus 40 units/kg of: HEParin by: "iv"
+    aPtt in 45 to 59   | giveBolus 40 units/kg of: HEParin by: iv
                        | increase HEParin by: 1 unit/kg/hour
 
  // aPTt in 59 to 101  | Continue current HEParin dose

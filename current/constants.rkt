@@ -11,5 +11,6 @@
 (defines/provide
   (heparin "heparin")
   (fentanyl "fentanyl")
-  (ondemandfentanyl "fentanyl, on demand"))
+  (ondemandfentanyl "fentanyl, on demand")
+  (iv "iv"))
 
