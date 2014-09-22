@@ -507,7 +507,8 @@
                              (:& (:/ (list NEWLINE :EOF)))))))]
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
-  [WHITESPACE (:rx no-op #rx" +")]
+  ;; handle non-breaking spaces for scribble
+  [WHITESPACE (:/ (list (:rx no-op #rx" +") "\xA0"))]
   [?WHITESPACE (:? no-op WHITESPACE)]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
                  (list ID-LIKE ":"))]
