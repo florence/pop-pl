@@ -23,7 +23,7 @@ infusion:
 
 heparinPttChecking:
   Q 6 hours checkPtt whenever ptt outside of 59 to 101, x2
-  Q 24 hours checkPtt whenever ptt in 59 to 101, x2
+  Q 24 hours checkPtt whenever ptt in range 59 to 101, x2
   
 
 /// ignore this
