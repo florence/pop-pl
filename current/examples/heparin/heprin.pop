@@ -1,5 +1,7 @@
 #lang pop-pl/current
 
+used by JessieBrownVA
+
 initially 
    giveBolus 80 units/kg of: HEParin by: iv
    start 18 units/kg/hour of: HEParin by: iv
@@ -24,17 +26,3 @@ infusion:
 heparinPttChecking:
   Q 6 hours checkPtt whenever ptt outside of 59 to 101, x2
   Q 24 hours checkPtt whenever ptt in range 59 to 101, x2
-  
-
-/// ignore this
-
-message ptt is [ aPtt ]
-message change is [ drug by: value ]
-message increase is change
-message decrease(drug by: value) is change(drug by: -value)
-message start is [ amount of: drug by: method]
-message give is [ amount of: drug by: method ]
-message giveBolus is give
-message hold is [ drug ]
-message restart is [ drug ]
-message checkPtt is []

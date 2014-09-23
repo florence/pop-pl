@@ -24,6 +24,7 @@ with '-' prevents access.
   [unit:= =]
   [in:in-range in-range])
  is
+ use
  ;; internal
  make-handler define-message add-handler define-handler
  -number
@@ -36,11 +37,13 @@ with '-' prevents access.
                      racket/syntax
                      syntax/id-table
                      syntax/parse
-                     unstable/sequence)
+                     unstable/sequence
+                     racket/format)
          (for-meta 2 racket/base
                      syntax/parse)
          racket/bool
          racket/list
+         racket/include
          racket/match
          racket/stxparam
          "private/shared.rkt")
@@ -53,7 +56,6 @@ with '-' prevents access.
     (pattern x:number)
     (pattern (-number x:number y:id))))
 ;; to guard against function misuse
-
 (define-syntax (define/func stx)
   (syntax-parse stx
     [(_ (n:id a ...) b ...)
@@ -155,6 +157,12 @@ with '-' prevents access.
 (define (remove-handler! n)
   (hash-remove! (next-handlers) n))
 
+;;; requiring message protocol
+(define-syntax (use stx)
+  (syntax-parse stx
+    [(use name:id)
+     (define file (~a (syntax-e #'name) ".popl"))
+     (datum->syntax stx `(,#'include ,file))]))
 ;;; handlers
 (define-syntax-parameter current-message (make-rename-transformer #'void))
 (define-syntax-parameter current-log (make-rename-transformer #'void))

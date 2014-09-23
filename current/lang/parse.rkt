@@ -229,11 +229,14 @@
                     (:seq no-op (list NEWLINE END))
                     (:seq (lambda (r p) (second r))
                           (list (:? no-op NEWLINE)
-                                (:/  (list Require COMMENT Initially Handler Message)))))))
+                                (:/  (list Require COMMENT Initially Handler Message Use)))))))
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?(\n|$)")]
   
+  [Use (:seq (->stx/filter values)
+             (list USE WHITESPACE ID))]
+
   [Require (:seq (->stx parse-require)
                  (list REQUIRE WHITESPACE ID (:? no-op WHITESPACE) END))]
   
@@ -513,6 +516,9 @@
   [TO "to"]
   [OUTSIDE "outside"]
   [OF "of"]
+  [USE (:seq (->stx (const 'use)) (list USED WHITESPACE BY))]
+  [USED "used"]
+  [BY "by"]
 
   ;; basics
   [END (:/ (list (:seq (const 'END) (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
@@ -542,7 +548,7 @@
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
   [Other (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO OUTSIDE OF))]
+                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO OUTSIDE OF USED BY))]
   [Other+End
    (:/
     (list
