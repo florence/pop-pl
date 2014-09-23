@@ -1,5 +1,7 @@
 #lang pop-pl/current
 
+used by Northwestern
+
 // fentanyl section
 initially
   start 25 micrograms/hour of: fentanyl
@@ -17,13 +19,3 @@ handler breakthroughPain is
 handler minimalPain is
    whenever painscore < 3, x2, 1 hour apart, since last decrease onDemandFentanyl
       decrease onDemandFentanyl by: 10 micrograms
-
-
-message change is [ drug by: amount]
-message increase is change
-message decrease(drug by: amount) is change drug by: -amount 
-message start is [ amount of: drug]
-message set is [ thing to: amount ]
-message painscore is [ score ]
-message checkPainScore is []
-message notifyDoctor is []

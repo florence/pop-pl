@@ -1,0 +1,8 @@
+(define-message change [ drug #:by amount])
+(define-message increase change)
+(define-message decrease (drug #:by amount) (change drug #:by (- amount)))
+(define-message start [ amount #:of drug])
+(define-message set [ thing #:to amount ])
+(define-message painscore [ score ])
+(define-message checkpainscore  [])
+(define-message notifydoctor  [])
