@@ -283,11 +283,11 @@ with '-' prevents access.
         (syntax/loc stx
           (lambda (log)
             (define-values (res _)
-              (for/fold ([res null] [time 0]) ([l log])
-                (if (> (message-time l) time)
+              (for/fold ([res null] [time 0]) ([l (reverse log)])
+                (if (> (message-time l) (+ time (time->stamp n)))
                     (values (cons l res) (message-time l))
                     (values res time))))
-            (reverse res)))]))))
+            res))]))))
 
 (struct failure ())
 
