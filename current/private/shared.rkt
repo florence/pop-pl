@@ -1,8 +1,9 @@
-#lang racket
+#lang racket/base
 (provide (struct-out in:number)
          (struct-out message)
          time->stamp)
 (module+ test (require rackunit))
+(require racket/match)
 (struct in:number (value unit) #:transparent
         ;#:methods gen:custom-write
         #;

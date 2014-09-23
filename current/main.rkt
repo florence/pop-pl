@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 #|
 if youre wondering why some names start with '-', its because they need to be visible in a 
 pop-pl program (ie the program litteral expands, or could expand to them), 
@@ -29,10 +29,22 @@ with '-' prevents access.
  -number
  (rename-out [require -require]))
 
-(require racket/stxparam "private/shared.rkt")
-(require (for-syntax syntax/parse syntax/id-table racket/dict racket/match racket/syntax racket/list
-                     unstable/sequence))
-(require (for-meta 2 racket/base syntax/parse))
+(require (for-syntax racket/base
+                     racket/dict
+                     racket/list
+                     racket/match
+                     racket/syntax
+                     syntax/id-table
+                     syntax/parse
+                     unstable/sequence)
+         (for-meta 2 racket/base
+                     syntax/parse)
+         racket/bool
+         racket/list
+         racket/match
+         racket/stxparam
+         "private/shared.rkt")
+
 (module+ test (require rackunit))
 ;;; things that need to go first
 (begin-for-syntax

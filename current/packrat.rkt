@@ -1,14 +1,19 @@
-#lang racket
+#lang racket/base
 (provide 
  (prefix-out : (combine-out lit rx seq ! & + * ? / EOF))
  define-parser/colorer
  (struct-out position)
  position->vector)
 
-
-(require racket/shared (prefix-in r: racket))
-(require racket/stxparam)
-(require (for-syntax syntax/parse))
+(require (for-syntax racket/base
+                     syntax/parse)
+         racket/function
+         racket/list
+         racket/match
+         racket/port
+         racket/shared
+         racket/stxparam
+         (prefix-in r: racket))
 (module+ test (require rackunit))
 
 

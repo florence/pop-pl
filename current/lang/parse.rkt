@@ -1,7 +1,14 @@
-#lang racket
+#lang racket/base
 (provide parse lex raise-parse-error)
-(require (for-syntax syntax/parse))
-(require "../packrat.rkt" syntax/parse syntax/readerr)
+(require (for-syntax syntax/parse racket/base)
+         racket/function
+         racket/format
+         racket/list
+         racket/match
+         syntax/parse
+         syntax/readerr
+         "../packrat.rkt")
+
 (module+ test (require rackunit))
 
 (define TAB-WIDTH 4)

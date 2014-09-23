@@ -1,6 +1,6 @@
-#lang racket
+#lang racket/base
 (provide get-info read-syntax)
-(require "parse.rkt")
+(require racket/match "parse.rkt")
 
 (define (get-info . default)
   (match-lambda**
