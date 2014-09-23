@@ -1,7 +1,7 @@
 #lang racket
 (provide prescription-test)
 (require (for-syntax syntax/parse))
-(require pop-pl/current/private/shared rackunit rackunit/text-ui)
+(require pop-pl/current/private/shared rackunit rackunit/text-ui unstable/match)
 
 (define TIME-ADVANCE 60)
 (define current-eval (make-parameter (lambda _ (error 'test "no eval set"))))
@@ -15,7 +15,11 @@
 
 (define (send msg)
   (filter
-   (negate (curry equal? msg))
+   (lambda (m)
+     (not (and (equal? (list->set (message-tags m))
+                       (list->set (message-tags msg)))
+               (equal? (message-values m)
+                       (message-values msg)))))
    ((current-eval) msg)))
 
 (define-syntax (prescription-test stx)
