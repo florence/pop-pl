@@ -43,7 +43,6 @@ with '-' prevents access.
                      syntax/parse)
          racket/bool
          racket/list
-         racket/include
          racket/match
          racket/stxparam
          "private/shared.rkt")
@@ -79,6 +78,10 @@ with '-' prevents access.
 (define-for-syntax -send-message! (generate-temporary '-))
 (define-for-syntax -add-matcher! (generate-temporary '-))
 (define-for-syntax -message-match-lists (generate-temporary '-))
+
+(define current-next-log (make-parameter #f))
+(define current-last-message-time-cache (make-parameter #f))
+(define current-message-matchers (make-parameter #f))
 ;;; evaluator
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
@@ -97,7 +100,7 @@ with '-' prevents access.
           (define current-handlers (hash))
           (define -next-handlers (make-hash))
           (define cur-log null)
-          (define next-log null)
+          (define next-log (box null))
           (define -time 0)
           (define message-matchers null)
           (define -message-match-lists (make-hash))
@@ -107,7 +110,7 @@ with '-' prevents access.
             (set! current-handlers (hash))
             (set! -next-handlers (hash-copy initial-handlers))
             (set! cur-log null)
-            (set! next-log null)
+            (set! next-log (box null))
             (set! -time 0)
             (set! -message-match-lists (hash-copy initial-match-lists)))
 
@@ -115,18 +118,20 @@ with '-' prevents access.
             (set! message-matchers (cons f message-matchers)))
 
           (define (-eval m)
-            (define msg (msg-fill/update-time! m))
-            (for ([n (message-tags msg)])
-              (hash-set! -last-message-time-cache n -time))
-            (for ([! message-matchers])
-              (! msg))
-            (for ([(_ h!) (in-hash current-handlers)])
-              (h! msg cur-log))
-            (set! current-handlers (hash->immutable-hash -next-handlers))
-            (set! cur-log (append next-log (list msg) cur-log))
-            (define res next-log)
-            (set! next-log null)
-            (append res (list msg)))
+            (parameterize ([current-next-log next-log]
+                           [current-last-message-time-cache -last-message-time-cache])
+              (define msg (msg-fill/update-time! m))
+              (for ([n (message-tags msg)])
+                (hash-set! (current-last-message-time-cache) n -time))
+              (for ([! message-matchers])
+                (! msg))
+              (for ([(_ h!) (in-hash current-handlers)])
+                (h! msg cur-log))
+              (set! current-handlers (hash->immutable-hash -next-handlers))
+              (define res (unbox next-log))
+              (set! cur-log (append res (list msg) cur-log))
+              (set-box! next-log null)
+              (append res (list msg))))
           (define (msg-fill/update-time! m)
             (match m
               [(message '(time) (list n) #f)
@@ -138,10 +143,11 @@ with '-' prevents access.
           (define (send-message! m)
             (define t (message-time m))
             (for ([n (message-tags m)])
-              (hash-set! -last-message-time-cache n t))
+              (hash-set! (current-last-message-time-cache) n t))
             (for ([! message-matchers])
               (! m))
-            (set! next-log (cons m next-log)))
+            (set-box! (current-next-log)
+                      (cons m (unbox (current-next-log)))))
           
           
 
@@ -158,13 +164,11 @@ with '-' prevents access.
   (hash-remove! (next-handlers) n))
 
 ;;; requiring message protocol
-;; TODO rewrite this a la "you want it when"
-;; silly compiletime hashtables...
 (define-syntax (use stx)
   (syntax-parse stx
     [(use name:id)
      (define file (~a (syntax-e #'name) ".popl"))
-     (datum->syntax stx `(,#'include ,file))]))
+     (datum->syntax stx `(,#'require ,file))]))
 ;;; handlers
 (define-syntax-parameter current-message (make-rename-transformer #'void))
 (define-syntax-parameter current-log (make-rename-transformer #'void))
@@ -455,33 +459,44 @@ with '-' prevents access.
     (syntax-parse stx
       ;; basic define
       [(define-message name:id (args:args))
-       (define key (syntax-local-introduce #'name))
-       (dict-set! messages key (syntax->list (syntax-local-introduce #'args.cleannames)))
-       (dict-set! in:messages key (syntax->list (syntax-local-introduce #'args.names)))
-       (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened)))
        (quasisyntax/loc stx
-         (define/func (name #,@#'args.flattened #:-keys [keys null])
-           (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time)))))]
+         (begin
+           (begin-for-syntax
+             (define key (syntax-local-introduce #'name))
+             (dict-set! messages key (syntax->list (syntax-local-introduce #'args.cleannames)))
+             (dict-set! in:messages key (syntax->list (syntax-local-introduce #'args.names)))
+             (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened))))
+           (provide name)
+           (define/func (name #,@#'args.flattened #:-keys [keys null])
+             (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time))))))]
       ;; define from other message
       [(define-message name:id other:id)
        (define key (syntax-local-introduce #'other))
        (define arg-names (dict-ref in:messages key))
        (define args (dict-ref message-args key))
-       (dict-set! messages (syntax-local-introduce #'name) (dict-ref messages key))
-       (dict-set! in:messages (syntax-local-introduce #'name) arg-names)
-       (dict-set! message-args (syntax-local-introduce #'name) args)
-       (quasisyntax/loc stx
-         (define/func (name #,@args #:-keys [keys null])
-           (other #,@args #:-keys `(name ,@keys))))]
+       (with-syntax ([(arg ...) args]
+                     [(arg-name ...) arg-names])
+         (quasisyntax/loc stx
+           (begin
+             (begin-for-syntax
+               (dict-set! messages (syntax-local-introduce #'name) (dict-ref messages #'#,key))
+               (dict-set! in:messages (syntax-local-introduce #'name) (list #'arg-name ...))
+               (dict-set! message-args (syntax-local-introduce #'name) (list #'arg ...)))
+             (provide name)
+             (define/func (name #,@args #:-keys [keys null])
+               (other #,@args #:-keys `(name ,@keys))))))]
       ;; define from function
       [(define-message name:id (args:args) (super:id call ...))
-       (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
-       (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
-       (dict-set! in:messages #'name (dict-ref in:messages (syntax-local-introduce #'super)))
        (with-syntax ([(old ...) #'args.cleannames]
                      [(new ...) #'args.names])
          (quasisyntax/loc stx 
-           (define/func (name #,@#'args.flattened #:-keys [keys null])
-             (let-syntax ([old (make-rename-transformer #'new)] ...)
-               (super call ... #:-keys `(name ,@keys))))))])))
+           (begin 
+             (begin-for-syntax
+               (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
+               (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
+               (dict-set! in:messages #'name (dict-ref in:messages (syntax-local-introduce #'super))))
+             (provide name)
+             (define/func (name #,@#'args.flattened #:-keys [keys null])
+               (let-syntax ([old (make-rename-transformer #'new)] ...)
+                 (super call ... #:-keys `(name ,@keys)))))))])))
 

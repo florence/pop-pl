@@ -1,10 +1,12 @@
-(define-message ptt [ aptt ])
-(define-message change  [ drug #:by value ])
-(define-message increase  change)
-(define-message decrease (drug #:by value) (change drug #:by (- value)))
-(define-message start [ amount #:of drug #:by method])
-(define-message give [ amount #:of drug #:by method ])
-(define-message givebolus give)
-(define-message hold [ drug ])
-(define-message restart [ drug ])
-(define-message checkptt [])
+#lang pop-pl/current
+
+message ptt is [ aPtt ]
+message change is [ drug by: value ]
+message increase is change
+message decrease(drug by: value) is change(drug by: -value)
+message start is [ amount of: drug by: method]
+message give is [ amount of: drug by: method ]
+message giveBolus is give
+message hold is [ drug ]
+message restart is [ drug ]
+message checkPtt is []

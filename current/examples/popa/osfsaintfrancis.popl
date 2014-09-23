@@ -1,8 +1,10 @@
-(define-message change [ drug #:by amount])
-(define-message increase change)
-(define-message decrease (drug #:by amount) (change drug #:by (- amount)))
-(define-message start [ amount #:of drug])
-(define-message set [ thing #:to amount ])
-(define-message painscore [ score ])
-(define-message checkpainscore  [])
-(define-message notifydoctor  [])
+#lang pop-pl/current
+
+message change is [ drug by: amount]
+message increase is change
+message decrease(drug by: amount) is change(drug by: -amount)
+message start is [ amount of: drug]
+message set is [ thing to: amount ]
+message painscore is [ score ]
+message checkpainscore is []
+message notifydoctor is []
