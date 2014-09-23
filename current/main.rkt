@@ -158,6 +158,8 @@ with '-' prevents access.
   (hash-remove! (next-handlers) n))
 
 ;;; requiring message protocol
+;; TODO rewrite this a la "you want it when"
+;; silly compiletime hashtables...
 (define-syntax (use stx)
   (syntax-parse stx
     [(use name:id)
