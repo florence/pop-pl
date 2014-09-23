@@ -167,7 +167,7 @@ with '-' prevents access.
 (define-syntax (use stx)
   (syntax-parse stx
     [(use name:id)
-     (define file (~a (syntax-e #'name) ".popl"))
+     (define file (~a (syntax-e #'name) ".pop"))
      (datum->syntax stx `(,#'require ,file))]))
 ;;; handlers
 (define-syntax-parameter current-message (make-rename-transformer #'void))
