@@ -53,7 +53,7 @@
                  (cons (vector t v) measured)
                  count)]
         [else (values heparin-continous heparin-bolus measured count)])))
-  (define last (vector fulltime (vector-ref (first hc) 0)))
+  (define last (vector fulltime (vector-ref (first hc) 1)))
   (values (reverse (cons last hc)) (reverse hb) (reverse m)))
 
 (define time-advance 60);in seconds
