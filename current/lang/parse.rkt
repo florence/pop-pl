@@ -121,6 +121,11 @@
    [(list w _ "new" _ id #t) `(,(datum->syntax #f 'whenever-new w) ,id)]
    [(list w _ "new" _ id (list _ _ _ e))
     `(,(datum->syntax #f 'whenever-new w) (,id ,e))]
+   [(list w _ "latest" _ e)
+    `(,w 
+      ,e
+      ,(datum->syntax #f '#:latest w)
+      ,(datum->syntax #f '#t w))]
    [(list w _ expr (list* extras)) `(,w ,expr ,@(flatten extras))]
    [(list do _ w _ when (list* extras)) `(,w ,when ,@(flatten extras) ,do)]))
 ;; parse a whenever that has many parts
@@ -281,6 +286,12 @@
                                    (:/ (list EmptyLine
                                              (:seq no-op (list INDENTATION WheneverPart END)))))))
                    (:seq (->stx parse-whenever+parts)
+                         (list WHENEVER WHITESPACE LATEST WHITESPACE Expr 
+                               ?WHITESPACE END
+                               (:+ parse-iwpe
+                                   (:/ (list EmptyLine
+                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
+                   (:seq (->stx parse-whenever+parts)
                          (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
                                ?WHITESPACE END
                                (:+ parse-iwpe 
@@ -296,6 +307,8 @@
                    (:seq (->stx parse-whenever)
                          (list WHENEVER WHITESPACE NEW WHITESPACE ID
                                (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))))
+                   (:seq (->stx parse-whenever)
+                         (list WHENEVER WHITESPACE LATEST WHITESPACE Expr))
                    (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
                    (:seq (->stx parse-whenever) (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
@@ -498,7 +511,7 @@
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
                       UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN
                       SINCELAST APART
-                      IN RANGE TO OF OUTSIDE))]
+                      IN RANGE TO OF OUTSIDE BETWEEN LATEST))]
   [AND "and"]
   [OR "or"]
   [REQUIRE (:lit (->stx string->symbol) "require")]
@@ -517,6 +530,8 @@
   [X "x"]
   [APART "apart"]
   [SINCELAST "since last"]
+  [SINCE "since"]
+  [LAST "last"]
   [IN "in"]
   [RANGE "range"]
   [TO "to"]
@@ -526,6 +541,7 @@
   [USED "used"]
   [BY "by"]
   [BETWEEN "between"]
+  [LATEST  "latest"]
 
   ;; basics
   [END (:/ (list (:seq (const 'END) (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
@@ -555,8 +571,8 @@
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
   [Other (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO OUTSIDE OF USED BY
-                   BETWEEN))]
+                   OP FUNCTION NEW COMMA NOT X SINCE LAST APART IN RANGE TO OUTSIDE OF USED BY
+                   BETWEEN LATEST))]
   [Other+End
    (:/
     (list
@@ -657,6 +673,8 @@
                (initially (whenever-cond (x (x) (n)))))
    (test-parse "initially\n  whenever x\n    x\n    n"
                (initially (whenever x (x) (n))))
+   (test-parse "initially\n  whenever latest x\n    x\n    n"
+               (initially (whenever x #:latest #t (x) (n))))
    (test-parse "handler b is\n  whenever x\n    12\n  x\ninitially\n  x"
                (define-handler b (whenever x 12) (x))
                (initially (x)))

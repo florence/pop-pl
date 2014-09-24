@@ -17,5 +17,5 @@ breakthroughPain:
   notifyDoctor whenever painscore > 8, x3, since last notifyDoctor
 
 minimalPain:
-whenever painscore < 3 cm, x2, 1 hour apart, since last decrease onDemandFentanyl
+  whenever painscore < 3 cm, x2, 1 hour apart, since last decrease onDemandFentanyl
       decrease onDemandFentanyl by: 10 micrograms

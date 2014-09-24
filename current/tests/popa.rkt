@@ -1,5 +1,6 @@
-#lang racket
+#lang racket/base
 (require "harness.rkt" pop-pl/current/constants)
+
 (prescription-test
  "../examples/popa/popa.pop"
  (=> start

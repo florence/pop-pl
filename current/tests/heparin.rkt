@@ -1,5 +1,7 @@
-#lang racket
-(require "harness.rkt" pop-pl/current/constants)
+#lang racket/base
+(require pop-pl/current/constants
+         "harness.rkt")
+
 (prescription-test
  "../examples/heparin/heprin.pop"
  (=> start 
@@ -7,7 +9,7 @@
      (start _ heparin "iv")
      (checkptt))
  (=> (ptt 40)
-     (givebolus _ heaprin "iv")
+     (givebolus _ heparin "iv")
      (decease heparin _))
  (=> (advance 7 hours)
      (checkptt))

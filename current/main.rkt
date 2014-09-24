@@ -233,7 +233,8 @@ with '-' prevents access.
   (define-syntax-class query-name
     (pattern #:times)
     (pattern #:since-last)
-    (pattern #:apart))
+    (pattern #:apart)
+    (pattern #:latest))
   (define-splicing-syntax-class query
     (pattern (~seq t:expr (~seq k:query-name e:expr) ...)
              #:with query

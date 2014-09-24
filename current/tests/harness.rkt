@@ -81,7 +81,7 @@
 (define-match-expander eq
   (lambda (stx)
     (syntax-parse stx
-      #:datum-literals (_)
-      [(eq _) #'_]
+      [(eq _u:id) #:when (eq? (syntax-e #'_u) '_)
+       #'_]
       [(eq e:expr)
        #'(? (lambda (v) (equal? v e)))])))
