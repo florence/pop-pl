@@ -1,0 +1,7 @@
+#lang pop-pl/current 
+
+message BG is [ BG ]
+message checkBG is []
+message stop is [ drug ]
+message start is [ drug at: amount by: method ]
+message change is [ drug to: amount ]

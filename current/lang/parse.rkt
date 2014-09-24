@@ -195,7 +195,7 @@
                   (< 3 4))))
 (define (parse-in-range l)
     (match l
-      [(list e _ _ _ _ _ o _ _ _ c)
+      [(list e _ _ _ o _ _ _ c)
        `(in-range ,e ,o ,c)]))
 (define parse-outside
     (match-lambda
@@ -416,15 +416,21 @@
   [Range (:/ (list
               (:seq (->stx parse-in-range)
                     (list Numeric WHITESPACE
-                          IN WHITESPACE (:? no-op RANGE) ?WHITESPACE
-                          Numeric WHITESPACE TO WHITESPACE Numeric))
+                          Between WHITESPACE
+                          Numeric WHITESPACE To WHITESPACE Numeric))
               (:seq (->stx parse-outside)
                     (list Numeric WHITESPACE
                           OUTSIDE WHITESPACE (:? no-op OF) ?WHITESPACE (:? no-op RANGE) ?WHITESPACE
                           Numeric WHITESPACE TO WHITESPACE Numeric))
               Numeric))]
+  
+  [To (:/ (list TO AND))]
+  [Between (:/ (list (:seq no-op (list IN (:? no-op (:seq no-op (list WHITESPACE RANGE)))))
+                     BETWEEN))]
 
   [Numeric Sum]
+  
+  
   
   [Sum (:seq (->stx/filter
               (match-lambda
@@ -519,6 +525,7 @@
   [USE (:seq (->stx (const 'use)) (list USED WHITESPACE BY))]
   [USED "used"]
   [BY "by"]
+  [BETWEEN "between"]
 
   ;; basics
   [END (:/ (list (:seq (const 'END) (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
@@ -548,7 +555,8 @@
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
   [Other (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO OUTSIDE OF USED BY))]
+                   OP FUNCTION NEW COMMA NOT X SINCELAST APART IN RANGE TO OUTSIDE OF USED BY
+                   BETWEEN))]
   [Other+End
    (:/
     (list
@@ -784,6 +792,9 @@ initially
                #:pattern Range
                (in-range 5 5 z))
    (test-parse "1 in range 5 to 12"
+               #:pattern Expr
+               (in-range 1 5 12))
+   (test-parse "1 between 5 and 12"
                #:pattern Expr
                (in-range 1 5 12))
    (test-parse "1 outside of 5 to 12"

@@ -7,7 +7,7 @@ initially
   start 25 micrograms/hour of: fentanyl
   set onDemandFentanyl to: 25 micrograms
 
-handler breakthroughPain is 
+breakthroughPain:
   // and will need to bind forward i think
   whenever new painscore and score > 8 cm
       increase onDemandFentanyl by: 10 micrograms
@@ -16,6 +16,6 @@ handler breakthroughPain is
 
   notifyDoctor whenever painscore > 8, x3, since last notifyDoctor
 
-handler minimalPain is
-   whenever painscore < 3, x2, 1 hour apart, since last decrease onDemandFentanyl
+minimalPain:
+whenever painscore < 3 cm, x2, 1 hour apart, since last decrease onDemandFentanyl
       decrease onDemandFentanyl by: 10 micrograms

@@ -1,34 +1,18 @@
 #lang pop-pl/current
 
-//http://www.hospitalmedicine.org/Web/Quality_Innovation/Implementation_Toolkits/Glycemic_Control/Web/Quality___Innovation/Implementation_Toolkit/Glycemic/Clinical_Tools/Insulin_Orders_Infusions.aspx
-// North Caroline Protocol
+// This simplified version of the commonly used 
+// part of the Loyola insulin protocol
+
+used by Loyola
 
 initially
-  begin eq2
+  start insulin at: 1 unit/hour by: iv
 
-
-handler eq1 is
-  whenever new BG 
-    a
-handler eq2 is
-  whenever new BG 
-
-handler eq3 is
-  whenever new BG 
-
-handler eq4 is
-  whenever new BG 
-
-handler eq5 is
-  whenever new BG 
-
-handler eq6 is
-  whenever new BG 
-
-handler monitoring is 
-  Q 1 hour checkBG
-  
-
-message BG is [ value ]
-message checkBG is []
-message set is [ drug to: amount ]
+insulin:
+  whenever new BG
+     BG < 70                | stop insulin
+     BG between 70 and 110  | change insulin to: 0.3 units/hour
+     BG between 110 and 210 | change insulin to: 1.5 units/hour
+     BG between 210 and 300 | change insulin to: 2.5 units/hour
+     BG between 300 and 360 | change insulin to: 4.0 units/hour
+     BG > 360               | change insulin to: 6.0 units/hour
