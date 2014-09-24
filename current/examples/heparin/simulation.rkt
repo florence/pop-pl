@@ -12,6 +12,10 @@
 
 (require "heprin.pop" pop-pl/current/private/shared)
 
+(define time-advance 60);in seconds
+(define perterb-factor 15)
+
+
 (define (simulate days [factor 5])
   (define fulltime (* days 24 60 60))
   (define log (run-simulation-for fulltime factor))
@@ -56,7 +60,6 @@
   (define last (vector fulltime (vector-ref (first hc) 1)))
   (values (reverse (cons last hc)) (reverse hb) (reverse m)))
 
-(define time-advance 60);in seconds
 (define (run-simulation-for time factor)
   (define-values (res _in-system _cont-dosage _next)
     (for/fold ([outgoing null] [heparin-in-system 0] [heparin-continous 0] [next null]) ([_ (in-range 0 time 60)])
@@ -116,7 +119,9 @@
   (message '(ptt) (list value) (add1 time)))
 
 (define (calculate-ptt h factor)
-  (* h factor))
+  (max (+ (+ (* h factor) 60)
+          (- (random perterb-factor) (random perterb-factor)))
+       0))
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)

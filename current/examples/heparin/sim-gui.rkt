@@ -4,7 +4,7 @@
          pict)
 
 (define (show-gui hep-infusion hep-bolus aptt #:title [title ""])
-  (define f (new frame% [width 600] [height 400] [label title]))
+  (define f (new frame% [width 800] [height 600] [label title]))
   (define c (new sim-canvas% 
                  [parent f]
                  [hep-infusion hep-infusion]
@@ -15,8 +15,8 @@
 (define bolus-color "forestgreen")
 (define infusion-color "red")
 (define aptt-color "blue")
-(define bolus-radius-min 20)
-(define bolus-radius-max 40)
+(define bolus-radius-min 10)
+(define bolus-radius-max 20)
 
 (define sim-canvas%
   (class canvas%
@@ -38,12 +38,12 @@
                                                  bolus-radius-min bolus-radius-max))
       
       ;; treat the range [0,30] with steps by 5 as reasonable heparin infusion rates
-      (define left-axis 
+      (define right-axis 
         (colorize (build-axis 0 30 5 (- (hep->y 30) (hep->y 0)))
                   infusion-color))
       
       ;; treat the range [40,140] with steps by 10 as reasonable aptt values
-      (define right-axis
+      (define left-axis
         (colorize (build-axis 40 140 10 (- (aptt->y 140) (aptt->y 40)))
                   aptt-color))
       
@@ -139,4 +139,7 @@
 (module+ main
   (require "simulation.rkt")
   (define-values (hc hb m) (simulate 5))
+  (displayln hc)
+  (displayln hb)
+  (displayln m)
   (show-gui hc hb (cdr m)))
