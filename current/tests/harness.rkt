@@ -1,5 +1,5 @@
 #lang racket
-(provide prescription-test)
+(provide prescription-test n)
 (require (for-syntax syntax/parse))
 (require pop-pl/current/private/shared rackunit rackunit/text-ui unstable/match)
 
@@ -21,6 +21,9 @@
                (equal? (message-values m)
                        (message-values msg)))))
    ((current-eval) msg)))
+
+(define-syntax-rule (n num u)
+  (in:number num 'u))
 
 (define-syntax (prescription-test stx)
   (define-syntax-class id

@@ -395,10 +395,10 @@ with '-' prevents access.
     (when (in:number? a)
       (define u (in:number-unit a))
       (if (not unit) 
-          (set! unit a)
+          (set! unit u)
           (unless (equal? unit u)
             (error (object-name f) "all numbers must have the same unit")))))
-  (define v (apply + (strip-units args)))
+  (define v (apply f (strip-units args)))
   (if unit (in:number v unit) v))
 (define ((convert/*/ f) . args)
   ;; we're not gonna support units for now
@@ -425,6 +425,9 @@ with '-' prevents access.
     (if (number? n)
         n
         (in:number-value n))))
+(module+ test
+  (check-equal? (strip-units (list (in:number 1 'x)))
+                '(1)))
 
 (define/func unit:+ (convert/+- +))
 (define/func unit:- (convert/+- -))
@@ -438,6 +441,12 @@ with '-' prevents access.
 (define/func (in:in-range n start end)
   (and (unit:<= start n)
        (unit:< n end)))
+
+(module+ test
+  (check-equal? (unit:+ (in:number 1 'x))
+                (in:number 1 'x))
+  (check-equal? (unit:- (in:number 1 'x))
+                (in:number -1 'x)))
 
 (define/func is equal?)
 

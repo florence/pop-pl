@@ -28,13 +28,13 @@
       (define y-margin 10)
       
       (define-values (hep-min hep-max) (find-min/max (λ (x) (vector-ref x 1)) hep-infusion))
-      (define (hep->y hep) (- h (scale-between hep hep-min hep-max y-margin (- h y-margin))))
+      (define (hep->y hep) (- h (scale-between hep 0 30 y-margin (- h y-margin))))
 
       (define-values (aptt-min aptt-max) (find-min/max (λ (x) (vector-ref x 1)) aptt))
-      (define (aptt->y aptt) (- h (scale-between aptt aptt-min aptt-max y-margin (- h y-margin))))
+      (define (aptt->y aptt) (- h (scale-between aptt 40 140 y-margin (- h y-margin))))
       
       (define-values (bolus-min bolus-max) (find-min/max (λ (x) (vector-ref x 1)) hep-bolus))
-      (define (bolus->size bolus) (scale-between bolus bolus-min bolus-max
+      (define (bolus->size bolus) (scale-between bolus 40 80
                                                  bolus-radius-min bolus-radius-max))
       
       ;; treat the range [0,30] with steps by 5 as reasonable heparin infusion rates
@@ -96,6 +96,12 @@
               (- x (/ size 2))
               (- (/ h 2) (/ size 2))
               size size))
+      (send dc set-brush (make-object color% 0 0 255 0.2) 'solid)
+      (send dc draw-rectangle
+            0
+            (aptt->y 101)
+            w
+            (- (aptt->y 59) (aptt->y 101)))
       
       (void))
     (super-new)))
@@ -116,9 +122,12 @@
               this-pict)))
   
 (define (scale-between x in-low in-high out-low out-high)
-  (+ (* (/ (- x in-low) (- in-high in-low))
-        (- out-high out-low))
-     out-low))
+  (define ih-l (- in-high in-low))
+  (if (zero? ih-l)
+      0
+      (+ (* (/ (- x in-low) (- in-high in-low))
+            (- out-high out-low))
+         out-low)))
 
 (define (find-min/max sel . stuff)
   (define pr
@@ -142,4 +151,4 @@
   (displayln hc)
   (displayln hb)
   (displayln m)
-  (show-gui hc hb (cdr m)))
+  (show-gui hc hb m))
