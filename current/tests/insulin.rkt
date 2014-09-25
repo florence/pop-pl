@@ -5,4 +5,24 @@
  "../examples/insulin/insulin.pop"
  (start
   => (start insulin _ iv)
-  (checkBG)))
+  (checkBG))
+ ((BG 120) 
+  => (change insulin _))
+
+ ((advance 1 hours)
+  => (checkBG))
+ ((BG 120)
+  => (change insulin _))
+
+ ((advance 1 hours)
+  => (checkBG))
+ ((BG 120)
+  => (change insulin _))
+ 
+ ((advance 1 hours)
+  => (checkBG))
+ ((BG 120)
+  => (change insulin _))
+ 
+ ((advance 4 hours)
+  => (checkBG)))

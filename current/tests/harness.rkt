@@ -27,7 +27,9 @@
     (pattern x
              #:when (identifier? #'x)
              #:with down
-             (datum->syntax #'x (string->symbol (string-downcase (symbol->string (syntax-e #'x)))))))
+             (datum->syntax #'x (string->symbol (string-downcase (symbol->string (syntax-e #'x))))
+                            #'x
+                            #'x)))
   (define-syntax-class expr
     (pattern e:id
              #:with down #'e.down)
@@ -81,7 +83,7 @@
   (define-syntax-class pat
     (pattern (m:id e:expr ...)
              #:with pat
-             #'(message (list-no-order m.down _ ___) (list (eq e.down) ...) _))
+             #'(message (list-no-order 'm.down _ ___) (list (eq e.down) ...) _))
     #;
     (pattern ((m:id ...) e:expr ...)
              #:with pat
