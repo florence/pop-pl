@@ -23,44 +23,65 @@
    ((current-eval) msg)))
 
 (define-syntax (prescription-test stx)
+  (define-syntax-class id
+    (pattern x
+             #:when (identifier? #'x)
+             #:with down
+             (datum->syntax #'x (string->symbol (string-downcase (symbol->string (syntax-e #'x)))))))
+  (define-syntax-class expr
+    (pattern e:id
+             #:with down #'e.down)
+    (pattern e #:with down #'e))
   (define-syntax-class test-clause 
     #:datum-literals (=> advance start)
     (pattern (~and
               stx
-              (=> start 
-                  m:pat ...))
+              (~or
+               (start 
+                => m:pat ...)
+               (=> start 
+                   m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
                (check-match (advance (in:number 1 'hour))
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
-              (=> (advance t)
-                  m:pat ...))
+              (~or
+               ((advance t)
+                => m:pat ...)
+               (=> (advance t)
+                   m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
                (check-match (advance t)
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
-              (=> (advance t u:id)
-                  m:pat ...))
+              (~or
+               ((advance t u:id)
+                => m:pat ...)
+               (=> (advance t u:id)
+                   m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (advance (in:number t 'u))
+               (check-match (advance (in:number t 'u.down))
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
-              (=> (mes:id e ...)
-                  m:pat ...))
+              (~or
+               ((mes:id e:expr ...)
+                => m:pat ...)
+               (=> (mes:id e:expr ...)
+                   m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (send (message '(mes) (list e ...) #f))
+               (check-match (send (message '(mes.down) (list e.down ...) #f))
                             (list-no-order m.pat ...)))))
   (define-syntax-class pat
     (pattern (m:id e:expr ...)
              #:with pat
-             #'(message (list-no-order m _ ___) (list (eq e) ...) _))
+             #'(message (list-no-order m.down _ ___) (list (eq e.down) ...) _))
     #;
     (pattern ((m:id ...) e:expr ...)
              #:with pat
