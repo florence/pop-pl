@@ -15,6 +15,12 @@
 (define bg-color "blue")
 (define bg-size 10)
 
+(define bg-min 60)
+(define bg-max 200)
+
+(define insul-min 0)
+(define insul-max 10)
+
 (define sim-canvas%
   (class canvas%
     (init-field insul-infusion bg)
@@ -25,19 +31,21 @@
       (define y-margin 10)
       
       (define-values (insul-min insul-max) (find-min/max (λ (x) (vector-ref x 1)) insul-infusion))
-      (define (insul->y insul) (- h (scale-between insul 0 30 y-margin (- h y-margin))))
+      (define (insul->y insul) (- h (scale-between insul insul-min insul-max y-margin (- h y-margin))))
 
       (define-values (bg-min bg-max) (find-min/max (λ (x) (vector-ref x 1)) bg))
-      (define (bg->y bg) (- h (scale-between bg 40 140 y-margin (- h y-margin))))
+      (define (bg->y bg) (- h (scale-between bg bg-min bg-max y-margin (- h y-margin))))
       
-      ;; treat the range [0,30] with steps by 5 as reasonable insularin infusion rates
+      ;; treat the range [insul-min,insul-max] with steps by 5 as reasonable insularin infusion rates
       (define right-axis 
-        (colorize (build-axis 0 30 5 (- (insul->y 30) (insul->y 0)))
+        (colorize (build-axis insul-min insul-max 5 (- (insul->y insul-max) (insul->y insul-min)))
                   infusion-color))
       
-      ;; treat the range [40,140] with steps by 10 as reasonable bg values
+      ;; treat the range [bg-min,bg-max] with steps by 25 as reasonable bg values
       (define left-axis
-        (colorize (build-axis 40 140 10 (- (bg->y 140) (bg->y 40)))
+        (colorize (build-axis bg-min bg-max
+                              25
+                              (- (bg->y bg-max) (bg->y bg-min)))
                   bg-color))
       
       (define x-margin (max (pict-width left-axis)
@@ -97,7 +105,7 @@
       (void))
     (super-new)))
 
-(define (build-axis min-value max-value step height)
+(define (build-axis min-value max-value count height)
   (define picts
     (for/list ([x (in-range min-value (+ max-value step) step)])
       (vector (scale-between x min-value max-value 0 1) 

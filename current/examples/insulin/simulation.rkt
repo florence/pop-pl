@@ -12,8 +12,8 @@
 (require "insulin.pop" pop-pl/current/private/shared)
 
 (define time-advance 60);in seconds
-(define perterb-percent 0.05)
-(define basic-factor 3000)
+(define perterb-percent 0.2)
+(define basic-factor 25)
 
 
 (define (simulate days [factor basic-factor])
@@ -87,17 +87,13 @@
   (message '(bg) (list value) (add1 time)))
 
 (define (calculate-bg h factor)
-  (* h factor))
+  (* (perterb-random)
+     (- 125 (* h factor))))
 
 (define halflife (* 6 60));90 minutes in seconds
 (define (insulin-values-after current continous seconds)
   (* (perterb-random) 
-   (+
-    ;; the amount remaining after seconds
-    (let ([number-of-halflives (/ seconds halflife)])
-      (* current (expt .05 number-of-halflives)))
-    ;; the amount injectected after x seconds
-    (* continous seconds (/ 60) (/ 60)))))
+     current))
 
-(define (perterb-random)
-  (+ 1 (* (- (* 2 (random)) 1) perterb-percent)))
+(define (perterb-random [% perterb-percent])
+  (+ 1 (* (- (* 2 (random)) 1) %)))
