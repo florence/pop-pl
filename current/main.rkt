@@ -81,6 +81,7 @@ with '-' prevents access.
    message-query-cache:last-time) ; hashof Sym Time
   #:mutable
   #:transparent)
+
 (define current-environment (make-parameter #f))
 (define (get-current-environment)
   (define cenv (current-environment))
@@ -124,6 +125,9 @@ with '-' prevents access.
    ))
 
 ;;; evaluator
+
+;; Message -> (Listof Message)
+;; evaluate the message in the current-environment
 (define (eval m)
   (next-message! m)
   (define msg (current-message))
@@ -135,10 +139,16 @@ with '-' prevents access.
     (h!))
   (cycle-env!))
 
+;; Message -> Void
+;; E: update the time and add a corrected current message to the environment
 (define (next-message! m)
   (set-environment-message!
    (current-environment)
    (msg-fill/update-time! m)))
+
+;; Message -> Message
+;; E: updates the time if the message says so
+;; If the message has no timestamp, fill it in
 (define (msg-fill/update-time! m)
   (match m
     [(message '(time) (list n) #f)
@@ -149,13 +159,22 @@ with '-' prevents access.
      (message types values (current-time))]
     [_ m]))
 
+;; -> (Listof Message)
+;; E: applys changes built up of the course of evaling a message
+;; returns the messages to send back out
 (define (cycle-env!)
   (swap-handlers!)
   (swap-log!))
 
+;; -> Void
+;; E: apply the changes to the handlers built up in next-handlers
 (define (swap-handlers!)
   (define cenv (current-environment))
   (set-environment-handlers! cenv (hash->immutable-hash (current-next-handlers))))
+
+;; -> (Listof Message)
+;; E: add the current message and outbound messages to the log
+;; returns the additions to the log
 (define (swap-log!)
   (define res (append (current-outgoing-log) (list (current-message))))
   (set-environment-log! (current-environment)
@@ -163,6 +182,8 @@ with '-' prevents access.
   (set-environment-outgoing-log! (current-environment) null)
   res)
 
+;; Message -> Void
+;; E: add the message to the current message queue (and caches)
 (define (send-message! m)
   (define t (message-time m))
   (for ([n (message-tags m)])
@@ -175,22 +196,32 @@ with '-' prevents access.
    (cons m out)))
 
 ;;; runtime helpers
+
+;; (-> Message Any) -> Void
+;; add a function to the list of cache generators
 (define (add-matcher! f)
   (define matchers (current-message-query-cache-generators))
   (set-environment-message-query-cache-generators!
    (current-environment)
    (cons f matchers)))
 
-
+;; Symbol -> (Listof Message)
+;; Get all messages cached under `key`
 (define (get-cached-matches key)
   (hash-ref (current-message-query-cache)
             key
             null))
+
+;; Symbol Message -> Void
+;; E: add `msg` to the messages cached under `key`
 (define (add-cached-match! key msg)
   (define cache (hash-ref! (current-message-query-cache) key null))
   (hash-set! (current-message-query-cache)
              key
              (cons msg cache)))
+
+;; Symbol -> Void
+;; E: clear all messages cached under `key`
 (define (clear-cached-matches! key)
   (hash-set! (current-message-query-cache)
              key 
@@ -199,8 +230,13 @@ with '-' prevents access.
 (define (hash->immutable-hash hash)
   (for/hash ([(k h) (in-hash hash)]) (values k h)))
 
-(define (add-handler! n f)
-  (hash-set! (current-next-handlers) n f))
+;; Symbol Handler -> Void
+;; Add `h` to the next set of handlers under the name `n`
+(define (add-handler! n h)
+  (hash-set! (current-next-handlers) n h))
+
+;; Symbol -> Void
+;; removed the handler named `n` from the next set of handlers
 (define (remove-handler! n)
   (hash-remove! (current-next-handlers) n))
 
@@ -340,9 +376,6 @@ with '-' prevents access.
     [(whenever q:query body ...)
      (syntax/loc stx (when q.query body ...))]))
 
-
-
-
 (define-for-syntax ((maybe-filter l) maybe-stx)
   (if (not maybe-stx)
       #'values
@@ -363,6 +396,7 @@ with '-' prevents access.
                           #t]
                          [_ #f]))
               l)))]))))
+
 (define-for-syntax make-apart-filter
   (maybe-filter
    (lambda (stx)
@@ -434,6 +468,7 @@ with '-' prevents access.
            (add-handler! 'n h))))]))
 
 ;; time time -> boolean
+;; are we currently `diff` after `start`
 (define (after? diff start)
   (< (+ (time->stamp diff) (time->stamp start)) 
      (time->stamp (current-time))))
@@ -466,12 +501,14 @@ with '-' prevents access.
             (error (object-name f) "all numbers must have the same unit")))))
   (define v (apply f (strip-units args)))
   (if unit (in:number v unit) v))
+
 (define ((convert/*/ f) . args)
   ;; we're not gonna support units for now
   (for ([a args])
     (unless (number? a)
       (error (object-name f) "does not support units yet")))
   (apply f args))
+
 (define ((convert/<>= f) . args)
   ;; for now just makes sure all units are the same. will build conversion tables later
   (define unit #f)
@@ -485,15 +522,13 @@ with '-' prevents access.
   (and all-same? (apply f (strip-units args))))
 
 ;; listof (U number number+unit) -> listof number
-(module+ test (check-equal? (strip-units (list (in:number 1 'y) 2 (in:number 3 'x) 4)) '(1 2 3 4)))
+;; Extract the numbers from any number+units
 (define (strip-units ns)
   (for/list ([n ns])
     (if (number? n)
         n
         (in:number-value n))))
-(module+ test
-  (check-equal? (strip-units (list (in:number 1 'x)))
-                '(1)))
+(module+ test (check-equal? (strip-units (list (in:number 1 'y) 2 (in:number 3 'x) 4)) '(1 2 3 4)))
 
 (define/func unit:+ (convert/+- +))
 (define/func unit:- (convert/+- -))
@@ -518,10 +553,24 @@ with '-' prevents access.
 
 ;;; messages
 (begin-for-syntax
+  ;; names of defined message -> the args
   (define messages (make-free-id-table))
+  ;; names of defined messages -> args with swapped out properties
+  ;; used for reusing names in different lexical scopes
   (define in:messages (make-free-id-table))
+  ;; names of messages -> args and keywords with swapped out properites
   (define message-args (make-free-id-table))
+  ;; a useful propery
   (define message-name-stx-prop (datum->syntax #f 'prop)))
+#|
+There are three ways to define a message
+1. define a completely new message
+   (basic define)
+2. define a message that is exactly the same as another, with an extra tag
+   (define from message)
+3. define a message that transforms its arguments to send a different message, plus its tag
+   (define from function)
+|#
 (define-syntax (define-message stx)
   (with-syntax ()
     (define-splicing-syntax-class args

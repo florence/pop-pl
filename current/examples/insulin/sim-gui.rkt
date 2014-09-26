@@ -105,7 +105,7 @@
       (void))
     (super-new)))
 
-(define (build-axis min-value max-value count height)
+(define (build-axis min-value max-value step height)
   (define picts
     (for/list ([x (in-range min-value (+ max-value step) step)])
       (vector (scale-between x min-value max-value 0 1) 
