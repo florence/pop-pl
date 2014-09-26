@@ -131,10 +131,7 @@ with '-' prevents access.
 (define (eval m)
   (next-message! m)
   (define msg (current-message))
-  (for ([n (in-list (message-tags msg))])
-    (hash-set! (current-message-query-cache:last-time) n (current-time)))
-  (for ([! (current-message-query-cache-generators)])
-    (! msg))
+  (cache-message! msg)
   (for ([(_ h!) (in-hash (current-handlers))])
     (h!))
   (cycle-env!))
@@ -185,15 +182,20 @@ with '-' prevents access.
 ;; Message -> Void
 ;; E: add the message to the current message queue (and caches)
 (define (send-message! m)
-  (define t (message-time m))
-  (for ([n (message-tags m)])
-    (hash-set! (current-message-query-cache:last-time) n t))
-  (for ([! (current-message-query-cache-generators)])
-    (! m))
+  (cache-message! m)
   (define out (current-outgoing-log))
   (set-environment-outgoing-log!
    (current-environment)
    (cons m out)))
+
+;; Message -> Void
+;; E: Update the caches with this message
+(define (cache-message! m)
+  (define t (message-time m))
+  (for ([n (message-tags m)])
+    (hash-set! (current-message-query-cache:last-time) n t))
+  (for ([! (current-message-query-cache-generators)])
+    (! m)))
 
 ;;; runtime helpers
 
