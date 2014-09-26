@@ -2,18 +2,16 @@
 (provide (struct-out in:number)
          (struct-out message)
          time->stamp)
+(require racket/match
+         racket/format)
 (module+ test (require rackunit))
-(require racket/match)
 (struct in:number (value unit) #:transparent
-        ;#:methods gen:custom-write
-        #;
+        #:methods gen:custom-write
         [(define (write-proc n port mode)
-           (define p
-             (case mode
-               [(#t) display]
-               [(#f) display]
-               [else (lambda (p port) (print p port mode))]))
-           (p (~a "%("(in:number-value n) " " (in:number-unit n) ")")))])
+           (fprintf port
+                    "%(~a ~a)"
+                    (exact->inexact (in:number-value n))
+                    (in:number-unit n)))])
 (struct message (tags values time) #:transparent)
 
 (define (time->stamp t)

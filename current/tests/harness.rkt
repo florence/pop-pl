@@ -107,7 +107,7 @@
 (define-match-expander eq
   (lambda (stx)
     (syntax-parse stx
-      [(eq _u:id) #:when (eq? (syntax-e #'_u) '_)
+      [(eq _u) #:when (eq? (syntax-e #'_u) '_)
        #'_]
       [(eq e:expr)
        #'(? (lambda (v) (equal? v e)))])))

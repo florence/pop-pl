@@ -387,7 +387,7 @@ with '-' prevents access.
 (define-syntax (-number stx)
   (syntax-parse stx
     [(_ n:number unit:id)
-     #'(in:number n 'unit)]))
+     #'(in:number (inexact->exact n) 'unit)]))
 
 (define ((convert/+- f) . args)
   (define unit #f)

@@ -4,10 +4,10 @@
 (prescription-test
  "../examples/popa/popa.pop"
  (=> start
-     (start _ fentanyl)
-     (set ondemandfentanyl _))
+     (start (n 25 micrograms/hour) fentanyl)
+     (set ondemandfentanyl (n 25 micrograms)))
  (=> (painscore 10)
-     (increase ondemandfentanyl _))
+     (increase ondemandfentanyl (n 10 micrograms)))
  (=> (advance 61 minutes)
      (checkpainscore))
  (=> (painscore 2))
@@ -15,4 +15,4 @@
  (=> (painscore 2))
  (=> (advance 2 hours))
  (=> (painscore 2)
-     (decrease ondemandfentanyl _)))
+     (decrease ondemandfentanyl (n -10 micrograms))))

@@ -5,12 +5,12 @@
 (prescription-test
  "../examples/heparin/heprin.pop"
  (=> start 
-     (givebolus _ heparin "iv")
-     (start _ heparin "iv")
+     (givebolus (n 80 units/kg) heparin iv)
+     (start (n 18 units/kg/hour) heparin iv)
      (checkptt))
  (=> (ptt 40)
-     (givebolus _ heparin "iv")
-     (increase heparin _))
+     (givebolus (n 80 units/kg) heparin iv)
+     (increase heparin (n 3 units/kg/hour)))
  (=> (advance 7 hours)
      (checkptt))
  (=> (ptt 120)
@@ -31,7 +31,7 @@
      (hold heparin))
  (=> (advance 2 hour)
      (restart heparin)
-     (decrease heparin _))
+     (decrease heparin (n -3 units/kg/hour)))
  (=> (advance 5 hours)
      (checkptt))
  (=> (ptt 80))
