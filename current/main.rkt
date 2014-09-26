@@ -68,110 +68,190 @@ with '-' prevents access.
                [na:id (raise-syntax-error 'function "a function cannot be used as an argument" stx)]
                [(na:id a (... ...))
                 #'(real a (... ...))]))))]))
+;;; environmetn
+(struct environment
+  (message ; #f or message
+   time ; current time in seconds
+   log ; listof Messages
+   outgoing-log ; listof Message
+   handlers ; hashof Sym Handlers
+   next-handlers ; hahsof Sym Handlers
+   message-query-cache ; hashof Sym (listof Message)
+   message-query-cache-generators ; listof (-> Message Void)
+   message-query-cache:last-time) ; hashof Sym Time
+  #:mutable
+  #:transparent)
+(define current-environment (make-parameter #f))
+(define (get-current-environment)
+  (define cenv (current-environment))
+  (if cenv
+      cenv
+      (error 'internal "no environment set")))
+(define (current-time)
+  (environment-time (get-current-environment)))
+(define (current-next-handlers)
+  (environment-next-handlers (get-current-environment)))
+(define (current-log)
+  (environment-log (get-current-environment)))
+(define (current-message-query-cache) 
+  (environment-message-query-cache (get-current-environment)))
+(define (current-message-query-cache-generators)
+  (environment-message-query-cache-generators (get-current-environment)))
+(define (current-message-query-cache:last-time)
+  (environment-message-query-cache:last-time (get-current-environment)))
+(define (current-outgoing-log)
+  (environment-outgoing-log (get-current-environment)))
+(define (current-handlers)
+  (environment-handlers (get-current-environment)))
+(define (current-message)
+  (define cenv (get-current-environment))
+  (define cmes (environment-message cenv))
+  (if cmes
+      cmes
+      (error 'internal "no message in environment ~a" cenv)))
 
-(define (current-time) (ctime))
-(define ctime (make-parameter 0))
-(define next-handlers (make-parameter #f))
-(define-for-syntax -time (generate-temporary '-))
-(define-for-syntax -next-handlers (generate-temporary '-))
-(define-for-syntax -last-message-time-cache (generate-temporary '-))
-(define-for-syntax -send-message! (generate-temporary '-))
-(define-for-syntax -add-matcher! (generate-temporary '-))
-(define-for-syntax -message-match-lists (generate-temporary '-))
+(define (make-empty-environment)
+  (environment
+   #f         ;message
+   0          ;time
+   null       ;lot
+   null       ;outgoing-log
+   (hash)     ;handlers
+   (make-hash);next handlers
+   (make-hash);cache
+   null       ;generatiors
+   (make-hash);time cache
+   ))
 
-(define current-next-log (make-parameter #f))
-(define current-last-message-time-cache (make-parameter #f))
-(define current-message-matchers (make-parameter #f))
 ;;; evaluator
-(define-syntax (in:module-begin stx)
-  (syntax-parse stx
-    [(_ body ...)
-     (with-syntax ([-time (syntax-local-introduce -time)]
-                   [-next-handlers (syntax-local-introduce -next-handlers)]
-                   [-last-message-time-cache (syntax-local-introduce -last-message-time-cache)]
-                   [send-message! (syntax-local-introduce -send-message!)]
-                   [-add-matcher! (syntax-local-introduce -add-matcher!)]
-                   [-message-match-lists (syntax-local-introduce -message-match-lists)])
-       #`(#%module-begin
-          (provide (rename-out [-eval eval] [-reset! reset!]))
-          #,(datum->syntax stx '(-require pop-pl/current/constants))
-          ;; global state
-          (define -last-message-time-cache (make-hash))
-          (define current-handlers (hash))
-          (define -next-handlers (make-hash))
-          (define cur-log null)
-          (define next-log (box null))
-          (define -time 0)
-          (define message-matchers null)
-          (define -message-match-lists (make-hash))
-          
-          (define (-reset!)
-            (set! -last-message-time-cache (make-hash))
-            (set! current-handlers (hash))
-            (set! -next-handlers (hash-copy initial-handlers))
-            (set! cur-log null)
-            (set! next-log (box null))
-            (set! -time 0)
-            (set! -message-match-lists (hash-copy initial-match-lists)))
+(define (eval m)
+  (next-message! m)
+  (define msg (current-message))
+  (for ([n (in-list (message-tags msg))])
+    (hash-set! (current-message-query-cache:last-time) n (current-time)))
+  (for ([! (current-message-query-cache-generators)])
+    (! msg))
+  (for ([(_ h!) (in-hash (current-handlers))])
+    (h!))
+  (cycle-env!))
 
-          (define (-add-matcher! f)
-            (set! message-matchers (cons f message-matchers)))
+(define (next-message! m)
+  (set-environment-message!
+   (current-environment)
+   (msg-fill/update-time! m)))
+(define (msg-fill/update-time! m)
+  (match m
+    [(message '(time) (list n) #f)
+     (set-environment-time! (current-environment)
+                            (+ n (current-time)))
+     m]
+    [(message types values #f)
+     (message types values (current-time))]
+    [_ m]))
 
-          (define (-eval m)
-            (parameterize ([current-next-log next-log]
-                           [current-last-message-time-cache -last-message-time-cache])
-              (define msg (msg-fill/update-time! m))
-              (for ([n (message-tags msg)])
-                (hash-set! (current-last-message-time-cache) n -time))
-              (for ([! message-matchers])
-                (! msg))
-              (for ([(_ h!) (in-hash current-handlers)])
-                (h! msg cur-log))
-              (set! current-handlers (hash->immutable-hash -next-handlers))
-              (define res (unbox next-log))
-              (set! cur-log (append res (list msg) cur-log))
-              (set-box! next-log null)
-              (append res (list msg))))
-          (define (msg-fill/update-time! m)
-            (match m
-              [(message '(time) (list n) #f)
-               (set! -time (+ n -time))
-               m]
-              [(message types values #f)
-               (message types values -time)]
-              [_ m]))
-          (define (send-message! m)
-            (define t (message-time m))
-            (for ([n (message-tags m)])
-              (hash-set! (current-last-message-time-cache) n t))
-            (for ([! message-matchers])
-              (! m))
-            (set-box! (current-next-log)
-                      (cons m (unbox (current-next-log)))))
-          
-          
+(define (cycle-env!)
+  (swap-handlers!)
+  (swap-log!))
 
-          body ...
-          (define initial-handlers (hash->immutable-hash -next-handlers))
-          (define initial-match-lists (hash->immutable-hash -message-match-lists))))]))
+(define (swap-handlers!)
+  (define cenv (current-environment))
+  (set-environment-handlers! cenv (hash->immutable-hash (current-next-handlers))))
+(define (swap-log!)
+  (define res (append (current-outgoing-log) (list (current-message))))
+  (set-environment-log! (current-environment)
+                        (append res (current-log)))
+  (set-environment-outgoing-log! (current-environment) null)
+  res)
+
+(define (send-message! m)
+  (define t (message-time m))
+  (for ([n (message-tags m)])
+    (hash-set! (current-message-query-cache:last-time) n t))
+  (for ([! (current-message-query-cache-generators)])
+    (! m))
+  (define out (current-outgoing-log))
+  (set-environment-outgoing-log!
+   (current-environment)
+   (cons m out)))
+
+;;; runtime helpers
+(define (add-matcher! f)
+  (define matchers (current-message-query-cache-generators))
+  (set-environment-message-query-cache-generators!
+   (current-environment)
+   (cons f matchers)))
+
+
+(define (get-cached-matches key)
+  (hash-ref (current-message-query-cache)
+            key
+            null))
+(define (add-cached-match! key msg)
+  (define cache (hash-ref! (current-message-query-cache) key null))
+  (hash-set! (current-message-query-cache)
+             key
+             (cons msg cache)))
+(define (clear-cached-matches! key)
+  (hash-set! (current-message-query-cache)
+             key 
+             null))
 
 (define (hash->immutable-hash hash)
   (for/hash ([(k h) (in-hash hash)]) (values k h)))
 
 (define (add-handler! n f)
-  (hash-set! (next-handlers) n f))
+  (hash-set! (current-next-handlers) n f))
 (define (remove-handler! n)
-  (hash-remove! (next-handlers) n))
+  (hash-remove! (current-next-handlers) n))
+
+;;; module
+(define-for-syntax in:the-environment (generate-temporary 'the-environment))
+(define-for-syntax (the-environment stx) 
+  (syntax-local-introduce 
+   (datum->syntax in:the-environment
+                  (syntax-e in:the-environment)
+                  stx)))
+(define-syntax (in:module-begin stx)
+  (syntax-parse stx
+    [(_ body ...)
+     (with-syntax ([the-environment (the-environment #'here)])
+       #`(#%module-begin
+          (provide (rename-out [-eval eval] [-reset! reset!]))
+          #,(datum->syntax stx '(-require pop-pl/current/constants))
+          ;; global state
+          (define the-environment (make-empty-environment))
+          
+          (define (-reset!)
+            (set! the-environment (make-empty-environment))
+            (set-environment-next-handlers! 
+             the-environment
+             (hash-copy initial-handlers))
+            (set-environment-message-query-cache-generators!
+             the-environment
+             initial-matchers))
+
+          (define (-eval m)
+            (parameterize ([current-environment the-environment])
+              (eval m)))
+
+          body ...
+          (define initial-handlers 
+            (parameterize ([current-environment the-environment])
+              (hash->immutable-hash (current-next-handlers))))
+          (define initial-matchers 
+            (parameterize ([current-environment the-environment])
+              (current-message-query-cache-generators)))))]))
+
+
 
 ;;; requiring message protocol
 (define-syntax (use stx)
   (syntax-parse stx
     [(use name:id)
      (define file (~a (syntax-e #'name) ".pop"))
+     ;;TODO environment swapping
      (datum->syntax stx `(,#'require ,file))]))
 ;;; handlers
-(define-syntax-parameter current-message (make-rename-transformer #'void))
-(define-syntax-parameter current-log (make-rename-transformer #'void))
 
 (define-syntax (initially stx)
   (syntax-parse stx
@@ -182,28 +262,21 @@ with '-' prevents access.
 (define-syntax (define-handler stx)
   (syntax-parse stx
     [(_ n:id body ...)
-     (with-syntax ([-next-handlers (syntax-local-introduce -next-handlers)])
+     (with-syntax ([the-environment (the-environment #'here)])
        (syntax/loc stx
          (begin
            (define/func n (make-handler body ...))
-           (parameterize ([next-handlers -next-handlers])
+           (parameterize ([current-environment the-environment])
              (add-handler n)))))]))
 
 (define-syntax (make-handler stx)
   (syntax-parse stx
     [(make-handler body ...)
-     (with-syntax ([-time (syntax-local-introduce -time)]
-                   [-next-handlers (syntax-local-introduce -next-handlers)])
-       #`(lambda (event log)
-           (syntax-parameterize ([current-message (make-rename-transformer #'event)]
-                                 [current-log (make-rename-transformer #'log)])
-             (parameterize ([ctime -time]
-                            [next-handlers -next-handlers])
-               body) ...)))]))
+     #`(lambda () body ...)]))
 (define-syntax (add-handler stx)
   (syntax-parse stx
     [(add-handler id)
-     #'(add-handler! 'id (lambda (a b) (id a b)))]))
+     #'(add-handler! 'id (lambda () (id)))]))
 
 ;;; whenevers
 (define-syntax whenever-cond (make-rename-transformer #'cond))
@@ -223,10 +296,10 @@ with '-' prevents access.
                       (datum->syntax n (syntax->datum n) #'id #'id))]
                    [(value ...)
                     (for/list ([n (in-range (length names))])
-                      #`(list-ref (message-values current-message) #,n))])
+                      #`(list-ref (message-values (current-message)) #,n))])
        #`(begin
            (and #f (id))
-           (when (member 'id (message-tags current-message))
+           (when (member 'id (message-tags (current-message)))
              (let ([name value] ...)
                body ...))))]))
 (define-syntax (whenever stx)
@@ -315,33 +388,29 @@ with '-' prevents access.
                        (with-syntax ([name (syntax-local-introduce k)])
                          (syntax/loc
                              stx
-                             [name
-                              (lambda (stx)
-                                (syntax-parse stx
-                                  [name:id
-                                   #'(match msg 
-                                       [(message (? (lambda (l) (member 'name l)) _)
-                                                 (list* x _)
-                                                 _)
-                                        x]
-                                       [_ (raise (failure))])]))])))]
-                    [message-match-lists (syntax-local-introduce -message-match-lists)]
-                    [add-matcher! (syntax-local-introduce -add-matcher!)])
+                           [name
+                            (lambda (stx)
+                              (syntax-parse stx
+                                [name:id
+                                 #'(match msg 
+                                     [(message (? (lambda (l) (member 'name l)) _)
+                                               (list* x _)
+                                               _)
+                                      x]
+                                     [_ (raise (failure))])]))])))]
+                    [key (generate-temporary)]
+                    [the-environment (the-environment #'here)]
+                    [x (syntax-local-lift-expression
+                        #'(parameterize ([current-environment the-environment])
+                            (add-matcher!
+                             (lambda (msg) 
+                               (with-handlers ([failure? void])
+                                 (if (not (let-syntax pats e))
+                                     (clear-cached-matches! 'key)
+                                     (add-cached-match! 'key msg)))))))])
        
-       (with-syntax* ([key (generate-temporary)])
-         (syntax-local-lift-expression
-          #'(begin
-              (add-matcher!
-               (lambda (msg) 
-                 (with-handlers ([failure? void])
-                   (if (not (let-syntax pats e))
-                       (hash-set! message-match-lists 'key null)
-                       (hash-set! message-match-lists
-                                  'key
-                                  (cons msg (hash-ref message-match-lists 'key)))))))
-              (hash-set! message-match-lists 'key null)))
-         (syntax/loc stx
-           (lambda () (hash-ref message-match-lists 'key)))))]))
+       (syntax/loc stx
+         (lambda () x (get-cached-matches 'key))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
   (if (not maybe-stx)
@@ -350,8 +419,6 @@ with '-' prevents access.
         (syntax-parse stx
           [n:number
            (syntax/loc stx (lambda (l) (n . <= . (length l))))]))))
-
-
 
 ;;; things that use time
 (define-syntax (after stx)
@@ -376,10 +443,9 @@ with '-' prevents access.
      (with-syntax ([(args ...)
                     (for/list ([e (in-syntax #'(exprs ...))]
                                #:unless (keyword? (syntax-e e)))
-                      e)]
-                   [-last-message-time-cache (syntax-local-introduce -last-message-time-cache)])
+                      e)])
        #'(when
-             (let ([m (hash-ref -last-message-time-cache 'name #f)])
+             (let ([m (hash-ref (current-message-query-cache:last-time) 'name #f)])
                (implies m (after? n m)))
            (name exprs ...)))]))
 ;;; numbers
@@ -457,7 +523,7 @@ with '-' prevents access.
   (define message-args (make-free-id-table))
   (define message-name-stx-prop (datum->syntax #f 'prop)))
 (define-syntax (define-message stx)
-  (with-syntax ([send-message! (syntax-local-introduce -send-message!)])
+  (with-syntax ()
     (define-splicing-syntax-class args
       (pattern (~seq a:arg ...)
                #:with cleannames #'(a.name ...)

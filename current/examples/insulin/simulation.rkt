@@ -38,7 +38,7 @@
 (define (run-simulation-for time factor)
   (define-values (res _in-system _cont-dosage _next)
     (for/fold ([outgoing null] [insulin-in-system 0] [insulin-continous 0] [next null])
-              s([_ (in-range 0 time 60)])
+              ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
       (define log
         (append tlog
