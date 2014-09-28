@@ -48,12 +48,14 @@ with '-' prevents access.
          "private/shared.rkt")
 
 (module+ test (require rackunit))
+
 ;;; things that need to go first
 (begin-for-syntax
   (define-syntax-class number+unit
     #:literals (-number)
     (pattern x:number)
     (pattern (-number x:number y:id))))
+
 ;; to guard against function misuse
 (define-syntax (define/func stx)
   (syntax-parse stx
@@ -68,7 +70,8 @@ with '-' prevents access.
                [na:id (raise-syntax-error 'function "a function cannot be used as an argument" stx)]
                [(na:id a (... ...))
                 #'(real a (... ...))]))))]))
-;;; environmetn
+
+;;; environment
 (struct environment
   (message ; #f or message
    time ; current time in seconds
