@@ -1,13 +1,17 @@
 #lang racket/base
 (require racket/gui/base 
          racket/class
-         pict)
+         pict
+         racket/match)
 
 (define (show-gui insul-infusion bg #:title [title ""])
   (define f (new frame% [width 800] [height 600] [label title]))
   (define c (new sim-canvas% 
                  [parent f]
-                 [insul-infusion insul-infusion]
+                 [insul-infusion 
+                  (for/list ([v insul-infusion])
+                    (match-define (vector t i) v)
+                    (vector t (exact->inexact i)))]
                  [bg bg]))
   (send f show #t))
 
@@ -19,7 +23,7 @@
 (define bg-max 200)
 
 (define insul-min 0)
-(define insul-max 10)
+(define insul-max 5)
 
 (define sim-canvas%
   (class canvas%
@@ -30,15 +34,15 @@
       (define-values (w h) (get-virtual-size))
       (define y-margin 10)
       
-      (define-values (insul-min insul-max) (find-min/max (λ (x) (vector-ref x 1)) insul-infusion))
+      ;(define-values (insul-min insul-max) (find-min/max (λ (x) (vector-ref x 1)) insul-infusion))
       (define (insul->y insul) (- h (scale-between insul insul-min insul-max y-margin (- h y-margin))))
 
-      (define-values (bg-min bg-max) (find-min/max (λ (x) (vector-ref x 1)) bg))
+      ;(define-values (bg-min bg-max) (find-min/max (λ (x) (vector-ref x 1)) bg))
       (define (bg->y bg) (- h (scale-between bg bg-min bg-max y-margin (- h y-margin))))
       
-      ;; treat the range [insul-min,insul-max] with steps by 5 as reasonable insularin infusion rates
+      ;; treat the range [insul-min,insul-max] with steps by 1 as reasonable insularin infusion rates
       (define right-axis 
-        (colorize (build-axis insul-min insul-max 5 (- (insul->y insul-max) (insul->y insul-min)))
+        (colorize (build-axis insul-min insul-max 1 (- (insul->y insul-max) (insul->y insul-min)))
                   infusion-color))
       
       ;; treat the range [bg-min,bg-max] with steps by 25 as reasonable bg values
