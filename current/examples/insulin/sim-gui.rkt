@@ -48,7 +48,7 @@
       ;; treat the range [bg-min,bg-max] with steps by 25 as reasonable bg values
       (define left-axis
         (colorize (build-axis bg-min bg-max
-                              25
+                              20
                               (- (bg->y bg-max) (bg->y bg-min)))
                   bg-color))
       
