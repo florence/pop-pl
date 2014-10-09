@@ -14,7 +14,7 @@ infusion:
     aPtt in 45 to 59   | giveBolus 40 units/kg of: HEParin by: iv
                        | increase HEParin by: 1 unit/kg/hour
 
- // aPTt in 59 to 101  | Continue current HEParin dose
+ // aPtt in 59 to 101  | Continue current HEParin dose
 
     aPtt in 101 to 123 | decrease HEParin by: 1 unit/kg/hour
 
