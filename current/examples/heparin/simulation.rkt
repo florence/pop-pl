@@ -121,7 +121,7 @@
            (eval-log* heparin-in-system n)]
           [(message '(restart) (list "heparin") _)
            (eval-log* heparin-in-system restart-amount)]
-          [(message '(checkptt) _ t)
+          [(message '(checkaptt) _ t)
            (eval-log (rest new-log)
                      (cons msg outgoing)
                      heparin-in-system
@@ -131,7 +131,7 @@
           [else (eval-log* heparin-in-system heparin-continous)]))))
 
 (define (new-ptt value time)
-  (message '(ptt) (list value) (add1 time)))
+  (message '(apttresult) (list value) (add1 time)))
 
 (define first-time-tested #t)
 (define (calculate-ptt h factor)

@@ -1,6 +1,6 @@
 #lang pop-pl/current
 
-message ptt is [ aPtt ]
+message aPttResult is [ aPtt ]
 message change is [ drug by: value ]
 message increase is change
 message decrease(drug by: value) is change(drug by: -value)
@@ -9,4 +9,4 @@ message give is [ amount of: drug by: method ]
 message giveBolus is give
 message hold is [ drug ]
 message restart is [ drug ]
-message checkPtt is []
+message checkaPtt is []

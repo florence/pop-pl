@@ -7,7 +7,7 @@ initially
    start 18 units/kg/hour of: HEParin by: iv
 
 infusion:
-  whenever new ptt
+  whenever new aPttResult
     aPtt < 45          | giveBolus 80 units/kg of: HEParin by: iv
                        | increase HEParin by: 3 units/kg/hour
 
@@ -23,6 +23,6 @@ infusion:
                        |     restart HEParin
                        |     decrease HEParin by: 3 units/kg/hour
 
-heparinPttChecking:
-  Q 6 hours checkPtt whenever ptt outside of 59 to 101, x2
-  Q 24 hours checkPtt whenever ptt in range 59 to 101, x2
+aPttChecking:
+  Q 6 hours checkaPtt whenever aPttResult outside of 59 to 101, x2
+  Q 24 hours checkaPtt whenever aPttResult in range 59 to 101, x2
