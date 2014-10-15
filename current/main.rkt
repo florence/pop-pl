@@ -11,7 +11,8 @@ with '-' prevents access.
  define and not
  (rename-out [in:module-begin #%module-begin])
  ;; forward facing
- whenever whenever-new initially after q whenever-cond
+ whenever whenever-new initially after every whenever-cond
+ (rename-out [every q])
  (rename-out
   [unit:+ +]
   [unit:- -]
@@ -477,9 +478,9 @@ with '-' prevents access.
 (define (after? diff start)
   (< (+ (time->stamp diff) (time->stamp start)) 
      (time->stamp (current-time))))
-(define-syntax (q stx)
+(define-syntax (every stx)
   (syntax-parse stx
-    [(q n:number+unit name:id exprs ...)
+    [(every n:number+unit name:id exprs ...)
      (with-syntax ([(args ...)
                     (for/list ([e (in-syntax #'(exprs ...))]
                                #:unless (keyword? (syntax-e e)))

@@ -22,11 +22,11 @@ insulinUpdating:
      BG > 360               | change insulin to: 6.0 units/hour
 
 monitoring:
-  Q 1 hours checkBG whenever BG outside 120 to 180, x4
-  Q 4 hours checkBG whenever BG between 120 and 180, x4
+  every 1 hours checkBG whenever BG outside 120 to 180, x4
+  every 4 hours checkBG whenever BG between 120 and 180, x4
 
 hypoglycemia:
   notifyDoctor whenever BG < 60, since last notifyDoctor
   whenever latest BG < 60
     hold insulin
-    Q 15 minutes checkBG
+    every 15 minutes checkBG

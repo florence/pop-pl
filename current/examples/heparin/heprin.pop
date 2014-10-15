@@ -24,5 +24,5 @@ infusion:
                        |     decrease HEParin by: 3 units/kg/hour
 
 aPttChecking:
-  Q 6 hours checkaPtt whenever aPttResult outside of 59 to 101, x2
-  Q 24 hours checkaPtt whenever aPttResult in range 59 to 101, x2
+  every 6 hours checkaPtt whenever aPttResult outside of 59 to 101, x2
+  every 24 hours checkaPtt whenever aPttResult in range 59 to 101, x2
