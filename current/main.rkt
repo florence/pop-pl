@@ -9,7 +9,8 @@ with '-' prevents access.
  ;; from racket
  #%top #%app #%datum 
  define and not
- (rename-out [in:module-begin #%module-begin])
+ (rename-out [in:module-begin #%module-begin]
+             [in:top-inter #%top-interaction])
  ;; forward facing
  whenever whenever-new initially after every whenever-cond
  (rename-out [every q])
@@ -29,7 +30,9 @@ with '-' prevents access.
  ;; internal
  make-handler define-message add-handler define-handler
  -number
- (rename-out [require -require]))
+ (rename-out [require -require])
+ ;;for the configure-runtime
+ current-environment)
 
 (require (for-syntax racket/base
                      racket/dict
@@ -253,11 +256,25 @@ with '-' prevents access.
    (datum->syntax in:the-environment
                   (syntax-e in:the-environment)
                   stx)))
+(require racket/function)
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
      (with-syntax ([the-environment (the-environment #'here)])
-       #`(#%module-begin
+       #`(#%plain-module-begin
+          (module* configure-runtime #f
+            (#%plain-module-begin
+             (require pop-pl/current/lang/parse racket/runtime-config)
+             (configure #f)
+             (current-environment the-environment)
+             (current-read-interaction
+              (lambda (name in)
+                (define-values (stx f) (parse in #:name name #:pattern Expr))
+                (unless f (error 'parse "bad"))
+                stx))
+             (-eval (message '(time) (list 1) #f))
+             (for-each displayln (-eval (message '(time) (list 1) #f)))))
+          
           (provide (rename-out [-eval eval] [-reset! reset!]))
           #,(datum->syntax stx '(-require pop-pl/current/constants))
           ;; global state
@@ -277,12 +294,28 @@ with '-' prevents access.
               (eval m)))
 
           body ...
+
           (define initial-handlers 
             (parameterize ([current-environment the-environment])
               (hash->immutable-hash (current-next-handlers))))
           (define initial-matchers 
             (parameterize ([current-environment the-environment])
               (current-message-query-cache-generators)))))]))
+
+(define-syntax (in:top-inter stx)
+  (syntax-parse stx
+    [(_ . f)
+     #`(#%top-interaction
+        values
+        (let ([v (get-current-environment)]
+              [e (make-empty-environment)])
+          (parameterize ([current-environment e])
+            (define r f)
+            (let ([l (current-outgoing-log)])
+              (if (null? l)
+                  r
+                  (parameterize ([current-environment v])
+                    (for-each displayln (eval (first l)))))))))]))
 
 
 
@@ -372,8 +405,7 @@ with '-' prevents access.
                                        [(not e)
                                         #'not]
                                        [_ #'values])])
-                        (syntax/loc 
-                            #'t
+                        (syntax/loc #'t
                           (n (let* ([matching (get-matching)]
                                     [since (since-last matching)]
                                     [acceptable (apart since)])

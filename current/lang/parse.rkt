@@ -1,5 +1,5 @@
 #lang racket/base
-(provide parse lex raise-parse-error)
+(provide parse lex raise-parse-error Expr)
 (require (for-syntax syntax/parse racket/base)
          racket/function
          racket/format

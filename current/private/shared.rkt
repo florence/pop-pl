@@ -3,7 +3,8 @@
          (struct-out message)
          time->stamp)
 (require racket/match
-         racket/format)
+         racket/format
+         racket/list)
 (module+ test (require rackunit))
 (struct in:number (value unit) #:transparent
         #:methods gen:custom-write
@@ -12,7 +13,13 @@
                     "%(~a ~a)"
                     (exact->inexact (in:number-value n))
                     (in:number-unit n)))])
-(struct message (tags values time) #:transparent)
+(struct message (tags values time) #:transparent
+        #:methods gen:custom-write
+        [(define (write-proc m port mode)
+           (fprintf port
+                    "~a~a"
+                    (last (message-tags m))
+                    (message-values m)))])
 
 (define (time->stamp t)
   (match t
