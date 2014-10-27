@@ -502,7 +502,9 @@
                        "weeks"
                        "week"
                        "minutes"
-                       "minute")
+                       "minute"
+                       "seconds"
+                       "second")
                  (lambda (l r) (> (string-length l) (string-length r)))))]
   [OP (:/ (list "and" "or" "=" "<" ">" "+" "-" "*" "/"))]
   
@@ -544,11 +546,12 @@
   [LATEST  "latest"]
 
   ;; basics
-  [END (:/ (list (:seq (const 'END) (list ?WHITESPACE (:& (:/ (list NEWLINE :EOF)))))
+  [END (:/ (list (:seq (const 'END) (list ?WHITESPACE (:& (:/ (list NEWLINE &EOF)))))
                  (:seq (const 'END)
                        (list ?WHITESPACE (:& COMMENT)
                              (:rx no-op #px"//.*?(?=(\n|$))")
-                             (:& (:/ (list NEWLINE :EOF)))))))]
+                             (:& (:/ (list NEWLINE &EOF)))))))]
+  [&EOF (:& :EOF)]
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   ;; handle non-breaking spaces for scribble

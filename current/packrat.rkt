@@ -104,11 +104,19 @@
 
 (define (parse* pat i name [table (make-hasheq)] #:debug [a:debug #f])
   (define-values (a b c) (if (string? i) (values #f #f #f) (port-next-location i)))
-  (define s (if (string? i) i (port->string i)))
-  (define in (open-input-string s))
-  (port-count-lines! in)
-  (set-port-next-location! in (or a 1) (or b 0) (or c 1))
-  (parse pat in name table #:debug a:debug))
+  (define s (if (string? i) i (port->string/no-eof i)))
+  (cond [(equal? s "") (values r:eof #f)]
+        [else
+         (define in (open-input-string s))
+         (port-count-lines! in)
+         (set-port-next-location! in (or a 1) (or b 0) (or c 1))
+         (parse pat in name table #:debug a:debug)]))
+
+(define (port->string/no-eof p)
+  (define p2 (peeking-input-port p))
+  (define s (port->bytes p2))
+  (read-bytes (bytes-length s) p)
+  (bytes->string/utf-8 s))
 
 (define (parse pat in [name #f] [table (make-hasheq)] #:debug [a:debug #f])
   (define start (make-location in))
@@ -155,7 +163,8 @@
                (if (not end)
                    (fail (get-pos))
                    (values (f (string-downcase (bytes->string/locale (read-bytes end in)))
-                              (get-pos)) (get-pos)))]
+                              (get-pos))
+                           (get-pos)))]
               [(/ (list* pats))
                (let loop ([pats pats] [pos (get-pos)]) 
                  (cond [(null? pats)

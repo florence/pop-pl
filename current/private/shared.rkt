@@ -9,17 +9,20 @@
 (struct in:number (value unit) #:transparent
         #:methods gen:custom-write
         [(define (write-proc n port mode)
+           (define v (in:number-value n))
            (fprintf port
-                    "%(~a ~a)"
-                    (exact->inexact (in:number-value n))
+                    "~a ~a"
+                    (if (integer? v) v (exact->inexact v))
                     (in:number-unit n)))])
 (struct message (tags values time) #:transparent
         #:methods gen:custom-write
         [(define (write-proc m port mode)
-           (fprintf port
-                    "~a~a"
-                    (last (message-tags m))
-                    (message-values m)))])
+           (parameterize ([current-output-port port])
+             (printf "[~a"
+                      (last (message-tags m)))
+             (for-each (lambda (a) (printf " ~a" a))
+                       (message-values m))
+             (printf "]")))])
 
 (define (time->stamp t)
   (match t

@@ -1,5 +1,5 @@
 #lang racket
-(provide prescription-test n)
+(provide prescription-test n advance send current-eval)
 (require (for-syntax syntax/parse))
 (require pop-pl/current/private/shared rackunit rackunit/text-ui unstable/match)
 

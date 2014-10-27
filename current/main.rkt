@@ -270,8 +270,9 @@ with '-' prevents access.
              (current-read-interaction
               (lambda (name in)
                 (define-values (stx f) (parse in #:name name #:pattern Expr))
-                (unless f (error 'parse "bad"))
+                (unless stx (error 'parse "bad"))
                 stx))
+             ;;TODO shouldn't need to do this twice...
              (-eval (message '(time) (list 1) #f))
              (for-each displayln (-eval (message '(time) (list 1) #f)))))
           
@@ -631,7 +632,9 @@ There are three ways to define a message
              (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened))))
            (provide name)
            (define/func (name #,@#'args.flattened #:-keys [keys null])
-             (send-message! (message `(name ,@keys) (list #,@#'args.names) (current-time))))))]
+             (send-message! (message `(name ,@keys)
+                                     (list #,@#'args.names)
+                                     (current-time))))))]
       ;; define from other message
       [(define-message name:id other:id)
        (define key (syntax-local-introduce #'other))
