@@ -26,3 +26,23 @@ infusion:
 aPTTChecking:
   every 6 hours checkaPTT whenever aPTTResult outside of 59 to 101, x2
   every 24 hours checkaPTT whenever aPTTResult in range 59 to 101, x2
+
+--- Tests ---
+
+[giveBolus 80 units/kg of: HEParin by: iv]
+[start 18 units/kg/hour of: HEParin by: iv]
+[checkaPTT]
+
+> aPTTResult 40
+[giveBolus 80 units/kg of: HEParin by: iv]
+[increase HEParin by: 3 units/kg/hour]
+
+> wait 7 hours
+[checkaPTT]
+
+> aPTTResult 240
+[hold HEParin]
+
+> wait 1.5 hours
+[restart HEParin]
+[decrease HEParin by: 3 units/kg/hour]

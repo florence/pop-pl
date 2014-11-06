@@ -38,7 +38,7 @@
              #:with down #'e.down)
     (pattern e #:with down #'e))
   (define-syntax-class test-clause 
-    #:datum-literals (=> advance start)
+    #:datum-literals (=> advance start wait)
     (pattern (~and
               stx
               (~or
@@ -56,6 +56,10 @@
                ((advance t)
                 => m:pat ...)
                (=> (advance t)
+                   m:pat ...)
+               ((wait t)
+                => m:pat ...)
+               (=> (wait t)
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
@@ -93,16 +97,18 @@
              #'(message (list-no-order 'm ... _ ___) (list e ...) _)))
   (syntax-parse stx
     [(_ path t:test-clause ...)
-     #`(parameterize ([current-eval (dynamic-require 'path 'eval)]
-                      [current-reset (dynamic-require 'path 'reset!)])
-         (void
-          (run-tests
-           (test-suite
-            (~a 'path)
-            #:after (current-reset)
-            (test-case
-             'path
-             t.parsed ...)))))]))
+     #`(let ()
+         (local-require (only-in path [eval eval] [reset! reset!]))
+         (parameterize ([current-eval eval]
+                        [current-reset reset!])
+           (void
+            (run-tests
+             (test-suite
+              (~a 'path)
+              #:after (current-reset)
+              (test-case
+               (~a 'path)
+               t.parsed ...))))))]))
 
 (define-match-expander eq
   (lambda (stx)

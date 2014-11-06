@@ -3,7 +3,7 @@
 message aPttResult is [ aPtt ]
 message change is [ drug by: value ]
 message increase is change
-message decrease(drug by: value) is change(drug by: -value)
+message decrease is change
 message start is [ amount of: drug by: method]
 message give is [ amount of: drug by: method ]
 message giveBolus is give

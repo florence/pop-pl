@@ -44,9 +44,9 @@
 (module+ test
   #;
   (let ([h #'handler]
-        [s #'(line 0 2)])
-    (check-equal? (parse-handler (list h " " 'x "is" " " #t "\n" `(,s ,42)))
-                  `(,(datum->syntax h 'define-handler) x ,s))))
+  [s #'(line 0 2)])
+  (check-equal? (parse-handler (list h " " 'x "is" " " #t "\n" `(,s ,42)))
+  `(,(datum->syntax h 'define-handler) x ,s))))
 (define parse-line
   (match-lambda
    [(list indent expr _)
@@ -114,7 +114,7 @@
 ;;; parsing whenevers
 ;; parse whenever part lines
 (define parse-iwpe
-    (lambda (r p) (filter list? r)))
+  (lambda (r p) (filter list? r)))
 ;; parse an whenever header
 (define parse-whenever
   (match-lambda
@@ -131,12 +131,12 @@
 ;; parse a whenever that has many parts
 (define (parse-whenever+parts l)
   (match l
-   [(list w _ 'END (list (list _ part _) ...))
-    `(,(datum->syntax #f 'whenever-cond w)  ,@(flatten-parts part))]
-   [(list w ... _ 'END (list (list _ part _) ...))
-    `(,@(parse-whenever w)
-      (,(datum->syntax #f 'whenever-cond (first w))
-       ,@(flatten-parts part)))]))
+    [(list w _ 'END (list (list _ part _) ...))
+     `(,(datum->syntax #f 'whenever-cond w)  ,@(flatten-parts part))]
+    [(list w ... _ 'END (list (list _ part _) ...))
+     `(,@(parse-whenever w)
+       (,(datum->syntax #f 'whenever-cond (first w))
+        ,@(flatten-parts part)))]))
 ;; condense the line-by-line whenever into a series of clauses
 (define (flatten-parts parts [results null])
   (cond [(null? parts) (reverse results)]
@@ -199,13 +199,13 @@
                 '(and (< 1 3)
                   (< 3 4))))
 (define (parse-in-range l)
-    (match l
-      [(list e _ _ _ o _ _ _ c)
-       `(in-range ,e ,o ,c)]))
+  (match l
+    [(list e _ _ _ o _ _ _ c)
+     `(in-range ,e ,o ,c)]))
 (define parse-outside
-    (match-lambda
-     [(list n _ _ _ _ _ _ _ lower _ _ _ upper)
-      `(not (in-range ,n ,lower ,upper))]))
+  (match-lambda
+   [(list n _ _ _ _ _ _ _ lower _ _ _ upper)
+    `(not (in-range ,n ,lower ,upper))]))
 (define (raise-parse-error p m)
   (raise-read-error m
                     (position-source p)
@@ -218,23 +218,51 @@
    #f
    id
    #f))
+
+
+
+(define (parse-test-top a)
+  (match a
+    [(list _begin results cases)
+     `(here-be-tests
+       (=> start ,@results)
+       ,@cases)]))
+(define-splicing-syntax-class ap
+  (pattern (~or x:expr
+                (~seq k:keyword x:expr))
+           #:with nokw #'x))
+(define (parse-test-case a)
+  (match a
+    [(list _nl _carrot _ws call _end results)
+     (syntax-parse call 
+       [(a:ap ...)
+        `(=> ,#'(a.nokw ...)
+          ,@results)])]))
+(define (parse-test-results a)
+  (match a
+    [(list _nl _ws _open call _close _end)
+     (syntax-parse call
+       [(a:ap ...)
+        (syntax/loc call (a.nokw ...))])]))
+
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
-              (compose
-               (lambda (b) `(,(empty-syntax'module) 
-                        ,(empty-syntax 'TODO) 
-                        ,(empty-syntax 'pop-pl/current/main)
-                        ,@(filter syntax? b)))
-               second))
+              (lambda (b)
+                `(,(empty-syntax 'module) 
+                  ,(empty-syntax 'TODO) 
+                  ,(empty-syntax 'pop-pl/current/main)
+                  ,@(filter syntax? (flatten b)))))
              (list 
               (:? no-op LANG)
-              (:+ no-op 
+              (:* no-op 
                   (:/
                    (list
                     (:seq no-op (list NEWLINE END))
                     (:seq (lambda (r p) (second r))
                           (list (:? no-op NEWLINE)
                                 (:/  (list Require COMMENT Initially Handler Message Use)))))))
+              (:* no-op NEWLINE)
+              (:? no-op Tests)
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?(\n|$)")]
@@ -244,6 +272,7 @@
 
   [Require (:seq (->stx parse-require)
                  (list REQUIRE WHITESPACE ID (:? no-op WHITESPACE) END))]
+  
   
   [Initially (:seq (->stx parse-init)
                    (list INITIALLY END (:+ no-op Line)))]
@@ -374,7 +403,7 @@
   
   
   
-    
+  
   ;; function calls
   [Call+Parens (:seq (->stx flatten)
                      (list ID ArgsList+Parens))]
@@ -508,12 +537,43 @@
                  (lambda (l r) (> (string-length l) (string-length r)))))]
   [OP (:/ (list "and" "or" "=" "<" ">" "+" "-" "*" "/"))]
   
+
+  [Tests 
+   (:seq (->stx parse-test-top)
+         (list TEST
+               TestResults
+               (:* no-op TestCase)))]
+  [TestCase
+   (:seq (->stx parse-test-case)
+         (list 
+          (:+ no-op NEWLINE)
+          CARROT
+          ?WHITESPACE
+          CallId
+          END
+          TestResults))]
+  [TestResults
+   (:* no-op
+       (:seq (->stx parse-test-results) 
+             (list NEWLINE ?WHITESPACE OPEN-BRACKET CallId CLOSE-BRACKET END)))]
+
+  
   ;; keywords
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
                       UNIT-RAW AND OR OP NEW COMMA OPEN-PAREN CLOSE-PAREN
                       SINCELAST APART
-                      IN RANGE TO OF OUTSIDE BETWEEN LATEST))]
+                      IN RANGE TO OF OUTSIDE BETWEEN LATEST
+                      TEST CARROT))]
+  [TEST (:seq no-op
+              (list (:* no-op "-")
+                    ?WHITESPACE
+                    "Tests"
+                    ?WHITESPACE
+                    (:* no-op "-")
+                    END
+                    (:* no-op (:seq no-op (list NEWLINE END)))))]
+  [CARROT ">"]
   [AND "and"]
   [OR "or"]
   [REQUIRE (:lit (->stx string->symbol) "require")]
@@ -573,9 +633,9 @@
   [Todo (:! (:? no-op (:rx no-op #rx".")))]
   [LANG (:seq no-op (list "#lang" (:rx no-op #rx".*?\n")))]
   [INCOMPLETE-STRING (:rx no-op #rx"\"[^\"]*")]
-  [Other (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER INITIALLY MEANS PIPE AFTER
-                   OP FUNCTION NEW COMMA NOT X SINCE LAST APART IN RANGE TO OUTSIDE OF USED BY
-                   BETWEEN LATEST))]
+  [Other (:/ (list TEST CARROT REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET WHENEVER HANDLER
+                   INITIALLY MEANS PIPE AFTER OP FUNCTION NEW COMMA NOT X SINCE LAST APART IN
+                   RANGE TO OUTSIDE OF USED BY BETWEEN LATEST))]
   [Other+End
    (:/
     (list
@@ -686,12 +746,12 @@
    ;; uuggg.... do i really care?
    #;
    (test-parse "initially
-whenever
- x | whenever x
- |  y"
-               (initially
-                (whenever-cond
-                 [x (whenever x (y))]))))
+   whenever
+   x | whenever x
+   |  y"
+   (initially
+   (whenever-cond
+   [x (whenever x (y))]))))
   (test-parse
    "initially
   whenever new x
@@ -1119,34 +1179,34 @@ infusion:
     (define-handler x 
       (whenever-new (m (is left right))
                     (z)))))
-(test-case
- "big5"
- (test-parse
-  "handler heparinPttChecking is
+  (test-case
+   "big5"
+   (test-parse
+    "handler heparinPttChecking is
   Q 24 hours checkPtt
   // this is iffy may need nested whenevers (ew)
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-  (define-handler heparinpttchecking
-    (q (-number 24 hours) checkptt)
-    (whenever-new (change (is drug "heparin"))
-                  (after (-number 6 hours)
-                         (checkptt)))))
- (test-parse
-  "handler heparinPttChecking is
+    (define-handler heparinpttchecking
+      (q (-number 24 hours) checkptt)
+      (whenever-new (change (is drug "heparin"))
+                    (after (-number 6 hours)
+                           (checkptt)))))
+   (test-parse
+    "handler heparinPttChecking is
   whenever new change and drug is \"heparin\"
       after 6 hours
         checkPtt"
-  (define-handler heparinpttchecking
-    (whenever-new (change (is drug "heparin"))
-                  (after (-number 6 hours)
-                         (checkptt)))))
+    (define-handler heparinpttchecking
+      (whenever-new (change (is drug "heparin"))
+                    (after (-number 6 hours)
+                           (checkptt)))))
 
- (test-parse
-  "drug is \"heparin\""
-  #:pattern Expr
-  (is drug "heparin")))
+   (test-parse
+    "drug is \"heparin\""
+    #:pattern Expr
+    (is drug "heparin")))
   
   (test-parse 
    "handler t is\n  notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
@@ -1158,4 +1218,44 @@ infusion:
     (read-line in)
     (define-values (s _) (parse in))
     (check-equal? (syntax->datum s)
-                  (module '(define-message test (a #:b c))))))
+                  (module '(define-message test (a #:b c)))))
+  (test-case
+   "parse test forms"
+   (test-parse
+    "--- Tests ---"
+    #:pattern Tests
+    (here-be-tests (=> start)))
+   (test-parse
+    "--- Tests ---"
+    (here-be-tests (=> start)))
+   (test-parse
+    "\n[x]"
+    #:pattern TestResults
+    ((x)))
+   (test-parse
+    "\n[x y: z]"
+    #:pattern TestResults
+    ((x z)))
+   (test-parse
+    "--- Tests ---\n [x y: z]"
+    #:pattern Tests
+    (here-be-tests (=> start (x z))))
+   (test-parse
+    "--- Tests ---\n [x y: z]"
+    (here-be-tests (=> start (x z))))
+   (test-parse
+    "\n>x"
+    #:pattern TestCase
+    (=> (x)))
+   (test-parse
+    "\n>x\n [x]"
+    #:pattern TestCase
+    (=> (x) (x)))
+   (test-parse
+    "--- Tests ---\n [x y: z]\n  [x]\n> x y\n[a b: c d: e]"
+    (here-be-tests
+     (=> start
+         (x z)
+         (x))
+     (=> (x y)
+         (a c e))))))

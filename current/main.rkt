@@ -31,6 +31,7 @@ with '-' prevents access.
  make-handler define-message add-handler define-handler
  -number
  (rename-out [require -require])
+ here-be-tests
  ;;for the configure-runtime
  current-environment)
 
@@ -610,6 +611,7 @@ There are three ways to define a message
 3. define a message that transforms its arguments to send a different message, plus its tag
    (define from function)
 |#
+(define do-send (make-parameter #t))
 (define-syntax (define-message stx)
   (with-syntax ()
     (define-splicing-syntax-class args
@@ -632,9 +634,10 @@ There are three ways to define a message
              (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened))))
            (provide name)
            (define/func (name #,@#'args.flattened #:-keys [keys null])
-             (send-message! (message `(name ,@keys)
-                                     (list #,@#'args.names)
-                                     (current-time))))))]
+             ((if (do-send) send-message! values)
+              (message `(name ,@keys)
+                       (list #,@#'args.names)
+                       (current-time))))))]
       ;; define from other message
       [(define-message name:id other:id)
        (define key (syntax-local-introduce #'other))
@@ -666,3 +669,17 @@ There are three ways to define a message
                (let-syntax ([old (make-rename-transformer #'new)] ...)
                  (super call ... #:-keys `(name ,@keys)))))))])))
 
+
+;;; testing
+
+(define-syntax (here-be-tests stx)
+  (syntax-parse stx
+    [(_ body-start body ...)
+     (syntax/loc stx
+       (module* test racket
+         (require pop-pl/current/tests/harness
+                  pop-pl/current/constants
+                  (only-in pop-pl/current/main -number))
+         (prescription-test
+          (submod "..")
+          body ...)))]))
