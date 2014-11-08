@@ -33,13 +33,6 @@ aPTTChecking:
 [start 18 units/kg/hour of: HEParin by: iv]
 [checkaPTT]
 
-> aPTTResult 40
-[giveBolus 80 units/kg of: HEParin by: iv]
-[increase HEParin by: 3 units/kg/hour]
-
-> wait 7 hours
-[checkaPTT]
-
 > aPTTResult 240
 [hold HEParin]
 
