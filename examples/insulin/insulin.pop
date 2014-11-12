@@ -1,0 +1,32 @@
+#lang pop-pl
+
+// This simplified version of the commonly used 
+// part of the Loyola insulin protocol
+
+used by Loyola
+
+initially
+  start insulin at: 1 unit/hour by: iv
+
+insulinUpdating:
+  whenever new BG
+     BG < 60                | hold insulin
+     BG between 60 and 80   | change insulin to: 0.1 units/hour
+     BG between 80 and 110  | change insulin to: 0.2 units/hour
+     BG between 110 and 120 | change insulin to: 0.5 units/hour
+     BG between 120 and 150 | change insulin to: 1.0 units/hour
+     BG between 150 and 180 | change insulin to: 1.5 units/hour
+     BG between 180 and 240 | change insulin to: 2.0 units/hour
+     BG between 240 and 300 | change insulin to: 3.0 units/hour
+     BG between 300 and 360 | change insulin to: 4.0 units/hour
+     BG > 360               | change insulin to: 6.0 units/hour
+
+monitoring:
+  every 1 hours checkBG whenever BG outside 120 to 180, x4
+  every 4 hours checkBG whenever BG between 120 and 180, x4
+
+hypoglycemia:
+  notifyDoctor whenever BG < 60, since last notifyDoctor
+  whenever latest BG < 60
+    hold insulin
+    every 15 minutes checkBG

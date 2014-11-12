@@ -1,0 +1,21 @@
+#lang pop-pl
+
+used by OSFSaintFrancis
+
+// fentanyl section
+initially
+  start 25 micrograms/hour of: fentanyl
+  set onDemandFentanyl to: 25 micrograms
+
+breakthroughPain:
+  // and will need to bind forward i think
+  whenever new painscore and score > 8 cm
+      increase onDemandFentanyl by: 10 micrograms
+      after 1 hour
+         checkPainScore
+
+  notifyDoctor whenever painscore > 8, x3, since last notifyDoctor
+
+minimalPain:
+  whenever painscore < 3 cm, x2, 1 hour apart, since last decrease onDemandFentanyl
+      decrease onDemandFentanyl by: 10 micrograms

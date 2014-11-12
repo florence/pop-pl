@@ -1,0 +1,10 @@
+#lang pop-pl
+
+message change is [ drug by: amount]
+message increase is change
+message decrease(drug by: amount) is change(drug by: -amount)
+message start is [ amount of: drug]
+message set is [ thing to: amount ]
+message painscore is [ score ]
+message checkpainscore is []
+message notifydoctor is []
