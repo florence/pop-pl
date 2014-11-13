@@ -3,3 +3,5 @@ This is the implementation of the Patient Oriented Programming Language (POP-PL)
 The examples are the best documentation you get right now.
 
 You can install this directly with "raco pkg install pop-pl"
+
+Once installed you can now open and run any of the ".pop" files in the examples. Pressing run will present you with a REPL to play with message interactions.
