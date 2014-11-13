@@ -1,7 +1,8 @@
 This is the implementation of the Patient Oriented Programming Language (POP-PL)
 
-The examples are the best documentation you get right now.
-
-You can install this directly with "raco pkg install pop-pl"
-
-Once installed you can now open and run any of the ".pop" files in the examples. Pressing run will present you with a REPL to play with message interactions.
+To install
+1. Download the latest version of Racket from http://download.racket-lang.org/
+2. Open the DrRacket IDE, which comes with Racket
+3. Select "File" -> "Install Package..."
+4. Enter "pop-pl" into the dialog and click "Install"
+5. You can now open and run any of the ".pop" files in the examples. Pressing run will present you with a REPL to play with message interactions.
