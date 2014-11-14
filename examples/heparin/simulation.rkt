@@ -10,7 +10,7 @@
 
 (provide simulate)
 
-(require "heprin.pop" pop-pl/private/shared)
+(require "heparin.pop" pop-pl/private/shared)
 
 (define time-advance 60);in seconds
 (define perterb-percent 0.2)
