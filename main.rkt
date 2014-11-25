@@ -123,7 +123,7 @@ with '-' prevents access.
   (environment
    #f         ;message
    0          ;time
-   null       ;lot
+   null       ;log
    null       ;outgoing-log
    (hash)     ;handlers
    (make-hash);next handlers
@@ -179,11 +179,13 @@ with '-' prevents access.
 
 ;; -> (Listof Message)
 ;; E: add the current message and outbound messages to the log
-;; returns the additions to the log
+;; returns the additions to the log, no including the current message
 (define (swap-log!)
-  (define res (append (current-outgoing-log) (list (current-message))))
+  (define res (current-outgoing-log))
   (set-environment-log! (current-environment)
-                        (append res (current-log)))
+                        (append res
+                                (list (current-message))
+                                (current-log)))
   (set-environment-outgoing-log! (current-environment) null)
   res)
 
@@ -273,14 +275,18 @@ with '-' prevents access.
                 (define-values (stx f) (parse in #:name name #:pattern Expr))
                 (unless stx (error 'parse "bad"))
                 stx))
-             ;;TODO shouldn't need to do this twice...
-             (-eval (message '(time) (list 1) #f))
-             (for-each displayln (-eval (message '(time) (list 1) #f)))))
+             (for-each displayln (-start))))
           
-          (provide (rename-out [-eval eval] [-reset! reset!]))
+          (provide -eval -reset! -start)
+
           #,(datum->syntax stx '(-require pop-pl/constants))
           ;; global state
           (define the-environment (make-empty-environment))
+          
+          (define (-start)
+             ;;TODO shouldn't need to do this twice...
+            (-eval (message '(time) (list 1) #f))
+            (-eval (message '(time) (list 1) #f)))
           
           (define (-reset!)
             (set! the-environment (make-empty-environment))
@@ -671,7 +677,6 @@ There are three ways to define a message
 
 
 ;;; testing
-
 (define-syntax (here-be-tests stx)
   (syntax-parse stx
     [(_ body-start body ...)

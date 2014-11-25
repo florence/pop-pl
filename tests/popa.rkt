@@ -15,4 +15,4 @@
  (=> (painscore 2))
  (=> (advance 2 hours))
  (=> (painscore 2)
-     (decrease ondemandfentanyl (n -10 micrograms))))
+     (decrease ondemandfentanyl (n 10 micrograms))))

@@ -6,6 +6,7 @@
 (define TIME-ADVANCE 60)
 (define current-eval (make-parameter (lambda _ (error 'test "no eval set"))))
 (define current-reset (make-parameter (lambda _ (error 'test "no reset set"))))
+(define current-start (make-parameter (lambda _ (error 'test "no start set"))))
 
 (define (advance time)
   (define t (time->stamp time))
@@ -14,13 +15,7 @@
      (append msg (send (message '(time) (list TIME-ADVANCE) #f))))))
 
 (define (send msg)
-  (filter
-   (lambda (m)
-     (not (and (equal? (list->set (message-tags m))
-                       (list->set (message-tags msg)))
-               (equal? (message-values m)
-                       (message-values msg)))))
-   ((current-eval) msg)))
+  ((current-eval) msg))
 
 (define-syntax-rule (n num u)
   (in:number num 'u))
@@ -48,7 +43,7 @@
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (advance (in:number 1 'hour))
+               (check-match ((current-start))
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
@@ -98,9 +93,10 @@
   (syntax-parse stx
     [(_ path t:test-clause ...)
      #`(let ()
-         (local-require (only-in path [eval eval] [reset! reset!]))
+         (local-require (only-in path [-eval eval] [-reset! reset!] [-start start]))
          (parameterize ([current-eval eval]
-                        [current-reset reset!])
+                        [current-reset reset!]
+                        [current-start start])
            (void
             (run-tests
              (test-suite
