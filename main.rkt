@@ -687,4 +687,5 @@ There are three ways to define a message
                   (only-in pop-pl/main -number))
          (prescription-test
           (submod "..")
+          body-start
           body ...)))]))
