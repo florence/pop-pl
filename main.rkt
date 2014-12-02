@@ -265,16 +265,18 @@ with '-' prevents access.
     [(_ body ...)
      (with-syntax ([the-environment (the-environment #'here)])
        #`(#%plain-module-begin
-          (module* configure-runtime #f
+          (module* configure-runtime racket/base
             (#%plain-module-begin
-             (require pop-pl/lang/parse racket/runtime-config)
+             (#%require pop-pl/lang/parse racket/runtime-config)
              (configure #f)
-             (current-environment the-environment)
              (current-read-interaction
               (lambda (name in)
                 (define-values (stx f) (parse in #:name name #:pattern Expr))
                 (unless stx (error 'parse "bad"))
-                stx))
+                stx))))
+          (module* main #f
+            (#%plain-module-begin
+             (current-environment the-environment)
              (for-each displayln (-start))))
           
           (provide -eval -reset! -start)
