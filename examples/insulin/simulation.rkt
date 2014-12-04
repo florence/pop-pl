@@ -43,7 +43,7 @@
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (eval msg)))))
+                  (append r (-eval msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing insulin-in-system insulin-continous factor))
       (values o
@@ -54,7 +54,7 @@
   res)
 
 (define (inc-time)
-  (eval (message '(time) (list time-advance) #f)))
+  (-eval (message '(time) (list time-advance) #f)))
 
 (define (eval-log new-log outgoing insulin-in-system insulin-continous factor [handle-next null])
   (define restart-amount 0)

@@ -11,6 +11,7 @@
 (provide simulate)
 
 (require "heparin.pop" pop-pl/private/shared)
+(module+ test (require rackunit))
 
 (define time-advance 60);in seconds
 (define perterb-percent 0.2)
@@ -82,7 +83,7 @@
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (eval msg)))))
+                  (append r (-eval msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing heparin-in-system heparin-continous factor))
       (values o
@@ -93,7 +94,9 @@
   res)
 
 (define (inc-time)
-  (eval (message '(time) (list time-advance) #f)))
+  (-eval (message '(time) (list time-advance) #f)))
+(module+ test 
+  (check-true (list? (inc-time))))
 
 (define (eval-log new-log outgoing heparin-in-system heparin-continous factor [handle-next null])
   (define restart-amount 0)
