@@ -83,7 +83,7 @@
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (-eval msg)))))
+                  (append r (-eval msg) (list msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing heparin-in-system heparin-continous factor))
       (values o
