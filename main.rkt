@@ -1,13 +1,13 @@
 #lang racket/base
 #|
-if youre wondering why some names start with '-', its because they need to be visible in a 
-pop-pl program (ie the program litteral expands, or could expand to them), 
+if youre wondering why some names start with '-', its because they need to be visible in a
+pop-pl program (ie the program litteral expands, or could expand to them),
 but we don't want users to actually access them. No pop-pl id can contain a symbol, so prefixing
 with '-' prevents access.
 |#
 (provide
  ;; from racket
- #%top #%app #%datum 
+ #%top #%app #%datum
  define and not
  (rename-out [in:module-begin #%module-begin]
              [in:top-inter #%top-interaction])
@@ -102,7 +102,7 @@ with '-' prevents access.
   (environment-next-handlers (get-current-environment)))
 (define (current-log)
   (environment-log (get-current-environment)))
-(define (current-message-query-cache) 
+(define (current-message-query-cache)
   (environment-message-query-cache (get-current-environment)))
 (define (current-message-query-cache-generators)
   (environment-message-query-cache-generators (get-current-environment)))
@@ -236,7 +236,7 @@ with '-' prevents access.
 ;; E: clear all messages cached under `key`
 (define (clear-cached-matches! key)
   (hash-set! (current-message-query-cache)
-             key 
+             key
              null))
 
 (define (hash->immutable-hash hash)
@@ -254,8 +254,8 @@ with '-' prevents access.
 
 ;;; module
 (define-for-syntax in:the-environment (generate-temporary 'the-environment))
-(define-for-syntax (the-environment stx) 
-  (syntax-local-introduce 
+(define-for-syntax (the-environment stx)
+  (syntax-local-introduce
    (datum->syntax in:the-environment
                   (syntax-e in:the-environment)
                   stx)))
@@ -278,21 +278,21 @@ with '-' prevents access.
             (#%plain-module-begin
              (current-environment the-environment)
              (for-each displayln (-start))))
-          
+
           (provide -eval -reset! -start)
 
           #,(datum->syntax stx '(-require pop-pl/constants))
           ;; global state
           (define the-environment (make-empty-environment))
-          
+
           (define (-start)
              ;;TODO shouldn't need to do this twice...
             (-eval (message '(time) (list 1) #f))
             (-eval (message '(time) (list 1) #f)))
-          
+
           (define (-reset!)
             (set! the-environment (make-empty-environment))
-            (set-environment-next-handlers! 
+            (set-environment-next-handlers!
              the-environment
              (hash-copy initial-handlers))
             (set-environment-message-query-cache-generators!
@@ -305,10 +305,10 @@ with '-' prevents access.
 
           body ...
 
-          (define initial-handlers 
+          (define initial-handlers
             (parameterize ([current-environment the-environment])
               (hash->immutable-hash (current-next-handlers))))
-          (define initial-matchers 
+          (define initial-matchers
             (parameterize ([current-environment the-environment])
               (current-message-query-cache-generators)))))]))
 
@@ -396,7 +396,7 @@ with '-' prevents access.
   (define-splicing-syntax-class query
     (pattern (~seq t:expr (~seq k:query-name e:expr) ...)
              #:with query
-             (let ([asc 
+             (let ([asc
                     (map (match-lambda [(list kw ex) (list (syntax-e kw) ex)])
                          (map syntax->list (syntax->list #'((k e) ...))))])
                (cond [(null? asc) #'t]
@@ -404,7 +404,7 @@ with '-' prevents access.
                       (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
                                     [apart (make-apart-filter (assoc '#:apart asc))]
                                     [times? (make-times-filter (assoc '#:times asc))]
-                                    [get-matching (make-get-matching 
+                                    [get-matching (make-get-matching
                                                    (syntax-parse #'t
                                                      #:literals (not)
                                                      [(not e) #'e]
@@ -438,7 +438,7 @@ with '-' prevents access.
             (for/list ([l log]
                        #:final
                        (match l
-                         [(message (? (lambda (l) (member 'name l))) 
+                         [(message (? (lambda (l) (member 'name l)))
                                    (list args ... _ ___)
                                    _)
                           #t]
@@ -465,7 +465,7 @@ with '-' prevents access.
   (syntax-parse stx
     [e:expr
      (with-syntax* ([msg (generate-temporary)]
-                    [pats 
+                    [pats
                      (for/list ([(k v) (in-dict messages)])
                        (with-syntax ([name (syntax-local-introduce k)])
                          (syntax/loc
@@ -474,7 +474,7 @@ with '-' prevents access.
                             (lambda (stx)
                               (syntax-parse stx
                                 [name:id
-                                 #'(match msg 
+                                 #'(match msg
                                      [(message (? (lambda (l) (member 'name l)) _)
                                                (list* x _)
                                                _)
@@ -485,12 +485,12 @@ with '-' prevents access.
                     [x (syntax-local-lift-expression
                         #'(parameterize ([current-environment the-environment])
                             (add-matcher!
-                             (lambda (msg) 
+                             (lambda (msg)
                                (with-handlers ([failure? void])
                                  (if (not (let-syntax pats e))
                                      (clear-cached-matches! 'key)
                                      (add-cached-match! 'key msg)))))))])
-       
+
        (syntax/loc stx
          (lambda () x (get-cached-matches 'key))))]))
 
@@ -518,7 +518,7 @@ with '-' prevents access.
 ;; time time -> boolean
 ;; are we currently `diff` after `start`
 (define (after? diff start)
-  (< (+ (time->stamp diff) (time->stamp start)) 
+  (< (+ (time->stamp diff) (time->stamp start))
      (time->stamp (current-time))))
 (define-syntax (every stx)
   (syntax-parse stx
@@ -543,7 +543,7 @@ with '-' prevents access.
   (for ([a args])
     (when (in:number? a)
       (define u (in:number-unit a))
-      (if (not unit) 
+      (if (not unit)
           (set! unit u)
           (unless (equal? unit u)
             (error (object-name f) "all numbers must have the same unit")))))
@@ -560,7 +560,7 @@ with '-' prevents access.
 (define ((convert/<>= f) . args)
   ;; for now just makes sure all units are the same. will build conversion tables later
   (define unit #f)
-  (define all-same? 
+  (define all-same?
     (for/and ([a args])
       (or (number? a)
           (let ([u (in:number-unit a)])
@@ -666,8 +666,8 @@ There are three ways to define a message
       [(define-message name:id (args:args) (super:id call ...))
        (with-syntax ([(old ...) #'args.cleannames]
                      [(new ...) #'args.names])
-         (quasisyntax/loc stx 
-           (begin 
+         (quasisyntax/loc stx
+           (begin
              (begin-for-syntax
                (dict-set! message-args #'name (syntax->list (syntax-local-introduce #'args.flattened)))
                (dict-set! messages #'name (dict-ref messages (syntax-local-introduce #'super)))
