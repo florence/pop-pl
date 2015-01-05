@@ -30,7 +30,7 @@ with '-' prevents access.
  ;; internal
  make-handler define-message add-handler define-handler
  -number
- (rename-out [require -require])
+ local-require
  here-be-tests
  ;;for the configure-runtime
  current-environment)
@@ -50,7 +50,9 @@ with '-' prevents access.
          racket/list
          racket/match
          racket/stxparam
-         "private/shared.rkt")
+         racket/unit
+         "private/shared.rkt"
+         "prescription-sig.rkt")
 
 (module+ test (require rackunit))
 
@@ -253,17 +255,19 @@ with '-' prevents access.
   (hash-remove! (current-next-handlers) n))
 
 ;;; module
-(define-for-syntax in:the-environment (generate-temporary 'the-environment))
+(define-for-syntax in:env #'the-environment)
 (define-for-syntax (the-environment stx)
   (syntax-local-introduce
-   (datum->syntax in:the-environment
-                  (syntax-e in:the-environment)
+   (datum->syntax in:env
+                  'the-environment
                   stx)))
 (require racket/function)
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
-     (with-syntax ([the-environment (the-environment #'here)])
+     (with-syntax ([the-environment/stx (the-environment #'here)]
+                   [((in-unit ...) (top ...))
+                    (split-body #'(body ...))])
        #`(#%plain-module-begin
           (module* configure-runtime racket/base
             (#%plain-module-begin
@@ -276,41 +280,65 @@ with '-' prevents access.
                 stx))))
           (module* main #f
             (#%plain-module-begin
+             (define-values/invoke-unit the-unit
+               (import)
+               (export (rename prescription^
+                               (-start -start)
+                               (the-environment the-environment))))
              (current-environment the-environment)
              (for-each displayln (-start))))
 
-          (provide -eval -reset! -start)
+          top ...
 
-          #,(datum->syntax stx '(-require pop-pl/constants))
-          ;; global state
-          (define the-environment (make-empty-environment))
+          (provide the-unit)
+          (define the-unit
+            (unit
+              (import)
+              (export (rename prescription^
+                              (the-environment/stx the-environment)))
 
-          (define (-start)
-             ;;TODO shouldn't need to do this twice...
-            (-eval (message '(time) (list 1) #f))
-            (-eval (message '(time) (list 1) #f)))
+              #,(datum->syntax stx '(local-require pop-pl/constants))
+              ;; global state
+              (define the-environment/stx (make-empty-environment))
 
-          (define (-reset!)
-            (set! the-environment (make-empty-environment))
-            (set-environment-next-handlers!
-             the-environment
-             (hash-copy initial-handlers))
-            (set-environment-message-query-cache-generators!
-             the-environment
-             initial-matchers))
+              (define (-start)
+                ;;TODO shouldn't need to do this twice...
+                (parameterize ([current-environment the-environment/stx])
+                  (-eval (message '(time) (list 1) #f))
+                  (-eval (message '(time) (list 1) #f))))
 
-          (define (-eval m)
-            (parameterize ([current-environment the-environment])
-              (eval m)))
+              (define (-eval m)
+                (parameterize ([current-environment the-environment/stx])
+                  (eval m)))
 
-          body ...
+              in-unit ...
 
-          (define initial-handlers
-            (parameterize ([current-environment the-environment])
-              (hash->immutable-hash (current-next-handlers))))
-          (define initial-matchers
-            (parameterize ([current-environment the-environment])
-              (current-message-query-cache-generators)))))]))
+              (get-top)))))]))
+
+(define-for-syntax top null)
+(define-syntax (get-top stx)
+  (syntax-parse stx
+    [(_) #`(begin #,@top)]))
+(define-for-syntax (to-top stx)
+  (set! top (cons stx top)))
+
+(define-for-syntax (split-body stx)
+  (define-values (u t)
+    (let recur ([stx stx])
+      (syntax-parse stx
+        #:literals (define-message use here-be-tests)
+        [() (values null null)]
+        [((~and top
+                (~or (define-message _ ...)
+                     (use _ ...)
+                     (here-be-tests _ ...)))
+          body ...)
+         (define-values (u t) (recur #'(body ...)))
+         (values u (cons #'top t))]
+        [(body0 body ...)
+         (define-values (u t) (recur #'(body ...)))
+         (values (cons #'body0 u) t)])))
+  (list u t))
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
@@ -327,15 +355,15 @@ with '-' prevents access.
                   (parameterize ([current-environment v])
                     (for-each displayln (eval (first l)))))))))]))
 
-
-
 ;;; requiring message protocol
 (define-syntax (use stx)
   (syntax-parse stx
     [(use name:id)
      (define file (~a (syntax-e #'name) ".pop"))
      ;;TODO environment swapping
-     (datum->syntax stx `(,#'require ,file))]))
+     (with-syntax ([file (datum->syntax stx file)])
+       (datum->syntax stx `(,#'require ,#'(except-in file the-unit))))]))
+
 ;;; handlers
 
 (define-syntax (initially stx)
@@ -404,11 +432,12 @@ with '-' prevents access.
                       (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
                                     [apart (make-apart-filter (assoc '#:apart asc))]
                                     [times? (make-times-filter (assoc '#:times asc))]
-                                    [get-matching (make-get-matching
-                                                   (syntax-parse #'t
-                                                     #:literals (not)
-                                                     [(not e) #'e]
-                                                     [_ #'t]))]
+                                    [get-matching
+                                     (make-get-matching
+                                      (syntax-parse #'t
+                                        #:literals (not)
+                                        [(not e) #'e]
+                                        [_ #'t]))]
                                     [n
                                      (syntax-parse #'t
                                        #:literals (not)
@@ -482,17 +511,16 @@ with '-' prevents access.
                                      [_ (raise (failure))])]))])))]
                     [key (generate-temporary)]
                     [the-environment (the-environment #'here)]
-                    [x (syntax-local-lift-expression
-                        #'(parameterize ([current-environment the-environment])
-                            (add-matcher!
-                             (lambda (msg)
-                               (with-handlers ([failure? void])
-                                 (if (not (let-syntax pats e))
-                                     (clear-cached-matches! 'key)
-                                     (add-cached-match! 'key msg)))))))])
-
+                    [x #'(parameterize ([current-environment the-environment])
+                           (add-matcher!
+                            (lambda (msg)
+                              (with-handlers ([failure? void])
+                                (if (not (let-syntax pats e))
+                                    (clear-cached-matches! 'key)
+                                    (add-cached-match! 'key msg))))))])
+       (to-top #'x)
        (syntax/loc stx
-         (lambda () x (get-cached-matches 'key))))]))
+         (lambda () (get-cached-matches 'key))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
   (if (not maybe-stx)
@@ -624,9 +652,12 @@ There are three ways to define a message
   (with-syntax ()
     (define-splicing-syntax-class args
       (pattern (~seq a:arg ...)
-               #:with cleannames #'(a.name ...)
-               #:with names (datum->syntax message-name-stx-prop (syntax->datum #'(a.name ...)))
-               #:with flattened (datum->syntax message-name-stx-prop (flatten (syntax->datum #'(a ...))))))
+               #:with cleannames
+               #'(a.name ...)
+               #:with names
+               (datum->syntax message-name-stx-prop (syntax->datum #'(a.name ...)))
+               #:with flattened
+               (datum->syntax message-name-stx-prop (flatten (syntax->datum #'(a ...))))))
     (define-splicing-syntax-class arg
       (pattern x:id #:with name #'x)
       (pattern (~seq k:keyword x:id) #:with name #'x))
@@ -684,9 +715,9 @@ There are three ways to define a message
     [(_ body-start body ...)
      (syntax/loc stx
        (module* test racket
-         (require pop-pl/tests/harness
-                  pop-pl/constants
-                  (only-in pop-pl/main -number))
+         (local-require pop-pl/tests/harness
+                        pop-pl/constants
+                        (only-in pop-pl/main -number))
          (prescription-test
           (submod "..")
           body-start

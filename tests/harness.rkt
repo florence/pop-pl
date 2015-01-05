@@ -1,21 +1,24 @@
-#lang racket
+#lang racket/base
 (provide prescription-test n advance send current-eval)
-(require (for-syntax syntax/parse))
-(require pop-pl/private/shared rackunit rackunit/text-ui unstable/match)
+(require (for-syntax racket/base
+                     syntax/parse)
+         pop-pl/private/shared
+         racket/format
+         racket/match
+         racket/unit
+         rackunit
+         rackunit/text-ui
+         "../system-unit.rkt")
 
-(define TIME-ADVANCE 60)
-(define current-eval (make-parameter (lambda _ (error 'test "no eval set"))))
-(define current-reset (make-parameter (lambda _ (error 'test "no reset set"))))
-(define current-start (make-parameter (lambda _ (error 'test "no start set"))))
+(define-values/invoke-unit/infer system@)
 
-(define (advance time)
-  (define t (time->stamp time))
-  (reverse
-   (for/fold ([msg null]) ([_ (in-range 0 t TIME-ADVANCE)])
-     (append msg (send (message '(time) (list TIME-ADVANCE) #f))))))
+(define current-network (make-parameter #f))
+(define testing-module (make-parameter #f))
 
+(define (advance t)
+  (advance! (current-network) t))
 (define (send msg)
-  ((current-eval) msg))
+  (send-message! (current-network) msg))
 
 (define-syntax-rule (n num u)
   (in:number num 'u))
@@ -32,18 +35,18 @@
     (pattern e:id
              #:with down #'e.down)
     (pattern e #:with down #'e))
-  (define-syntax-class test-clause 
+  (define-syntax-class test-clause
     #:datum-literals (=> advance start wait)
     (pattern (~and
               stx
               (~or
-               (start 
+               (start
                 => m:pat ...)
-               (=> start 
+               (=> start
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match ((current-start))
+               (check-match (spawn-actor! (current-network) (testing-module))
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
@@ -93,15 +96,13 @@
   (syntax-parse stx
     [(_ path t:test-clause ...)
      #`(let ()
-         (local-require (only-in path [-eval eval] [-reset! reset!] [-start start]))
-         (parameterize ([current-eval eval]
-                        [current-reset reset!]
-                        [current-start start])
+         (define the-network (new-network))
+         (parameterize ([current-network the-network]
+                        [testing-module 'path])
            (void
             (run-tests
              (test-suite
               (~a 'path)
-              #:after (current-reset)
               (test-case
                (~a 'path)
                t.parsed ...))))))]))

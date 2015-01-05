@@ -4,5 +4,7 @@
 new-network
 ;; Network module-path? -> (Listof Messages)
 spawn-actor!
-;; Network Message -> (Listof Messages
+;; Network Message -> (Listof Messages)
 send-message!
+;; Network Time -> (Listof Messages)
+advance!
