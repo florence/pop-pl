@@ -290,37 +290,28 @@ with '-' prevents access.
 
           top ...
 
+          #,(datum->syntax stx '(local-require pop-pl/constants))
           (provide the-unit)
           (define the-unit
             (unit
               (import)
               (export (rename prescription^
                               (the-environment/stx the-environment)))
+              (unit-body
+               ;; global state
+               (define the-environment/stx (make-empty-environment))
 
-              #,(datum->syntax stx '(local-require pop-pl/constants))
-              ;; global state
-              (define the-environment/stx (make-empty-environment))
+               (define (-start)
+                 ;;TODO shouldn't need to do this twice...
+                 (parameterize ([current-environment the-environment/stx])
+                   (-eval (message '(time) (list 1) #f))
+                   (-eval (message '(time) (list 1) #f))))
 
-              (define (-start)
-                ;;TODO shouldn't need to do this twice...
-                (parameterize ([current-environment the-environment/stx])
-                  (-eval (message '(time) (list 1) #f))
-                  (-eval (message '(time) (list 1) #f))))
+               (define (-eval m)
+                 (parameterize ([current-environment the-environment/stx])
+                   (eval m)))
 
-              (define (-eval m)
-                (parameterize ([current-environment the-environment/stx])
-                  (eval m)))
-
-              in-unit ...
-
-              (get-top)))))]))
-
-(define-for-syntax top null)
-(define-syntax (get-top stx)
-  (syntax-parse stx
-    [(_) #`(begin #,@top)]))
-(define-for-syntax (to-top stx)
-  (set! top (cons stx top)))
+               in-unit ...)))))]))
 
 (define-for-syntax (split-body stx)
   (define-values (u t)
@@ -339,6 +330,18 @@ with '-' prevents access.
          (define-values (u t) (recur #'(body ...)))
          (values (cons #'body0 u) t)])))
   (list u t))
+
+(begin-for-syntax
+  (struct in-liberal-define-context ()
+          #:property prop:liberal-define-context #t))
+(define-syntax (unit-body stx)
+  (syntax-parse stx
+    [(unit-body e ...)
+     (define ctx(cons (in-liberal-define-context) (syntax-local-context)))
+     (local-expand/capture-lifts
+      #'(begin e ...)
+      ctx
+      null)]))
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
@@ -511,16 +514,17 @@ with '-' prevents access.
                                      [_ (raise (failure))])]))])))]
                     [key (generate-temporary)]
                     [the-environment (the-environment #'here)]
-                    [x #'(parameterize ([current-environment the-environment])
-                           (add-matcher!
-                            (lambda (msg)
-                              (with-handlers ([failure? void])
-                                (if (not (let-syntax pats e))
-                                    (clear-cached-matches! 'key)
-                                    (add-cached-match! 'key msg))))))])
-       (to-top #'x)
+                    [x
+                     (syntax-local-lift-expression
+                      #'(parameterize ([current-environment the-environment])
+                          (add-matcher!
+                           (lambda (msg)
+                             (with-handlers ([failure? void])
+                               (if f
+                                   (clear-cached-matches! 'key)
+                                   (add-cached-match! 'key msg)))))))])
        (syntax/loc stx
-         (lambda () (get-cached-matches 'key))))]))
+         (lambda () x (get-cached-matches 'key))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
   (if (not maybe-stx)
