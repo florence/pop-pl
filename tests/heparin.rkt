@@ -4,7 +4,7 @@
 
 (prescription-test
  "../examples/heparin/heparin.pop"
- (=> start 
+ (=> start
      (givebolus (n 80 units/kg) heparin iv)
      (start (n 18 units/kg/hour) heparin iv)
      (checkaptt))

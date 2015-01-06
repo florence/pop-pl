@@ -584,7 +584,7 @@ with '-' prevents access.
                           (add-matcher!
                            (lambda (msg)
                              (with-handlers ([failure? void])
-                               (if (let-syntax pats e)
+                               (if (not (let-syntax pats e))
                                    (clear-cached-matches! 'key)
                                    (add-cached-match! 'key msg)))))))])
        (syntax/loc stx
@@ -741,12 +741,11 @@ There are three ways to define a message
              (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened))))
            (provide name)
            (define/func (name #,@#'args.flattened #:-keys [keys null])
-             ((current-send-message) 
+             ((current-send-message)
               (message `(name ,@keys)
                        (list #,@#'args.names)
-                       #f
-                       #;(current-time)
-                       )))))]
+                       (and (current-environment)
+                            (current-time)))))))]
       ;; define from other message
       [(define-message name:id other:id)
        (define key (syntax-local-introduce #'other))

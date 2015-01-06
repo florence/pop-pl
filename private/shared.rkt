@@ -22,6 +22,7 @@
                       (last (message-tags m)))
              (for-each (lambda (a) (printf " ~a" a))
                        (message-values m))
+             (printf " @ ~a" (message-time m))
              (printf "]")))])
 
 (define (time->stamp t)
@@ -30,7 +31,7 @@
     [(in:number n (or 'minutes 'minute)) (* n 60)]
     [(in:number n (or 'hours 'hour))
      (* n
-        60 
+        60
         (time->stamp (in:number 1 'minutes)))]
     [(in:number n (or 'days 'day))
      (* n
@@ -44,4 +45,3 @@
                 259200)
   (check-equal? (time->stamp (in:number 2 'hours))
                 7200))
-
