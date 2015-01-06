@@ -8,7 +8,7 @@
 
 (define TIME-ADVANCE 60)
 
-;; Network: [Hashof module-path? Actor]
+;; Network: [Hashof Any Actor]
 (struct network (actors))
 
 ;; Actor :
@@ -18,15 +18,16 @@
 (define (new-network)
   (network (make-hash)))
 
-(define (spawn-actor! network path)
-  (define prescription@ (dynamic-require path 'the-unit))
+(define (spawn-actor! network path-or-unit)
+  (define prescription@
+    (if (unit? path-or-unit)
+        path-or-unit
+        (dynamic-require path-or-unit 'the-unit)))
   (define-values/invoke-unit prescription@
     (import)
-    (export (rename prescription^
-                    (-start -start)
-                    (the-environment the-environment))))
+    (export prescription^))
   (define new-actor (actor -eval))
-  (hash-set! (network-actors network) path new-actor)
+  (hash-set! (network-actors network) name new-actor)
   (-start))
 
 (define (send-message! network msg)

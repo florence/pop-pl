@@ -2,7 +2,7 @@
 
 ;; -> Network
 new-network
-;; Network module-path? -> (Listof Messages)
+;; Network (or module-path? prescription^) -> (Listof Messages)
 spawn-actor!
 ;; Network Message -> (Listof Messages)
 send-message!

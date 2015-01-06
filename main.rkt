@@ -254,22 +254,31 @@ with '-' prevents access.
   (hash-remove! (current-next-handlers) n))
 
 ;;; module
-(define-for-syntax in:env #'the-environment)
+(define-for-syntax pctx #'ctx)
 (define-for-syntax (make-the-environment stx)
   (syntax-local-introduce
-   (datum->syntax in:env
+   (datum->syntax pctx
                   'the-environment
                   stx)))
 (require racket/function)
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
-     (define pctx in:env)
-     (with-syntax ([the-environment/stx (make-the-environment #'here)]
+     (define here #'here)
+     (define (p/i i)
+       (syntax-local-introduce (p i)))
+     (define (p i)
+       (datum->syntax pctx i here))
+     (with-syntax ([the-environment/stx (make-the-environment here)]
                    [((in-unit ...) (top ...))
                     (split-body #'(body ...))]
-                   [-eval (datum->syntax pctx '-eval)]
-                   [-start (datum->syntax pctx '-start)])
+                   [-eval/stx (p/i '-eval)]
+                   [-start/stx (p/i'-start)]
+                   [prescription^/stx (p 'prescription^)]
+                   [name/stx (p/i 'name)]
+                   [new-network (datum->syntax stx 'new-network)]
+                   [spawn-actor! (datum->syntax stx 'spawn-actor!)]
+                   [send-message! (datum->syntax stx 'send-message!)])
        #`(#%plain-module-begin
           (module* configure-runtime racket/base
             (#%plain-module-begin
@@ -282,42 +291,42 @@ with '-' prevents access.
                 stx))))
           (module* main #f
             (#%plain-module-begin
-             (define-values/invoke-unit the-unit
+             (require pop-pl/system-unit pop-pl/system-sig)
+             (define-values/invoke-unit system@
                (import)
-               (export (rename prescription^
-                               (-start -start)
-                               (the-environment the-environment))))
-             (current-environment the-environment)
-             (for-each displayln (-start))))
+               (export system^))
+             (define the-network (new-network))
+             (for-each displayln (spawn-actor! the-network the-unit))
+             (current-send-message (lambda (m) (send-message! the-network m)))))
 
           top ...
 
           #,(datum->syntax stx '(local-require pop-pl/constants))
-          #,(datum->syntax pctx `(,#'local-require pop-pl/prescription-sig))
+          #,(p `(,#'require pop-pl/prescription-sig))
           ;(require pop-pl/prescription-sig)
+          ;;TODO get module path
+          (define the-name (gensym))
           (provide the-unit)
           (define the-unit
             (unit/capture-lifts
              (import)
-             (export
-              #,(datum->syntax pctx 'prescription^)
-              #;
-              (rename prescription^
-                      (the-environment/stx the-environment)
-                      (-eval -eval)
-                      (-start -start)))
+             (export prescription^/stx)
              ;; global state
              (define the-environment/stx (make-empty-environment))
 
-             (define (-start)
-               ;;TODO shouldn't need to do this twice...
-               (parameterize ([current-environment the-environment/stx])
-                 (-eval (message '(time) (list 1) #f))
-                 (-eval (message '(time) (list 1) #f))))
+             (define name/stx the-name)
 
-             (define (-eval m)
-               (parameterize ([current-environment the-environment/stx])
-                 (eval m)))
+             (define -start/stx
+               (lambda ()
+                 ;;TODO shouldn't need to do this twice...
+                 (parameterize ([current-environment the-environment/stx])
+                   (-eval/stx (message '(time) (list 1) #f))
+                   (-eval/stx (message '(time) (list 1) #f)))))
+
+             (define -eval/stx
+               (lambda (m)
+                 (parameterize ([current-environment the-environment/stx])
+                   (eval m))))
 
              in-unit ...))))]))
 
@@ -339,6 +348,8 @@ with '-' prevents access.
          (values (cons #'body0 u) t)])))
   (list u t))
 
+;; All this does is (unit (import) (exports sig^ ...) (local-expand/capture-lifts body ...))
+;; Turns out thats really hard
 (define-syntax (unit/capture-lifts stx)
   (syntax-case stx (import export)
     [(_ (import) (export out^ ...) form ...)
@@ -409,15 +420,7 @@ with '-' prevents access.
     [(_ . f)
      #`(#%top-interaction
         values
-        (let ([v (get-current-environment)]
-              [e (make-empty-environment)])
-          (parameterize ([current-environment e])
-            (define r f)
-            (let ([l (current-outgoing-log)])
-              (if (null? l)
-                  r
-                  (parameterize ([current-environment v])
-                    (for-each displayln (eval (first l)))))))))]))
+        (for-each displayln f))]))
 
 ;;; requiring message protocol
 (define-syntax (use stx)
@@ -581,7 +584,7 @@ with '-' prevents access.
                           (add-matcher!
                            (lambda (msg)
                              (with-handlers ([failure? void])
-                               (if f
+                               (if (let-syntax pats e)
                                    (clear-cached-matches! 'key)
                                    (add-cached-match! 'key msg)))))))])
        (syntax/loc stx
@@ -712,7 +715,7 @@ There are three ways to define a message
 3. define a message that transforms its arguments to send a different message, plus its tag
    (define from function)
 |#
-(define do-send (make-parameter #t))
+(define current-send-message (make-parameter send-message!))
 (define-syntax (define-message stx)
   (with-syntax ()
     (define-splicing-syntax-class args
@@ -738,10 +741,12 @@ There are three ways to define a message
              (dict-set! message-args key (syntax->list (syntax-local-introduce #'args.flattened))))
            (provide name)
            (define/func (name #,@#'args.flattened #:-keys [keys null])
-             ((if (do-send) send-message! values)
+             ((current-send-message) 
               (message `(name ,@keys)
                        (list #,@#'args.names)
-                       (current-time))))))]
+                       #f
+                       #;(current-time)
+                       )))))]
       ;; define from other message
       [(define-message name:id other:id)
        (define key (syntax-local-introduce #'other))
