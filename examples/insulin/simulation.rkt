@@ -1,7 +1,7 @@
 #lang racket
 
 
-;; Natural (in days) [Real] -> (Listof (vector Natural Natural)) (Listof (vector Natural Natural)) 
+;; Natural (in days) [Real] -> (Listof (vector Natural Natural)) (Listof (vector Natural Natural))
 ;; takes the number of days to run the simulation and returns:
 ;; 1. Time x insulin infusion rate (units/kg/hour). Each point is when the infusion changes
 ;; 2. Time x aBg count (seconds). Each point is when the test was asked for, and what the results are be
@@ -9,7 +9,8 @@
 
 (provide simulate)
 
-(require "insulin.pop" pop-pl/private/shared)
+(require "insulin.pop" pop-pl/private/shared pop-pl/system-unit racket/runtime-path)
+(define-values/invoke-unit/infer system@)
 
 (define time-advance 60);in seconds
 (define perterb-percent 0.2)
@@ -20,7 +21,7 @@
   (define fulltime (* days 24 60 60))
   (define log (run-simulation-for fulltime factor))
   (define-values (ic bg)
-    (for/fold ([infusion null] [blood-glucose null]) 
+    (for/fold ([infusion null] [blood-glucose null])
               ([m log])
       (match m
         [(or (message '(change) (list insulin (in:number amount _))   t)
@@ -35,26 +36,29 @@
   (values (cons last (reverse ic))
           (reverse bg)))
 
+(define the-network (new-network))
+(define-runtime-path insulin.pop "insulin.pop")
 (define (run-simulation-for time factor)
   (define-values (res _in-system _cont-dosage _next)
-    (for/fold ([outgoing null] [insulin-in-system 0] [insulin-continous 0] [next null])
+    (for/fold ([outgoing (spawn-actor! the-network insulin.pop)]
+               [insulin-in-system 0] [insulin-continous 0] [next null])
               ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (-eval msg) (list msg)))))
+                  (append r (send-message! the-network msg) (list msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing insulin-in-system insulin-continous factor))
       (values o
               (insulin-values-after his hc time-advance)
               hc
               n)))
-  (-reset!)
+  (set! the-network (new-network))
   res)
 
 (define (inc-time)
-  (-eval (message '(time) (list time-advance) #f)))
+  (advance! the-network time-advance))
 
 (define (eval-log new-log outgoing insulin-in-system insulin-continous factor [handle-next null])
   (define restart-amount 0)
@@ -92,7 +96,7 @@
 
 (define halflife (* 6 60));90 minutes in seconds
 (define (insulin-values-after current continous seconds)
-  (* (perterb-random) 
+  (* (perterb-random)
      current))
 
 (define (perterb-random [% perterb-percent])

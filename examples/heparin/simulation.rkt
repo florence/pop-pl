@@ -1,7 +1,8 @@
 #lang racket
 
 
-;; Natural (in days) [Real] -> (Listof (vector Natural Natural)) (Listof (vector natural Natural)) (Listof (vector Natural Real))
+;; Natural (in days) [Real] ->
+;; (Listof (vector Natural Natural)) (Listof (vector natural Natural)) (Listof (vector Natural Real))
 ;; takes the number of days to run the simulation and returns:
 ;; 1. Time x heparin infusion rate (units/kg/hour). Each point is when the infusion changes
 ;; 2. Time x Heparin bolus (units/kg). Each point is when the bolus is given, and how much
@@ -10,7 +11,9 @@
 
 (provide simulate)
 
-(require "heparin.pop" pop-pl/private/shared)
+(require "heparin.pop" pop-pl/private/shared pop-pl/system-unit
+         racket/runtime-path)
+(define-values/invoke-unit/infer system@)
 (module+ test (require rackunit))
 
 (define time-advance 60);in seconds
@@ -25,16 +28,16 @@
   (for-each
    displayln
    (reverse
-    (filter 
+    (filter
      (lambda (m) (not (member 'time (message-tags m))))
      log)))
   (define restart-value #f)
   (define-values (hc hb m _)
     (for/fold ([heparin-continous null] [heparin-bolus null] [measured null] [count 0])
               ([m (reverse log)])
-      (match m 
+      (match m
         [(message (list-no-order 'change _ ...) (list "heparin" (in:number amount _)) t)
-         (define new-count 
+         (define new-count
            (if restart-value
                (begin0 (+ restart-value amount)
                  (set! restart-value #f))
@@ -75,27 +78,31 @@
           (reverse hb)
           (reverse m)))
 
+(define the-network (new-network))
+(define-runtime-path heparin.pop "heparin.pop")
 (define (run-simulation-for time factor)
   (set! first-time-tested #t)
   (define-values (res _in-system _cont-dosage _next)
-    (for/fold ([outgoing null] [heparin-in-system 0] [heparin-continous 0] [next null]) ([_ (in-range 0 time 60)])
+    (for/fold ([outgoing (spawn-actor! heparin.pop)]
+               [heparin-in-system 0] [heparin-continous 0] [next null])
+              ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (-eval msg) (list msg)))))
+                  (append r (send-message! the-network msg) (list msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing heparin-in-system heparin-continous factor))
       (values o
               (heparin-values-after his hc time-advance)
               hc
               n)))
-  (-reset!)
+  (set! the-network (new-network))
   res)
 
 (define (inc-time)
-  (-eval (message '(time) (list time-advance) #f)))
-(module+ test 
+  (advance! the-network time-advance))
+(module+ test
   (check-true (list? (inc-time))))
 
 (define (eval-log new-log outgoing heparin-in-system heparin-continous factor [handle-next null])
@@ -146,7 +153,7 @@
 
 (define halflife (* 90 60));90 minutes in seconds
 (define (heparin-values-after current continous seconds)
-  (* (perterb-random) 
+  (* (perterb-random)
    (+
     ;; the amount remaining after seconds
     (let ([number-of-halflives (/ seconds halflife)])
