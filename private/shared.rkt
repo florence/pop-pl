@@ -22,7 +22,7 @@
                       (last (message-tags m)))
              (for-each (lambda (a) (printf " ~a" a))
                        (message-values m))
-             (printf " @ ~a" (message-time m))
+             ;(printf " @ ~a" (message-time m))
              (printf "]")))])
 
 (define (time->stamp t)
