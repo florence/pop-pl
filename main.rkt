@@ -51,8 +51,7 @@ with '-' prevents access.
          racket/match
          racket/stxparam
          racket/unit
-         "private/shared.rkt"
-         "prescription-sig.rkt")
+         "private/shared.rkt")
 
 (module+ test (require rackunit))
 
@@ -256,7 +255,7 @@ with '-' prevents access.
 
 ;;; module
 (define-for-syntax in:env #'the-environment)
-(define-for-syntax (the-environment stx)
+(define-for-syntax (make-the-environment stx)
   (syntax-local-introduce
    (datum->syntax in:env
                   'the-environment
@@ -265,9 +264,12 @@ with '-' prevents access.
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
-     (with-syntax ([the-environment/stx (the-environment #'here)]
+     (define pctx in:env)
+     (with-syntax ([the-environment/stx (make-the-environment #'here)]
                    [((in-unit ...) (top ...))
-                    (split-body #'(body ...))])
+                    (split-body #'(body ...))]
+                   [-eval (datum->syntax pctx '-eval)]
+                   [-start (datum->syntax pctx '-start)])
        #`(#%plain-module-begin
           (module* configure-runtime racket/base
             (#%plain-module-begin
@@ -291,27 +293,33 @@ with '-' prevents access.
           top ...
 
           #,(datum->syntax stx '(local-require pop-pl/constants))
+          #,(datum->syntax pctx `(,#'local-require pop-pl/prescription-sig))
+          ;(require pop-pl/prescription-sig)
           (provide the-unit)
           (define the-unit
-            (unit
-              (import)
-              (export (rename prescription^
-                              (the-environment/stx the-environment)))
-              (unit-body
-               ;; global state
-               (define the-environment/stx (make-empty-environment))
+            (unit/capture-lifts
+             (import)
+             (export
+              #,(datum->syntax pctx 'prescription^)
+              #;
+              (rename prescription^
+                      (the-environment/stx the-environment)
+                      (-eval -eval)
+                      (-start -start)))
+             ;; global state
+             (define the-environment/stx (make-empty-environment))
 
-               (define (-start)
-                 ;;TODO shouldn't need to do this twice...
-                 (parameterize ([current-environment the-environment/stx])
-                   (-eval (message '(time) (list 1) #f))
-                   (-eval (message '(time) (list 1) #f))))
+             (define (-start)
+               ;;TODO shouldn't need to do this twice...
+               (parameterize ([current-environment the-environment/stx])
+                 (-eval (message '(time) (list 1) #f))
+                 (-eval (message '(time) (list 1) #f))))
 
-               (define (-eval m)
-                 (parameterize ([current-environment the-environment/stx])
-                   (eval m)))
+             (define (-eval m)
+               (parameterize ([current-environment the-environment/stx])
+                 (eval m)))
 
-               in-unit ...)))))]))
+             in-unit ...))))]))
 
 (define-for-syntax (split-body stx)
   (define-values (u t)
@@ -331,17 +339,70 @@ with '-' prevents access.
          (values (cons #'body0 u) t)])))
   (list u t))
 
-(begin-for-syntax
-  (struct in-liberal-define-context ()
-          #:property prop:liberal-define-context #t))
-(define-syntax (unit-body stx)
-  (syntax-parse stx
-    [(unit-body e ...)
-     (define ctx(cons (in-liberal-define-context) (syntax-local-context)))
-     (local-expand/capture-lifts
-      #'(begin e ...)
-      ctx
-      null)]))
+(define-syntax (unit/capture-lifts stx)
+  (syntax-case stx (import export)
+    [(_ (import) (export out^ ...) form ...)
+     ;; The expansion loop here is based on `block`, but followed by
+     ;; another loop that forces remaining expression expansions (so
+     ;; that we capture all lifts). We don't have to keep any local
+     ;; syntax definitions, since we'll force all local expansion.
+     (let* ([def-ctx (syntax-local-make-definition-context)]
+            [ctx (list (syntax-local-make-definition-context def-ctx))]
+            [stoplist
+             ;; other kernel bindings added implicitly:
+             (list #'begin #'define-syntaxes #'define-values)]
+            [pre-forms
+             (let loop ([todo (syntax->list #'(form ...))] [r '()])
+               (if (null? todo)
+                   (reverse r)
+                   (let ([form (local-expand/capture-lifts (car todo) ctx stoplist def-ctx)]
+                         [todo (cdr todo)])
+                     (syntax-case form (begin)
+                       [(begin lift ... body)
+                        ;; Added lifted expressions to accumulated results:
+                        (let ([r (append (reverse (syntax->list #'(lift ...))) r)])
+                          ;; Handle the three special cases:
+                          (syntax-case #'body (begin define-syntaxes define-values)
+                            [(begin . rest)
+                             ;; splice
+                             (loop (append (syntax->list #'rest) todo) r)]
+                            [(define-syntaxes (id ...) rhs)
+                             ;; bind syntax
+                             (andmap identifier? (syntax->list #'(id ...)))
+                             (begin
+                               (syntax-local-bind-syntaxes
+                                (syntax->list #'(id ...))
+                                #'rhs def-ctx)
+                               (loop todo r))]
+                            [(define-values (id ...) rhs)
+                             ;; introduce binding for a value, and save rhs for
+                             ;; later expansion:
+                             (andmap identifier? (syntax->list #'(id ...)))
+                             (let ([ids (syntax->list #'(id ...))])
+                               (syntax-local-bind-syntaxes ids #f def-ctx)
+                               (loop todo (cons #'body r)))]
+                            [else
+                             ;; just save any other form:
+                             (loop todo (cons form r))]))]))))])
+       (internal-definition-context-seal def-ctx)
+       (with-syntax ([(form ...)
+                      ;; finish expanding all context to capture lifts:
+                      (for/list ([form (in-list pre-forms)])
+                        (syntax-case form (define-values)
+                          [(define-values ids rhs)
+                           (with-syntax ([(begin lifted ... rhs)
+                                          (local-expand/capture-lifts #'rhs ctx null def-ctx)])
+                             #`(begin
+                                 lifted ...
+                                 (define-values ids rhs)))]
+                          [else
+                           (local-expand/capture-lifts form ctx null def-ctx)]))])
+         ;; Finally, force expansion of the `unit` form, so that it can be in the
+         ;; internal-definition context, too:
+         (local-expand #'(unit (import) (export out^ ...) form ...)
+                       ctx
+                       null
+                       def-ctx)))]))
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
@@ -378,7 +439,7 @@ with '-' prevents access.
 (define-syntax (define-handler stx)
   (syntax-parse stx
     [(_ n:id body ...)
-     (with-syntax ([the-environment (the-environment #'here)])
+     (with-syntax ([the-environment (make-the-environment #'here)])
        (syntax/loc stx
          (begin
            (define/func n (make-handler body ...))
@@ -513,7 +574,7 @@ with '-' prevents access.
                                       x]
                                      [_ (raise (failure))])]))])))]
                     [key (generate-temporary)]
-                    [the-environment (the-environment #'here)]
+                    [the-environment (make-the-environment #'here)]
                     [x
                      (syntax-local-lift-expression
                       #'(parameterize ([current-environment the-environment])
