@@ -278,7 +278,9 @@ with '-' prevents access.
                    [name/stx (p/i 'name)]
                    [new-network (datum->syntax stx 'new-network)]
                    [spawn-actor! (datum->syntax stx 'spawn-actor!)]
-                   [send-message! (datum->syntax stx 'send-message!)])
+                   [send-message!/stx (datum->syntax stx 'send-message!)]
+                   [advance! (datum->syntax stx 'advance!)]
+                   [-wait (datum->syntax stx '-wait)])
        #`(#%plain-module-begin
           (module* configure-runtime racket/base
             (#%plain-module-begin
@@ -294,10 +296,16 @@ with '-' prevents access.
              (require pop-pl/system-unit pop-pl/system-sig)
              (define-values/invoke-unit system@
                (import)
-               (export system^))
+               (export (rename system^
+                               (send! send-message!/stx))))
              (define the-network (new-network))
+             (set-wait! (lambda (t) (advance! the-network t)))
              (for-each displayln (spawn-actor! the-network the-unit))
-             (current-send-message (lambda (m) (send-message! the-network m)))))
+             (current-send-message
+              (lambda (m) (send! the-network m)))))
+
+          (define (set-wait! f) (set! -wait f))
+          (define -wait #f)
 
           top ...
 
@@ -319,13 +327,15 @@ with '-' prevents access.
              (define -start/stx
                (lambda ()
                  ;;TODO shouldn't need to do this twice...
-                 (parameterize ([current-environment the-environment/stx])
+                 (parameterize ([current-environment the-environment/stx]
+                                [current-send-message send-message!])
                    (-eval/stx (message '(time) (list 1) #f))
                    (-eval/stx (message '(time) (list 1) #f)))))
 
              (define -eval/stx
                (lambda (m)
-                 (parameterize ([current-environment the-environment/stx])
+                 (parameterize ([current-environment the-environment/stx]
+                                [current-send-message send-message!])
                    (eval m))))
 
              in-unit ...))))]))
@@ -417,10 +427,14 @@ with '-' prevents access.
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
+    #:datum-literals (wait)
+    [(_ . (wait t))
+     #`(#%top-interaction
+        . (values (for-each displayln (-wait t))))]
     [(_ . f)
      #`(#%top-interaction
-        values
-        (for-each displayln f))]))
+        . (begin
+            (values (for-each displayln f))))]))
 
 ;;; requiring message protocol
 (define-syntax (use stx)
