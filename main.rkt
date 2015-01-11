@@ -796,12 +796,13 @@ There are three ways to define a message
 (define-syntax (here-be-tests stx)
   (syntax-parse stx
     [(_ body-start body ...)
-     (syntax/loc stx
-       (module* test racket
-         (local-require pop-pl/tests/harness
-                        pop-pl/constants
-                        (only-in pop-pl/main -number))
-         (prescription-test
-          (submod "..")
-          body-start
-          body ...)))]))
+     (with-syntax ([mod (syntax-source stx)])
+       (syntax/loc stx
+         (module* test racket
+           (local-require pop-pl/tests/harness
+                          pop-pl/constants
+                          (only-in pop-pl/main -number))
+           (prescription-test
+            mod
+            body-start
+            body ...))))]))
