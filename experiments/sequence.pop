@@ -1,0 +1,20 @@
+#lang pop-pl
+
+used by OSFSaintFrancis
+
+// fentanyl section
+initially
+  start 25 micrograms/hour of: fentanyl
+  set onDemandFentanyl to: 25 micrograms
+
+adjuvantAnalgesic:
+  NSAID, once give 15 mg of: ketorolac by: iv then for 3 days every 6 hours give 600 mg of: ibuprofen by: mouth
+  NonNSAID, every 6 hours give 600 mg of: acetaminophen by: mouth
+
+(define/handler (adjuvantanalgesic ...)
+  (seq
+   #:nsaid
+   (once (give (n 15 mg) #:of ketorolac #:by iv))
+   (for (n 3 days) (every (n 6 hours) (give (n 600 mg) #:of ibuprofen #:by mouth)))
+   #:nonnsaid
+   (continue (every (n 6 hours) (give (n 600 mg) #:of acetaminophen #:by mouth)))))
