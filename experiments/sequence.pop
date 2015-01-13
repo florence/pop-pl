@@ -2,19 +2,38 @@
 
 used by OSFSaintFrancis
 
-// fentanyl section
-initially
-  start 25 micrograms/hour of: fentanyl
-  set onDemandFentanyl to: 25 micrograms
-
 adjuvantAnalgesic:
-  NSAID, once give 15 mg of: ketorolac by: iv then for 3 days every 6 hours give 600 mg of: ibuprofen by: mouth
-  NonNSAID, every 6 hours give 600 mg of: acetaminophen by: mouth
+  NSAID: once give 15 mg of: ketorolac by: iv
+    then, after 6 hours, for 3 days every 6 hours give 600 mg of: ibuprofen by: mouth
+  NonNSAID: every 6 hours give 600 mg of: acetaminophen by: mouth
+
+->
 
 (define/handler (adjuvantanalgesic ...)
   (seq
    #:nsaid
    (once (give (n 15 mg) #:of ketorolac #:by iv))
+   (wait (n 6 hours))
    (for (n 3 days) (every (n 6 hours) (give (n 600 mg) #:of ibuprofen #:by mouth)))
    #:nonnsaid
    (continue (every (n 6 hours) (give (n 600 mg) #:of acetaminophen #:by mouth)))))
+
+->
+
+(define/hander (adjuvantalalgesic ...)
+  (block
+   (define/handler/lift (aa:nsaid ...)
+     (do-once (give ...)
+              (aa:gen.1)))
+   (define/handler/lift (aa:gen.1)
+     (after (n 6 hours)
+            (switch-with aa:gen.2)))
+   (define/handler/lift/disabled (aa:gen.2 ...)
+     (do-for (n 3 days)
+             (every (give ...))
+             (switch-with aa:nonnsaid)))
+   (define/handler/lift/disabled (aa:nonnsaid)
+     (every (n 6 hours) (give ...)))))
+
+;; define/handler/lift: like define/handler but lifts the definition
+;; define/handler/lift/disabled like define/handler/lift but the handler is not activated
