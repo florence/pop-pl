@@ -68,7 +68,7 @@ with '-' prevents access.
     [(_ (n:id a ...) b ...)
      #'(define/func n (lambda (a ...) b ...))]
     [(_ n:id b)
-     (with-syntax ([real (generate-temporary)])
+     (with-syntax ([real (generate-temporary #'n)])
        #'(begin
            (define real b)
            (define-syntax (n stx)
@@ -80,16 +80,42 @@ with '-' prevents access.
 ;;; environment
 (struct environment
   (message ; #f or message
-   time ; current time in seconds
-   log ; listof Messages
+   state ; State
    outgoing-log ; listof Message
-   handlers ; hashof Sym Handlers
-   next-handlers ; hahsof Sym Handlers
+   next-handlers) ; hahsof Sym Handlers
+  #:mutable
+  #:transparent)
+
+(struct state
+  (handlers ; hashof Sym Handlers
+   time ; current time in seconds
+   log ; listof MEssages
    message-query-cache ; hashof Sym (listof Message)
    message-query-cache-generators ; listof (-> Message Void)
    message-query-cache:last-time) ; hashof Sym Time
-  #:mutable
   #:transparent)
+
+(define (update-time! t)
+  (define s (environment-state (get-current-environment)))
+  (define new
+    (state (state-handlers s)
+           t
+           (state-log s)
+           (state-message-query-cache s)
+           (state-message-query-cache-generators s)
+           (state-message-query-cache:last-time s)))
+  (set-environment-state! (get-current-environment)))
+
+(define (update-message-query-cache-generators! g)
+  (define s (environment-state (get-current-environment)))
+  (define new
+    (state (state-handlers s)
+           (state-time s)
+           (state-log s)
+           (state-message-query-cache s)
+           (cons g (state-message-query-cache-generators s))
+           (state-message-query-cache:last-time s)))
+  (set-environment-state! (get-current-environment)))
 
 (define current-environment (make-parameter #f))
 (define (get-current-environment)
@@ -98,21 +124,22 @@ with '-' prevents access.
       cenv
       (error 'internal "no environment set")))
 (define (current-time)
-  (environment-time (get-current-environment)))
+  (environment-state (state-time (get-current-environment))))
 (define (current-next-handlers)
   (environment-next-handlers (get-current-environment)))
 (define (current-log)
-  (environment-log (get-current-environment)))
+  (environment-state (state-log (get-current-environment))))
 (define (current-message-query-cache)
-  (environment-message-query-cache (get-current-environment)))
+  (environment-state
+   (state-message-query-cache (get-current-environment))))
 (define (current-message-query-cache-generators)
-  (environment-message-query-cache-generators (get-current-environment)))
+  (environment-state (state-message-query-cache-generators (get-current-environment))))
 (define (current-message-query-cache:last-time)
-  (environment-message-query-cache:last-time (get-current-environment)))
+  (environment-state (state-message-query-cache:last-time (get-current-environment))))
 (define (current-outgoing-log)
   (environment-outgoing-log (get-current-environment)))
 (define (current-handlers)
-  (environment-handlers (get-current-environment)))
+  (environment-state (state-handlers (get-current-environment))))
 (define (current-message)
   (define cenv (get-current-environment))
   (define cmes (environment-message cenv))
@@ -120,30 +147,43 @@ with '-' prevents access.
       cmes
       (error 'internal "no message in environment ~a" cenv)))
 
-(define (make-empty-environment)
+
+(define (make-environment-from-state state)
   (environment
    #f         ;message
-   0          ;time
-   null       ;log
+   state
    null       ;outgoing-log
-   (hash)     ;handlers
-   (make-hash);next handlers
-   (make-hash);cache
-   null       ;generatiors
-   (make-hash);time cache
+   (state-handlers state) ;next handlers
+   ))
+
+(define (make-empty-state)
+  (state
+   null        ; handlers
+   0           ; time
+   null        ; log
+   (make-hash) ; cache
+   null        ; generators
    ))
 
 ;;; evaluator
+(module+ eval (provide eval start))
 
-;; Message -> (Listof Message)
+;; State -> State (Listof Message)
+(define (start state)
+  (define msg (message '(time) (list 1) #f))
+  (define-values (s1 _) (eval msg state))
+  (eval msg s1))
+
+;; Message State -> State (Listof Message)
 ;; evaluate the message in the current-environment
-(define (eval m)
-  (next-message! m)
-  (define msg (current-message))
-  (cache-message! msg)
-  (for ([(_ h!) (in-hash (current-handlers))])
-    (h!))
-  (cycle-env!))
+(define (eval m state)
+  (parameterize ([current-environment (make-environment-from-state state)])
+    (next-message! m)
+    (define msg (current-message))
+    (cache-message! msg)
+    (for ([(_ h!) (in-hash (current-handlers))])
+      (h!))
+    (cycle-env!)))
 
 ;; Message -> Void
 ;; E: update the time and add a corrected current message to the environment
@@ -158,37 +198,42 @@ with '-' prevents access.
 (define (msg-fill/update-time! m)
   (match m
     [(message '(time) (list n) #f)
-     (set-environment-time! (current-environment)
-                            (+ n (current-time)))
+     (update-time! (+ n (current-time)))
      m]
     [(message types values #f)
      (message types values (current-time))]
     [_ m]))
 
-;; -> (Listof Message)
+;; -> State (Listof Message)
 ;; E: applys changes built up of the course of evaling a message
 ;; returns the messages to send back out
 (define (cycle-env!)
-  (swap-handlers!)
-  (swap-log!))
+  (define handlers (swap-handlers!))
+  (define-values (log outgoing) (swap-log!))
+  (define s (environment-state (get-current-environment)))
+  (values
+   (state handlers
+          (state-time s)
+          log
+          (state-message-query-cache s)
+          (state-message-query-cache-generators s)
+          (state-message-query-cache:last-time s))
+   outgoing))
 
 ;; -> Void
 ;; E: apply the changes to the handlers built up in next-handlers
 (define (swap-handlers!)
-  (define cenv (current-environment))
-  (set-environment-handlers! cenv (hash->immutable-hash (current-next-handlers))))
+  (hash->immutable-hash (current-next-handlers)))
 
 ;; -> (Listof Message)
 ;; E: add the current message and outbound messages to the log
 ;; returns the additions to the log, no including the current message
 (define (swap-log!)
   (define res (current-outgoing-log))
-  (set-environment-log! (current-environment)
-                        (append res
-                                (list (current-message))
-                                (current-log)))
-  (set-environment-outgoing-log! (current-environment) null)
-  res)
+  (values (append res
+                  (list (current-message))
+                  (current-log))
+          res))
 
 ;; Message -> Void
 ;; E: add the message to the current message queue (and caches)
@@ -214,9 +259,7 @@ with '-' prevents access.
 ;; add a function to the list of cache generators
 (define (add-matcher! f)
   (define matchers (current-message-query-cache-generators))
-  (set-environment-message-query-cache-generators!
-   (current-environment)
-   (cons f matchers)))
+  (update-message-query-cache-generators! f))
 
 ;; Symbol -> (Listof Message)
 ;; Get all messages cached under `key`
@@ -270,12 +313,8 @@ with '-' prevents access.
      (define (p i)
        (datum->syntax pctx i here))
      (with-syntax ([the-environment/stx (make-the-environment here)]
-                   [((in-unit ...) (top ...))
+                   [((in-func ...) (top ...))
                     (split-body #'(body ...))]
-                   [-eval/stx (p/i '-eval)]
-                   [-start/stx (p/i'-start)]
-                   [prescription^/stx (p 'prescription^)]
-                   [name/stx (p/i 'name)]
                    [new-network (datum->syntax stx 'new-network)]
                    [spawn-actor! (datum->syntax stx 'spawn-actor!)]
                    [send-message!/stx (datum->syntax stx 'send-message!)]
@@ -300,7 +339,7 @@ with '-' prevents access.
                                (send! send-message!/stx))))
              (define the-network (new-network))
              (set-wait! (lambda (t) (advance! the-network t)))
-             (for-each displayln (spawn-actor! the-network the-unit))
+             (for-each displayln (spawn-actor! the-network create-initial-state))
              (current-send-message
               (lambda (m) (send! the-network m)))))
 
@@ -310,39 +349,23 @@ with '-' prevents access.
           top ...
 
           #,(datum->syntax stx '(local-require pop-pl/constants))
-          #,(p `(,#'require pop-pl/prescription-sig))
           ;(require pop-pl/prescription-sig)
           ;;TODO get module path
-          (define the-name (gensym))
-          (provide the-unit)
-          (define the-unit
-            (unit/capture-lifts
-             (import)
-             (export prescription^/stx)
-             ;; global state
-             (define the-environment/stx (make-empty-environment))
+          (define name (gensym 'prescrip))
+          (provide create-initial-state)
+          (define create-initial-state
+            (lambda ()
+             ;; setup state
+             (define the-state (make-empty-state))
+             (define the-environment/stx (make-environment-from-state the-state))
 
-             (define name/stx the-name)
-
-             (define -start/stx
-               (lambda ()
-                 ;;TODO shouldn't need to do this twice...
-                 (parameterize ([current-environment the-environment/stx]
-                                [current-send-message send-message!])
-                   (-eval/stx (message '(time) (list 1) #f))
-                   (-eval/stx (message '(time) (list 1) #f)))))
-
-             (define -eval/stx
-               (lambda (m)
-                 (parameterize ([current-environment the-environment/stx]
-                                [current-send-message send-message!])
-                   (eval m))))
-
-             in-unit ...))))]))
+             (capture-caches (let () in-func ... (void)))
+             (values the-state name)))))]))
 
 (define-for-syntax (split-body stx)
   (define-values (u t)
     (let recur ([stx stx])
+      (displayln (syntax->datum stx))
       (syntax-parse stx
         #:literals (define-message use here-be-tests)
         [() (values null null)]
@@ -356,74 +379,18 @@ with '-' prevents access.
         [(body0 body ...)
          (define-values (u t) (recur #'(body ...)))
          (values (cons #'body0 u) t)])))
+  (displayln (list u t))
   (list u t))
 
-;; All this does is (unit (import) (exports sig^ ...) (local-expand/capture-lifts body ...))
-;; Turns out thats really hard
-(define-syntax (unit/capture-lifts stx)
-  (syntax-case stx (import export)
-    [(_ (import) (export out^ ...) form ...)
-     ;; The expansion loop here is based on `block`, but followed by
-     ;; another loop that forces remaining expression expansions (so
-     ;; that we capture all lifts). We don't have to keep any local
-     ;; syntax definitions, since we'll force all local expansion.
-     (let* ([def-ctx (syntax-local-make-definition-context)]
-            [ctx (list (syntax-local-make-definition-context def-ctx))]
-            [stoplist
-             ;; other kernel bindings added implicitly:
-             (list #'begin #'define-syntaxes #'define-values)]
-            [pre-forms
-             (let loop ([todo (syntax->list #'(form ...))] [r '()])
-               (if (null? todo)
-                   (reverse r)
-                   (let ([form (local-expand/capture-lifts (car todo) ctx stoplist def-ctx)]
-                         [todo (cdr todo)])
-                     (syntax-case form (begin)
-                       [(begin lift ... body)
-                        ;; Added lifted expressions to accumulated results:
-                        (let ([r (append (reverse (syntax->list #'(lift ...))) r)])
-                          ;; Handle the three special cases:
-                          (syntax-case #'body (begin define-syntaxes define-values)
-                            [(begin . rest)
-                             ;; splice
-                             (loop (append (syntax->list #'rest) todo) r)]
-                            [(define-syntaxes (id ...) rhs)
-                             ;; bind syntax
-                             (andmap identifier? (syntax->list #'(id ...)))
-                             (begin
-                               (syntax-local-bind-syntaxes
-                                (syntax->list #'(id ...))
-                                #'rhs def-ctx)
-                               (loop todo r))]
-                            [(define-values (id ...) rhs)
-                             ;; introduce binding for a value, and save rhs for
-                             ;; later expansion:
-                             (andmap identifier? (syntax->list #'(id ...)))
-                             (let ([ids (syntax->list #'(id ...))])
-                               (syntax-local-bind-syntaxes ids #f def-ctx)
-                               (loop todo (cons #'body r)))]
-                            [else
-                             ;; just save any other form:
-                             (loop todo (cons form r))]))]))))])
-       (internal-definition-context-seal def-ctx)
-       (with-syntax ([(form ...)
-                      ;; finish expanding all context to capture lifts:
-                      (for/list ([form (in-list pre-forms)])
-                        (syntax-case form (define-values)
-                          [(define-values ids rhs)
-                           (with-syntax ([(begin lifted ... rhs)
-                                          (local-expand/capture-lifts #'rhs ctx null def-ctx)])
-                             #`(begin
-                                 lifted ...
-                                 (define-values ids rhs)))]
-                          [else
-                           (local-expand/capture-lifts form ctx null def-ctx)]))])
-         ;; Finally, force expansion of the `unit` form, so that it can be in the
-         ;; internal-definition context, too:
-         (local-expand #'(unit (import) (export out^ ...) form ...)
-                       ctx
-                       null
-                       def-ctx)))]))
+(define-for-syntax cache-exprs null)
+(define-syntax (capture-caches stx)
+  (syntax-parse stx
+    [(_ body ...)
+     (with-syntax ([(b ...) (map (lambda (e) (local-expand e (syntax-local-context) #f))
+                                 (syntax->list #'(body ...)))])
+       #`(begin () b ... #,@cache-exprs))]))
+(define-for-syntax (cache-expr e)
+  (set! cache-exprs (cons e cache-exprs)))
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
@@ -443,14 +410,14 @@ with '-' prevents access.
      (define file (~a (syntax-e #'name) ".pop"))
      ;;TODO environment swapping
      (with-syntax ([file (datum->syntax stx file)])
-       (datum->syntax stx `(,#'require ,#'(except-in file the-unit))))]))
+       (datum->syntax stx `(,#'require ,#'(except-in file create-initial-state))))]))
 
 ;;; handlers
 
 (define-syntax (initially stx)
   (syntax-parse stx
     [(_ body ...)
-     (with-syntax ([id (generate-temporary)])
+     (with-syntax ([id (generate-temporary 'initially)])
        #'(define-handler id body ... (remove-handler! 'id)))]))
 
 (define-syntax (define-handler stx)
@@ -574,7 +541,7 @@ with '-' prevents access.
 (define-for-syntax (make-get-matching stx)
   (syntax-parse stx
     [e:expr
-     (with-syntax* ([msg (generate-temporary)]
+     (with-syntax* ([msg (generate-temporary 'msg-matching)]
                     [pats
                      (for/list ([(k v) (in-dict messages)])
                        (with-syntax ([name (syntax-local-introduce k)])
@@ -590,17 +557,17 @@ with '-' prevents access.
                                                _)
                                       x]
                                      [_ (raise (failure))])]))])))]
-                    [key (generate-temporary)]
-                    [the-environment (make-the-environment #'here)]
-                    [x
-                     (syntax-local-lift-expression
-                      #'(parameterize ([current-environment the-environment])
-                          (add-matcher!
-                           (lambda (msg)
-                             (with-handlers ([failure? void])
-                               (if (not (let-syntax pats e))
-                                   (clear-cached-matches! 'key)
-                                   (add-cached-match! 'key msg)))))))])
+                    [key (generate-temporary 'matching-key)]
+                    [the-environment #`(begin 'here
+                                              #,(make-the-environment #'here))])
+       (cache-expr
+        #'(parameterize ([current-environment the-environment])
+            (add-matcher!
+             (lambda (msg)
+               (with-handlers ([failure? void])
+                 (if (not (let-syntax pats e))
+                     (clear-cached-matches! 'key)
+                     (add-cached-match! 'key msg)))))))
        (syntax/loc stx
          (lambda () x (get-cached-matches 'key))))]))
 
@@ -616,7 +583,7 @@ with '-' prevents access.
 (define-syntax (after stx)
   (syntax-parse stx
     [(after t body ...)
-     (with-syntax ([n (generate-temporary)])
+     (with-syntax ([n (generate-temporary 'after)])
        (syntax/loc stx
          (let* ([start (current-time)]
                 [h (make-handler
