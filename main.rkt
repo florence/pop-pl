@@ -30,7 +30,7 @@ with '-' prevents access.
  ;; internal
  make-handler define-message add-handler define-handler
  -number
- local-require
+ (rename-out [require -require])
  here-be-tests
  ;;for the configure-runtime
  current-environment)
@@ -325,12 +325,7 @@ with '-' prevents access.
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
-     (define here #'here)
-     (define (p/i i)
-       (syntax-local-introduce (p i)))
-     (define (p i)
-       (datum->syntax pctx i here))
-     (with-syntax ([the-environment/stx (make-the-environment here)]
+     (with-syntax ([the-environment (make-the-environment #'here)]
                    [new-network (datum->syntax stx 'new-network)]
                    [spawn-actor! (datum->syntax stx 'spawn-actor!)]
                    [send-message!/stx (datum->syntax stx 'send-message!)]
@@ -359,18 +354,19 @@ with '-' prevents access.
              (current-send-message
               (lambda (m) (send! the-network m)))))
 
+          (define the-environment (make-environment-from-state (make-empty-state)))
+
           (define (set-wait! f) (set! -wait f))
           (define -wait #f)
 
-          #,(datum->syntax stx '(local-require pop-pl/constants))
-          ;(require pop-pl/prescription-sig)
+          #,(datum->syntax stx '(-require pop-pl/constants))
           ;;TODO get module path
+          (provide name)
           (define name (gensym 'prescrip))
           ;; setup state
-          (define the-environment/stx (make-environment-from-state (make-empty-state)))
           body ...
           (provide the-state)
-          (define the-state (environment-state the-environment/stx))))]))
+          (define the-state (environment-state the-environment))))]))
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
@@ -539,15 +535,14 @@ with '-' prevents access.
                                      [_ (raise (failure))])]))])))]
                     [key (generate-temporary 'matching-key)]
                     [the-environment (make-the-environment #'here)]
-                    [x
-                     (syntax-local-lift-expression
-                      #'(parameterize ([current-environment the-environment])
-                          (add-matcher!
-                           (lambda (msg)
-                             (with-handlers ([failure? void])
-                               (if (not (let-syntax pats e))
-                                   (clear-cached-matches! 'key)
-                                   (add-cached-match! 'key msg)))))))])
+                    [x (syntax-local-lift-expression
+                        #'(parameterize ([current-environment the-environment])
+                            (add-matcher!
+                             (lambda (msg)
+                               (with-handlers ([failure? void])
+                                 (if (not (let-syntax pats e))
+                                     (clear-cached-matches! 'key)
+                                     (add-cached-match! 'key msg)))))))])
        (syntax/loc stx
          (lambda () x (get-cached-matches 'key))))]))
 
