@@ -1,7 +1,8 @@
 #lang racket/unit
 
 (require "system-sig.rkt" "private/shared.rkt"
-         "prescription-sig.rkt" (submod "main.rkt" eval))
+         "prescription-sig.rkt" (submod "main.rkt" eval)
+         racket/match)
 
 (import)
 (export system^)
@@ -18,15 +19,16 @@
 (define (new-network)
   (network (make-hash)))
 
-(define (spawn-actor! network path-or-func)
-  (define create-prescription
-    (if (procedure? path-or-func)
-        path-or-func
-        (dynamic-require path-or-func 'create-initial-state)))
-  (define-values (the-state name) (create-prescription))
-  (define new-actor (actor the-state))
+(define (spawn-actor! network path-or-state)
+  (define-values (the-state name)
+    (match path-or-state
+      [(list state name) (values state name)]
+      [path (values (dynamic-require path-or-state 'the-state)
+                    (dynamic-require path-or-state 'name))]))
+  (define-values (state ms) (start the-state))
+  (define new-actor (actor state))
   (hash-set! (network-actors network) name new-actor)
-  (start the-state))
+  ms)
 
 (define (send-message! network msg)
   (apply
