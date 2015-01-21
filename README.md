@@ -4,6 +4,7 @@
 This is the implementation of the Patient Oriented Prescription Programming Language (POP-PL)
 
 To install
+
 1. Download the latest version of Racket from http://download.racket-lang.org/
 2. Open the DrRacket IDE, which comes with Racket
 3. Select "File" -> "Install Package..."
