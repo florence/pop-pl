@@ -5,4 +5,4 @@
                "pict-lib"))
 (define build-deps
   '("rackunit-lib"
-    "typed-racket-lib"))
+    "cover"))
