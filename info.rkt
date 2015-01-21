@@ -6,3 +6,7 @@
 (define build-deps
   '("rackunit-lib"
     "cover"))
+
+(define test-omit-paths
+  '("examples/heparin/sim-gui.rkt"
+    "examples/insulin/sim-gui.rkt"))
