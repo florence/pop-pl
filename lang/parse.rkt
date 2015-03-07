@@ -64,7 +64,7 @@
     #:datum-literals (after whenever whenever-new whenever-cond)
     (pattern (~or whenever whenever-new after)))
   (define (join* lines depth [results null])
-    (cond [(null? lines) 
+    (cond [(null? lines)
            (values results null)]
           [else
            (define line (first lines))
@@ -75,10 +75,10 @@
                     (define-values (res b) (join* lines (sub1 depth)))
                     (values results (append res b)))
                   (syntax-parse l
-                    [(i:scope-introducer e ...) 
+                    [(i:scope-introducer e ...)
                      (define-values (next rst) (join* (rest lines) inner-depth))
                      (values (append results (list (quasisyntax/loc l (i e ... #,@next))) rst) null)]
-                    [_ 
+                    [_
                      (join* (rest lines) depth (append results (list l)))]))]
              [(? syntax? line)
               (join* (rest lines) depth (append results (list line)))]
@@ -122,7 +122,7 @@
    [(list w _ "new" _ id (list _ _ _ e))
     `(,(datum->syntax #f 'whenever-new w) (,id ,e))]
    [(list w _ "latest" _ e)
-    `(,w 
+    `(,w
       ,e
       ,(datum->syntax #f '#:latest w)
       ,(datum->syntax #f '#t w))]
@@ -146,12 +146,12 @@
 
 ;; take a line-by-line parse of a multipart whenever and get the next full clause and whats after
 (define (get-next-clause parts)
-  (define start 
+  (define start
     (syntax-parse (first parts)
       [(t e) (first parts)]
       [_ (raise-syntax-error 'whenever "whenever must start with a condition" (first parts))]))
   (define-values (bits remainder)
-    (splitf-at (rest parts) 
+    (splitf-at (rest parts)
                (lambda (stx)
                  (syntax-parse stx
                    [(e) #t]
@@ -165,7 +165,7 @@
                   `(line ,(syntax->datum #'n) ,#'e)]))
              (quasisyntax/loc start (t #,@(join-lines (map stx->line (syntax->list #'(e1 e2 ...))))))])
           remainder))
-(module+ test 
+(module+ test
   (check-equal? (map syntax->datum (flatten-parts (list #'(t1 (line 0 1)) #'((line 5 2)) #'((line 4 3)) #'(t2 (line 12 4)) #'(t3 (line 6 5)))))
                 '((t1 1 2 3) (t2 4) (t3 5))))
 ;; parse a literal line from the part
@@ -214,7 +214,7 @@
                     (position-start p)
                     (position-span p)))
 (define (empty-syntax id)
-  (datum->syntax 
+  (datum->syntax
    #f
    id
    #f))
@@ -234,7 +234,7 @@
 (define (parse-test-case a)
   (match a
     [(list _nl _carrot _ws call _end results)
-     (syntax-parse call 
+     (syntax-parse call
        [(a:ap ...)
         `(=> ,#'(a.nokw ...)
           ,@results)])]))
@@ -248,13 +248,13 @@
 (define-parser/colorer (parse lex)
   [Top (:seq (->stx
               (lambda (b)
-                `(,(empty-syntax 'module) 
-                  ,(empty-syntax 'TODO) 
+                `(,(empty-syntax 'module)
+                  ,(empty-syntax 'TODO)
                   ,(empty-syntax 'pop-pl/main)
                   ,@(filter syntax? (flatten b)))))
-             (list 
+             (list
               (:? no-op LANG)
-              (:* no-op 
+              (:* no-op
                   (:/
                    (list
                     (:seq no-op (list NEWLINE END))
@@ -266,17 +266,17 @@
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?(\n|$)")]
-  
+
   [Use (:seq (->stx/filter values)
              (list USE WHITESPACE ID))]
 
   [Require (:seq (->stx parse-require)
                  (list REQUIRE WHITESPACE ID (:? no-op WHITESPACE) END))]
-  
-  
+
+
   [Initially (:seq (->stx parse-init)
                    (list INITIALLY END (:+ no-op Line)))]
-  
+
   [Handler
    (:/
     (list
@@ -284,8 +284,8 @@
            (list HANDLER WHITESPACE ID WHITESPACE IS (:? no-op WHITESPACE) END (:+ no-op Line)))
      (:seq (->stx parse-handler)
            (list KEYWORD ?WHITESPACE END (:+ no-op Line)))))]
-  
-  [Line (:/ 
+
+  [Line (:/
          (list
           (:seq (lambda (r p) (parse-line r))
                 (list INDENTATION Line-Body END))
@@ -297,13 +297,13 @@
   [EmptyLine (:seq (lambda (r p) "")
                    (list NEWLINE END))]
   [Line-Body (:/ (list Whenever Means After Expr/CallId))]
-  [After (:seq (->stx (match-lambda [(list a _ n) `(,a ,n)])) 
+  [After (:seq (->stx (match-lambda [(list a _ n) `(,a ,n)]))
                (list AFTER WHITESPACE Number))]
-  
+
   [Whenever (:/
              (list (:seq (->stx parse-whenever+parts)
                          (list WHENEVER ?WHITESPACE END
-                               (:+ parse-iwpe 
+                               (:+ parse-iwpe
                                    (:/ (list EmptyLine
                                              (:seq no-op (list INDENTATION WheneverPart END)))))))
 
@@ -315,7 +315,7 @@
                                    (:/ (list EmptyLine
                                              (:seq no-op (list INDENTATION WheneverPart END)))))))
                    (:seq (->stx parse-whenever+parts)
-                         (list WHENEVER WHITESPACE LATEST WHITESPACE Expr 
+                         (list WHENEVER WHITESPACE LATEST WHITESPACE Expr
                                ?WHITESPACE END
                                (:+ parse-iwpe
                                    (:/ (list EmptyLine
@@ -323,7 +323,7 @@
                    (:seq (->stx parse-whenever+parts)
                          (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
                                ?WHITESPACE END
-                               (:+ parse-iwpe 
+                               (:+ parse-iwpe
                                    (:/ (list EmptyLine
                                              (:seq no-op (list INDENTATION WheneverPart END)))))))
                    (:seq (->stx parse-whenever+parts)
@@ -349,17 +349,17 @@
                                      (list Number WHITESPACE APART))
                                (:seq (lambda (r p) (list ((->stx values) '#:since-last p) (last r)))
                                      (list SINCELAST WHITESPACE CallId))))]
-  
-  [WheneverPart (:/ 
-                 (list 
+
+  [WheneverPart (:/
+                 (list
                   (:seq (->stx parse-whenever-part) (list Expr ?WHITESPACE PIPE Line-Like))
                   (:seq (->stx parse-whenever-part) (list PIPE Line-Like))))]
   [Line-Like (:seq (lambda (r p) (parse-line r))
                    (list SPACING Line-Body END))]
 
-  
 
-  [INDENTATION (:seq (lambda (r p) (apply string-append r)) 
+
+  [INDENTATION (:seq (lambda (r p) (apply string-append r))
                      (list NEWLINE SPACING))]
   [SPACING (:+ (lambda (r p) (apply string-append (flatten r)))
                WHITESPACE)]
@@ -373,15 +373,15 @@
                            (list MESSAGE WHITESPACE ID ArgDef WHITESPACE IS WHITESPACE Call END))))]
   [MessageForm (:seq  (->stx message-maker)
                       (list OPEN-BRACKET ArgList CLOSE-BRACKET))]
-  
+
   ;; arguments
-  [ArgDef (:seq (->stx second) 
+  [ArgDef (:seq (->stx second)
                 (list OPEN-PAREN ArgList CLOSE-PAREN))]
   [ArgList (:* (->stx/filter values)
                (:/ (list WHITESPACE
                          (:seq no-op (list KEYWORD WHITESPACE ID))
                          ID)))]
-  
+
   ;;; expressions
   [Expr (:/
          (list
@@ -400,16 +400,16 @@
      STRING
      CallId
      Infix))]
-  
-  
-  
-  
+
+
+
+
   ;; function calls
   [Call+Parens (:seq (->stx flatten)
                      (list ID ArgsList+Parens))]
-  
-  [CallId (:seq (->stx 
-                 (lambda (r) 
+
+  [CallId (:seq (->stx
+                 (lambda (r)
                    (match (flatten r)
                      [(list id #t) (list id)]
                      [v v])))
@@ -423,18 +423,18 @@
                         [(list _ a ... _) a]))
                     (list OPEN-PAREN (:? no-op ArgsListCall) CLOSE-PAREN))]
   [ArgsListCall
-   (:+ (lambda (r p) (filter (negate string?) r)) 
+   (:+ (lambda (r p) (filter (negate string?) r))
        (:/ (list
             (:seq (lambda (r p) (match r [(list _ k _ e) (list k e)]))
                   (list ?WHITESPACE KEYWORD WHITESPACE Expr/CallParens))
             (:seq (->stx second) (list ?WHITESPACE Expr/CallParens)))))]
-  
-  ;; infix 
+
+  ;; infix
 
   [Infix (:/ (list Bool Numeric Todo))]
   [Bool Not]
   [Not (:/ (list
-            (:seq 
+            (:seq
              (->stx (match-lambda [(list n _ e) (list n e)]))
              (list NOT WHITESPACE Not))
             AndOr))]
@@ -445,16 +445,16 @@
                (list BoolFromNumTop (:? no-op (:seq no-op (list ?WHITESPACE ANDOR ?WHITESPACE Bool))) ))]
   [ANDOR (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list AND OR))))]
 
-  
 
 
-  
+
+
   [BoolFromNumTop (:seq (->stx/filter parse-bool-from-numb) (list BoolFromNum))]
   [BoolFromNum
    (:seq no-op (list Range (:? no-op (:seq no-op (list ?WHITESPACE LGT ?WHITESPACE BoolFromNum)))))]
   [LGT (:seq (->stx (lambda (r) (string->symbol (first r)))) (list (:/ (list IS "<=" ">=" ">" "<" "="))))]
 
-  
+
   [Range (:/ (list
               (:seq (->stx parse-in-range)
                     (list Numeric WHITESPACE
@@ -465,15 +465,15 @@
                           OUTSIDE WHITESPACE (:? no-op OF) ?WHITESPACE (:? no-op RANGE) ?WHITESPACE
                           Numeric WHITESPACE TO WHITESPACE Numeric))
               Numeric))]
-  
+
   [To (:/ (list TO AND))]
   [Between (:/ (list (:seq no-op (list IN (:? no-op (:seq no-op (list WHITESPACE RANGE)))))
                      BETWEEN))]
 
   [Numeric Sum]
-  
-  
-  
+
+
+
   [Sum (:seq (->stx/filter
               (match-lambda
                [(list r) r]
@@ -483,7 +483,7 @@
                 (list s r)]
                [(list* s r (? (negate null?) rest)) `(+ ,(list s r) ,@rest)]
                [(list* r rest) `(+ ,r ,@rest)]))
-             (list 
+             (list
               (:? no-op MINUS)
               Product
               (:* no-op
@@ -492,7 +492,7 @@
   [PM (:/ (list PLUS MINUS))]
   [PLUS "+"]
   [MINUS (:seq (->stx (const '-)) (list "-"))]
-  [Product (:seq (->stx/filter 
+  [Product (:seq (->stx/filter
                   (match-lambda
                    [(list r) r]
                    [(list r rest) `(* ,r ,rest)]))
@@ -512,7 +512,7 @@
   [NUMBER-RAW-TOK (:rx no-op #rx"[0-9]+(\\.[0-9]*)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
               (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" UNIT-RAW))))))]
-  [UnitTok (:seq no-op 
+  [UnitTok (:seq no-op
                  (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" (:? no-op UNIT-RAW)))))))]
   [UNIT-RAW (:/ (sort
                  (list "units"
@@ -536,16 +536,16 @@
                        "second")
                  (lambda (l r) (> (string-length l) (string-length r)))))]
   [OP (:/ (list "and" "or" "=" "<" ">" "+" "-" "*" "/"))]
-  
 
-  [Tests 
+
+  [Tests
    (:seq (->stx parse-test-top)
          (list TEST
                TestResults
                (:* no-op TestCase)))]
   [TestCase
    (:seq (->stx parse-test-case)
-         (list 
+         (list
           (:+ no-op NEWLINE)
           CARROT
           ?WHITESPACE
@@ -554,10 +554,10 @@
           TestResults))]
   [TestResults
    (:* no-op
-       (:seq (->stx parse-test-results) 
+       (:seq (->stx parse-test-results)
              (list NEWLINE ?WHITESPACE OPEN-BRACKET CallId CLOSE-BRACKET END)))]
 
-  
+
   ;; keywords
   [Keywords (:/ (list REQUIRE MESSAGE IS OPEN-BRACKET CLOSE-BRACKET
                       WHENEVER INITIALLY MEANS PIPE AFTER FUNCTION NOT
@@ -620,7 +620,7 @@
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
                  (list ID-LIKE ":"))]
   [ID (:seq (->stx second)
-            (list 
+            (list
              (:& (:! (:seq no-op (list Keywords (:/ (list " " END))))))
              ID-LIKE
              (:/ (list (:! ":") END))))]
@@ -648,14 +648,14 @@
      (:seq
       no-op
       (list
-       Other 
+       Other
        (:& (:/ (list WHITESPACE END)))))))]
   #:tokens
-  (comment LANG COMMENT) 
+  (comment LANG COMMENT)
   (hash-colon-keyword KEYWORD)
-  (other Other+End) 
-  (white-space NEWLINE WHITESPACE) 
-  (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok) 
+  (other Other+End)
+  (white-space NEWLINE WHITESPACE)
+  (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok)
   (symbol ID)
   (parenthesis OPEN-PAREN CLOSE-PAREN))
 
@@ -669,14 +669,14 @@
           (~optional (~seq #:pattern p))
           e:expr ...)
        (quasisyntax/loc stx
-         (let-values ([(val _) (parse t 
+         (let-values ([(val _) (parse t
                                       #,@(if (attribute d) #'(#:debug d) #'())
                                       #,@(if (not (attribute p))
                                              #'()
                                              #'(#:pattern (:seq (lambda (r p) (first r)) (list p :EOF)))))]
-                      [(res) #,@(if (attribute p) 
+                      [(res) #,@(if (attribute p)
                                     #'('e ...) ;; there should only be one here
-                                    #'((module 'e ...)))]) 
+                                    #'((module 'e ...)))])
            (define (convert v)
              (cond [(syntax? v)
                     (syntax->datum v)]
@@ -687,7 +687,7 @@
                #,(quasisyntax/loc stx (fail (~a "parsing \"" t "\" returned false, expected " res)))
                #,(quasisyntax/loc stx
                    (check-equal? (convert val)
-                                 res 
+                                 res
                                  t)))))]))
   (test-case
    "Begin"
@@ -704,7 +704,7 @@
    (test-parse "-change"
                #:pattern Expr
                (- change))
-   
+
    (test-parse "handler x is\n  test"
                (define-handler x (test)))
    (test-parse "hanDlEr X iS\n  tEst"
@@ -724,12 +724,12 @@
                #:pattern Expr
                (+ (- 1) (- 1)))
    (test-parse "initially\n notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
-               (initially 
+               (initially
                 (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
                           (notifydoctor))))
    (test-parse "initially\n  test"
                (initially (test)))
-   
+
    (test-parse "require x"
                (add-handler x))
    (test-parse "initially\n  whenever\n   x | x\n   | n"
@@ -764,7 +764,7 @@
               (x y z))
   (test-case
    "collect"
-   (test-parse 
+   (test-parse
     "handler b is
   QQ
   whenever t1
@@ -786,7 +786,7 @@ initially
       (qq)
       (whenever t1
                 (e1)
-                (e2) 
+                (e2)
                 (whenever-new x (e3) (e4))
                 (whenever-cond [g (m) (x)] [g2 (v) (v2)])
                 (e5)))
@@ -803,7 +803,7 @@ initially
    (test-parse "\n  whenever new x"
                #:pattern Line
                (line 2 (whenever-new x)))
-   
+
   ;;; expressions
    (test-parse "x"
                #:pattern Expr
@@ -826,7 +826,7 @@ initially
    (test-parse "x \"m\" by: z"
                #:pattern Expr
                (x "m" #:by z)))
-  
+
   ;; infix
   (test-case
    "infix"
@@ -843,15 +843,15 @@ initially
                #:pattern Expr
                (>= 4 4))
    (test-parse "1 < 2 < 3 and 4 >= 4"
-               #:pattern Expr 
+               #:pattern Expr
                (and (and (< 1 2) (< 2 3))
                     (>= 4 4)))
    (test-parse "1<2<3and4>=4"
-               #:pattern Expr 
+               #:pattern Expr
                (and (and (< 1 2) (< 2 3))
                     (>= 4 4)))
    (test-parse "1<2<3and0.4>=4.0"
-               #:pattern Expr 
+               #:pattern Expr
                (and (and (< 1 2) (< 2 3))
                     (>= 0.4 4.0))))
   ;; ranges
@@ -896,7 +896,7 @@ initially
   ;;; the big ones
   (test-case
    "big1"
-   (test-parse 
+   (test-parse
     "giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
     #:pattern Expr
     (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv"))
@@ -905,11 +905,11 @@ initially
     #:pattern Expr
     (start (-number 18 units/kg/hour) #:of "heparin"))
    (test-parse
-    "initially 
+    "initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\""
     (initially (givebolus (-number 80 units/kg) #:of "heparin" #:by "iv")))
    (test-parse
-    "initially 
+    "initially
    x"
     (initially (x)))
    (test-parse "\n  x"
@@ -919,7 +919,7 @@ initially
                #:pattern Line-Body
                (x))
    (test-parse
-    "initially 
+    "initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\""
     (initially
@@ -931,7 +931,7 @@ initially
     whenever x
      x"
     (define-handler infusion (whenever-new ptt (whenever x (x))))))
-  (test-case 
+  (test-case
    "big2"
    (test-parse
     "handler infusion is
@@ -969,7 +969,7 @@ initially
                     (whenever-cond
                      [(and (< x x) (< x x)) (x) (x)]
                      [y (z) (q)])))))
-  (test-case 
+  (test-case
    "big3"
    (test-parse
     "handler infusion is
@@ -992,7 +992,7 @@ require heparinPttChecking
 require heparinInfusion
 require ivInserted
 
-initially 
+initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\"
 
@@ -1042,7 +1042,7 @@ require heparinPttChecking
 require heparinInfusion
 require ivInserted
 
-initially 
+initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\"
 
@@ -1092,7 +1092,7 @@ require heparinPttChecking
 require heparinInfusion
 require ivInserted
 
-initially 
+initially
    giveBolus 80 units/kg of: \"heparin\" by: \"iv\"
    start 18 units/kg/hour of: \"heparin\"
 
@@ -1137,7 +1137,7 @@ infusion:
                 (decrease "heparin" #:by (-number 3 units/kg/hour)))])))))
   (test-case
    "big4"
-   (test-parse 
+   (test-parse
     "handler heparinPttChecking is
   Q 6 hours checkPtt whenever not ptt in range 59 to 101, x2
   Q 24 hours checkPtt whenever 59 < ptt < 101, x2"
@@ -1169,14 +1169,14 @@ infusion:
     "x:
   whenever new m and left is right
     z"
-    (define-handler x 
+    (define-handler x
       (whenever-new (m (is left right))
                     (z))))
    (test-parse
     "handler x is
   whenever new m and left is right
     z"
-    (define-handler x 
+    (define-handler x
       (whenever-new (m (is left right))
                     (z)))))
   (test-case
@@ -1207,8 +1207,8 @@ infusion:
     "drug is \"heparin\""
     #:pattern Expr
     (is drug "heparin")))
-  
-  (test-parse 
+
+  (test-parse
    "handler t is\n  notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
    (define-handler t
      (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
