@@ -35,3 +35,7 @@ aPTTChecking:
 
 > aPTTResult 240
 [hold HEParin]
+
+> wait 1.5 hours
+[restart HEParin]
+[decrease HEParin by: 3 units/kg/hour]
