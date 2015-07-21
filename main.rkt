@@ -11,6 +11,7 @@ with '-' prevents access.
  define and not
  (rename-out [in:module-begin #%module-begin]
              [in:top-inter #%top-interaction])
+ module*
  ;; forward facing
  whenever whenever-new initially after every whenever-cond
  (rename-out [every q])
@@ -43,13 +44,15 @@ with '-' prevents access.
                      syntax/id-table
                      syntax/parse
                      unstable/sequence
-                     racket/format)
+                     racket/format
+                     syntax/strip-context)
          (for-meta 2 racket/base
                      syntax/parse)
          racket/bool
          racket/list
          racket/match
          racket/stxparam
+         racket/function
          racket/unit
          "private/shared.rkt")
 
@@ -255,12 +258,12 @@ with '-' prevents access.
 
 ;;; module
 (define-for-syntax pctx #'ctx)
-(define-for-syntax (make-the-environment stx)
+(define-for-syntax (make-the-environment loc)
   (syntax-local-introduce
    (datum->syntax pctx
                   'the-environment
-                  stx)))
-(require racket/function)
+                  loc)))
+
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
@@ -274,12 +277,8 @@ with '-' prevents access.
                     (split-body #'(body ...))]
                    [-eval/stx (p/i '-eval)]
                    [-start/stx (p/i'-start)]
-                   [prescription^/stx (p 'prescription^)]
+                   [prescription^/stx (p/i 'prescription^)]
                    [name/stx (p/i 'name)]
-                   [new-network (datum->syntax stx 'new-network)]
-                   [spawn-actor! (datum->syntax stx 'spawn-actor!)]
-                   [send-message!/stx (datum->syntax stx 'send-message!)]
-                   [advance! (datum->syntax stx 'advance!)]
                    [-wait (datum->syntax stx '-wait)])
        #`(#%plain-module-begin
           (module* configure-runtime racket/base
@@ -297,7 +296,9 @@ with '-' prevents access.
              (define-values/invoke-unit system@
                (import)
                (export (rename system^
-                               (send! send-message!/stx))))
+                               (send! send-message!)
+                               #;
+                               (mk-network new-network))))
              (define the-network (new-network))
              (set-wait! (lambda (t) (advance! the-network t)))
              (for-each displayln (spawn-actor! the-network the-unit))
@@ -310,13 +311,13 @@ with '-' prevents access.
           top ...
 
           #,(datum->syntax stx '(local-require pop-pl/constants))
-          #,(p `(,#'require pop-pl/prescription-sig))
+          #,(p/i `(,#'require pop-pl/prescription-sig))
           ;(require pop-pl/prescription-sig)
           ;;TODO get module path
           (define the-name (gensym))
           (provide the-unit)
           (define the-unit
-            (unit/capture-lifts
+            (unit
              (import)
              (export prescription^/stx)
              ;; global state
@@ -337,8 +338,8 @@ with '-' prevents access.
                  (parameterize ([current-environment the-environment/stx]
                                 [current-send-message send-message!])
                    (eval m))))
-
-             in-unit ...))))]))
+             (parameterize ([current-environment the-environment/stx])
+               (expand/capture (let () (void) in-unit ...)))))))]))
 
 (define-for-syntax (split-body stx)
   (define-values (u t)
@@ -358,72 +359,14 @@ with '-' prevents access.
          (values (cons #'body0 u) t)])))
   (list u t))
 
-;; All this does is (unit (import) (exports sig^ ...) (local-expand/capture-lifts body ...))
-;; Turns out thats really hard
-(define-syntax (unit/capture-lifts stx)
-  (syntax-case stx (import export)
-    [(_ (import) (export out^ ...) form ...)
-     ;; The expansion loop here is based on `block`, but followed by
-     ;; another loop that forces remaining expression expansions (so
-     ;; that we capture all lifts). We don't have to keep any local
-     ;; syntax definitions, since we'll force all local expansion.
-     (let* ([def-ctx (syntax-local-make-definition-context)]
-            [ctx (list (syntax-local-make-definition-context def-ctx))]
-            [stoplist
-             ;; other kernel bindings added implicitly:
-             (list #'begin #'define-syntaxes #'define-values)]
-            [pre-forms
-             (let loop ([todo (syntax->list #'(form ...))] [r '()])
-               (if (null? todo)
-                   (reverse r)
-                   (let ([form (local-expand/capture-lifts (car todo) ctx stoplist def-ctx)]
-                         [todo (cdr todo)])
-                     (syntax-case form (begin)
-                       [(begin lift ... body)
-                        ;; Added lifted expressions to accumulated results:
-                        (let ([r (append (reverse (syntax->list #'(lift ...))) r)])
-                          ;; Handle the three special cases:
-                          (syntax-case #'body (begin define-syntaxes define-values)
-                            [(begin . rest)
-                             ;; splice
-                             (loop (append (syntax->list #'rest) todo) r)]
-                            [(define-syntaxes (id ...) rhs)
-                             ;; bind syntax
-                             (andmap identifier? (syntax->list #'(id ...)))
-                             (begin
-                               (syntax-local-bind-syntaxes
-                                (syntax->list #'(id ...))
-                                #'rhs def-ctx)
-                               (loop todo r))]
-                            [(define-values (id ...) rhs)
-                             ;; introduce binding for a value, and save rhs for
-                             ;; later expansion:
-                             (andmap identifier? (syntax->list #'(id ...)))
-                             (let ([ids (syntax->list #'(id ...))])
-                               (syntax-local-bind-syntaxes ids #f def-ctx)
-                               (loop todo (cons #'body r)))]
-                            [else
-                             ;; just save any other form:
-                             (loop todo (cons form r))]))]))))])
-       (internal-definition-context-seal def-ctx)
-       (with-syntax ([(form ...)
-                      ;; finish expanding all context to capture lifts:
-                      (for/list ([form (in-list pre-forms)])
-                        (syntax-case form (define-values)
-                          [(define-values ids rhs)
-                           (with-syntax ([(begin lifted ... rhs)
-                                          (local-expand/capture-lifts #'rhs ctx null def-ctx)])
-                             #`(begin
-                                 lifted ...
-                                 (define-values ids rhs)))]
-                          [else
-                           (local-expand/capture-lifts form ctx null def-ctx)]))])
-         ;; Finally, force expansion of the `unit` form, so that it can be in the
-         ;; internal-definition context, too:
-         (local-expand #'(unit (import) (export out^ ...) form ...)
-                       ctx
-                       null
-                       def-ctx)))]))
+(define-syntax (expand/capture stx)
+  (syntax-parse stx
+    [(_ body)
+     (local-expand/capture-lifts
+      #'body
+      'expression
+      null)]))
+
 
 (define-syntax (in:top-inter stx)
   (syntax-parse stx
@@ -456,12 +399,10 @@ with '-' prevents access.
 (define-syntax (define-handler stx)
   (syntax-parse stx
     [(_ n:id body ...)
-     (with-syntax ([the-environment (make-the-environment #'here)])
-       (syntax/loc stx
-         (begin
-           (define/func n (make-handler body ...))
-           (parameterize ([current-environment the-environment])
-             (add-handler n)))))]))
+     (syntax/loc stx
+       (begin
+         (define/func n (make-handler body ...))
+         (add-handler n)))]))
 
 (define-syntax (make-handler stx)
   (syntax-parse stx
@@ -484,13 +425,13 @@ with '-' prevents access.
                    body:expr ...)
      (unless (dict-has-key? messages (syntax-local-introduce #'id))
        (raise-syntax-error 'messages "the name of a message needs to go here" #'id))
-     (define names (map syntax-local-introduce (dict-ref messages (syntax-local-introduce #'id))))
-     (with-syntax ([(name ...)
-                    (for/list ([n names])
-                      (datum->syntax n (syntax->datum n) #'id #'id))]
-                   [(value ...)
-                    (for/list ([n (in-range (length names))])
-                      #`(list-ref (message-values (current-message)) #,n))])
+     (define names (dict-ref messages (syntax-local-introduce #'id)))
+     (with-syntax* ([(name ...)
+                     (for/list ([n names])
+                       (datum->syntax #'id (syntax->datum n) #'id #'id))]
+                    [(value ...)
+                     (for/list ([n (in-range (length (syntax->list #'(name ...))))])
+                       #`(list-ref (message-values (current-message)) #,n))])
        #`(begin
            (and #f (id))
            (when (member 'id (message-tags (current-message)))
@@ -577,7 +518,7 @@ with '-' prevents access.
      (with-syntax* ([msg (generate-temporary)]
                     [pats
                      (for/list ([(k v) (in-dict messages)])
-                       (with-syntax ([name (syntax-local-introduce k)])
+                       (with-syntax ([name (replace-context #'e k)])
                          (syntax/loc
                              stx
                            [name
@@ -591,16 +532,14 @@ with '-' prevents access.
                                       x]
                                      [_ (raise (failure))])]))])))]
                     [key (generate-temporary)]
-                    [the-environment (make-the-environment #'here)]
                     [x
                      (syntax-local-lift-expression
-                      #'(parameterize ([current-environment the-environment])
-                          (add-matcher!
-                           (lambda (msg)
-                             (with-handlers ([failure? void])
-                               (if (not (let-syntax pats e))
-                                   (clear-cached-matches! 'key)
-                                   (add-cached-match! 'key msg)))))))])
+                      #'(add-matcher!
+                         (lambda (msg)
+                           (with-handlers ([failure? void])
+                             (if (not (let-syntax pats e))
+                                 (clear-cached-matches! 'key)
+                                 (add-cached-match! 'key msg))))))])
        (syntax/loc stx
          (lambda () x (get-cached-matches 'key))))]))
 
@@ -797,12 +736,14 @@ There are three ways to define a message
   (syntax-parse stx
     [(_ body-start body ...)
      (with-syntax ([mod (syntax-source stx)])
-       (syntax/loc stx
-         (module* test racket
-           (local-require pop-pl/tests/harness
-                          pop-pl/constants
-                          (only-in pop-pl/main -number))
-           (prescription-test
-            mod
-            body-start
-            body ...))))]))
+       (replace-context
+        stx
+        (syntax/loc stx
+          (module* test racket
+            (local-require pop-pl/tests/harness
+                           pop-pl/constants
+                           (only-in pop-pl/main -number))
+            (prescription-test
+             mod
+             body-start
+             body ...)))))]))
