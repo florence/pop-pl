@@ -43,7 +43,7 @@ with '-' prevents access.
                      racket/syntax
                      syntax/id-table
                      syntax/parse
-                     unstable/sequence
+                     racket/sequence
                      racket/format
                      syntax/strip-context)
          (for-meta 2 racket/base
