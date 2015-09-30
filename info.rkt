@@ -5,8 +5,10 @@
                "pict-lib"))
 (define build-deps
   '("rackunit-lib"
-    "cover"))
+    "cover-coveralls"))
 
 (define test-omit-paths
   '("examples/heparin/sim-gui.rkt"
     "examples/insulin/sim-gui.rkt"))
+
+(define module-suffixes '(#"pop"))
