@@ -9,9 +9,8 @@
          (define n v) ...)]))
 
 (defines/provide
-  (heparin "heparin")
-  (fentanyl "fentanyl")
+  (heparin "HEParin")
+  (fentanyl "fentaNYL")
   (insulin "insulin")
-  (ondemandfentanyl "fentanyl, on demand")
-  (iv "iv"))
-
+  (ondemandfentanyl "fentaNYL, on demand")
+  (iv "I.V."))
