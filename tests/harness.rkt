@@ -1,8 +1,9 @@
 #lang racket/base
-(provide prescription-test n advance send current-eval)
+(provide prescription-test n advance send current-eval -number)
 (require (for-syntax racket/base
                      syntax/parse)
          pop-pl/private/shared
+         (only-in pop-pl/main -number)
          racket/format
          racket/match
          racket/unit
@@ -20,8 +21,7 @@
 (define (send msg)
   (send-message! (current-network) msg))
 
-(define-syntax-rule (n num u)
-  (in:number num 'u))
+(define-syntax n (make-rename-transformer #'-number))
 
 (define-syntax (prescription-test stx)
   (define-syntax-class id

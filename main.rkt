@@ -467,10 +467,11 @@ with '-' prevents access.
                                         #'not]
                                        [_ #'values])])
                         (syntax/loc #'t
-                          (n (let* ([matching (get-matching)]
-                                    [since (since-last matching)]
-                                    [acceptable (apart since)])
-                               (times? acceptable)))))]))))
+                          (n (let ([matching (get-matching)])
+                               (and matching
+                                    (let* ([since (since-last matching)]
+                                           [acceptable (apart since)])
+                                      (times? acceptable)))))))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
      (syntax/loc stx (when q.query body ...))]))
@@ -531,17 +532,19 @@ with '-' prevents access.
                                                _)
                                       x]
                                      [_ (raise (failure))])]))])))]
+                    [enabled? (syntax-local-lift-expression #'#f)]
                     [key (generate-temporary)]
                     [x
                      (syntax-local-lift-expression
                       #'(add-matcher!
                          (lambda (msg)
-                           (with-handlers ([failure? void])
+                           (with-handlers ([failure? (lambda _ (set! enabled? #f))])
+                             (set! enabled? #t)
                              (if (not (let-syntax pats e))
                                  (clear-cached-matches! 'key)
                                  (add-cached-match! 'key msg))))))])
        (syntax/loc stx
-         (lambda () x (get-cached-matches 'key))))]))
+         (lambda () x (and enabled? (get-cached-matches 'key)))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
   (if (not maybe-stx)
@@ -741,8 +744,7 @@ There are three ways to define a message
         (syntax/loc stx
           (module* test racket
             (local-require pop-pl/tests/harness
-                           pop-pl/constants
-                           (only-in pop-pl/main -number))
+                           pop-pl/constants)
             (prescription-test
              mod
              body-start

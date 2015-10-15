@@ -1,4 +1,4 @@
-#lang racket/unit
+#lang debug racket/unit
 
 (require "system-sig.rkt" "private/shared.rkt"
          "prescription-sig.rkt")
