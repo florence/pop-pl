@@ -1,6 +1,7 @@
 #lang info
 (define collection "pop-pl")
 (define deps '("base"
+               "debug"
                "gui-lib"
                "debug"
                "pict-lib"))
