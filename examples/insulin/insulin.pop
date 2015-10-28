@@ -30,3 +30,24 @@ hypoglycemia:
   whenever latest BG < 60
     hold insulin
     every 15 minutes checkBG
+
+--- Tests ---
+
+[start insulin at: 1 unit/hour by: iv]
+[checkbg]
+> BG 120
+[change insulin to: 1 units/hour]
+> wait 1.1 hours
+[checkBG]
+> BG 120
+[change insulin to: 1 units/hour]
+> wait 1.1 hours
+[checkBG]
+> BG 120
+[change insulin to: 1 units/hour]
+> wait 1.1 hours
+[checkBG]
+> BG 120
+[change insulin to: 1 units/hour]
+> wait 4.1 hours
+[checkBG]
