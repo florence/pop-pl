@@ -456,6 +456,7 @@ with '-' prevents access.
                                     [times? (make-times-filter (assoc '#:times asc))]
                                     [get-matching
                                      (make-get-matching
+                                      (assoc '#:latest asc)
                                       (syntax-parse #'t
                                         #:literals (not)
                                         [(not e) #'e]
@@ -467,10 +468,11 @@ with '-' prevents access.
                                         #'not]
                                        [_ #'values])])
                         (syntax/loc #'t
-                          (n (let* ([matching (get-matching)]
-                                    [since (since-last matching)]
-                                    [acceptable (apart since)])
-                               (times? acceptable)))))]))))
+                          (let ([matching (get-matching)])
+                            (and matching
+                                 (n (let* ([since (since-last matching)]
+                                           [acceptable (apart since)])
+                                      (times? acceptable)))))))]))))
   (syntax-parse stx
     [(whenever q:query body ...)
      (syntax/loc stx (when q.query body ...))]))
@@ -512,7 +514,7 @@ with '-' prevents access.
 
 (struct failure ())
 
-(define-for-syntax (make-get-matching stx)
+(define-for-syntax (make-get-matching match-only-on-latest? stx)
   (syntax-parse stx
     [e:expr
      (with-syntax* ([msg (generate-temporary)]
@@ -532,16 +534,21 @@ with '-' prevents access.
                                       x]
                                      [_ (raise (failure))])]))])))]
                     [key (generate-temporary)]
+                    [enabled? (syntax-local-lift-expression #'#f)]
                     [x
                      (syntax-local-lift-expression
                       #'(add-matcher!
                          (lambda (msg)
-                           (with-handlers ([failure? void])
+                           (with-handlers ([failure? (lambda _ (set! enabled? #f))])
+                             (set! enabled? #t)
                              (if (not (let-syntax pats e))
                                  (clear-cached-matches! 'key)
                                  (add-cached-match! 'key msg))))))])
-       (syntax/loc stx
-         (lambda () x (get-cached-matches 'key))))]))
+       (quasisyntax/loc stx
+         (lambda () x
+                 (and
+                  #,@(if match-only-on-latest? #'(enabled?) #'())
+                  (get-cached-matches 'key)))))]))
 
 (define-for-syntax (make-times-filter maybe-stx)
   (if (not maybe-stx)

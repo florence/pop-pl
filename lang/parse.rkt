@@ -126,8 +126,15 @@
       ,e
       ,(datum->syntax #f '#:latest w)
       ,(datum->syntax #f '#t w))]
+   [(list w _ "latest" _ e (list* extras))
+    `(,w
+      ,e
+      ,(datum->syntax #f '#:latest w)
+      ,(datum->syntax #f '#t w)
+      ,@(flatten extras))]
    [(list w _ expr (list* extras)) `(,w ,expr ,@(flatten extras))]
-   [(list do _ w _ when (list* extras)) `(,w ,when ,@(flatten extras) ,do)]))
+   [(list do _ w _ when (list* extras)) `(,w ,when ,@(flatten extras) ,do)]
+   [(list do _ w _ "latest" _ when (list* extras)) `(,w ,when #:latest #t ,@(flatten extras) ,do)]))
 ;; parse a whenever that has many parts
 (define (parse-whenever+parts l)
   (match l
@@ -136,7 +143,8 @@
     [(list w ... _ 'END (list (list _ part _) ...))
      `(,@(parse-whenever w)
        (,(datum->syntax #f 'whenever-cond (first w))
-        ,@(flatten-parts part)))]))
+        ,@(flatten-parts part)))]
+    [w (parse-whenever w)]))
 ;; condense the line-by-line whenever into a series of clauses
 (define (flatten-parts parts [results null])
   (cond [(null? parts) (reverse results)]
@@ -300,55 +308,82 @@
   [After (:seq (->stx (match-lambda [(list a _ n) `(,a ,n)]))
                (list AFTER WHITESPACE Number))]
 
-  [Whenever (:/
-             (list (:seq (->stx parse-whenever+parts)
-                         (list WHENEVER ?WHITESPACE END
-                               (:+ parse-iwpe
-                                   (:/ (list EmptyLine
-                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
+  [Whenever
+   (:/
+    (list
+     (:seq
+      (->stx (lambda (r) (parse-whenever+parts (cons (first r) (second r)))))
+      (list WHENEVER
+            (:~
+             (:/
+              (list
+               (:seq no-op
+                     (list ?WHITESPACE END ~
+                           (:+ parse-iwpe
+                               (:/ (list EmptyLine
+                                         (:seq no-op (list INDENTATION WheneverPart END)))))))
 
-                   (:seq (->stx parse-whenever+parts)
-                         (list WHENEVER WHITESPACE NEW WHITESPACE ID
-                               (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))
-                               ?WHITESPACE END
-                               (:+ parse-iwpe
-                                   (:/ (list EmptyLine
-                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
-                   (:seq (->stx parse-whenever+parts)
-                         (list WHENEVER WHITESPACE LATEST WHITESPACE Expr
-                               ?WHITESPACE END
-                               (:+ parse-iwpe
-                                   (:/ (list EmptyLine
-                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
-                   (:seq (->stx parse-whenever+parts)
-                         (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
-                               ?WHITESPACE END
-                               (:+ parse-iwpe
-                                   (:/ (list EmptyLine
-                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
-                   (:seq (->stx parse-whenever+parts)
-                         (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
-                               ?WHITESPACE END
-                               (:+ parse-iwpe
-                                   (:/ (list EmptyLine
-                                             (:seq no-op (list INDENTATION WheneverPart END)))))))
+               (:seq no-op
+                     (list WHITESPACE NEW WHITESPACE ID
+                           (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))
+                           ?WHITESPACE END 
+                           (:+ parse-iwpe
+                               (:/ (list EmptyLine
+                                         (:seq no-op (list INDENTATION WheneverPart END)))))))
+               (:seq no-op
+                     (list WHITESPACE NEW WHITESPACE ID
+                           (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))))
+               (:seq no-op
+                     (list WHITESPACE LATEST WHITESPACE Expr
+                           ?WHITESPACE END
+                           (:+ parse-iwpe
+                               (:/ (list EmptyLine
+                                         (:seq no-op (list INDENTATION WheneverPart END)))))))
+               (:seq no-op
+                     (list WHITESPACE LATEST WHITESPACE Expr (:* no-op WheneverExtras)
+                           ?WHITESPACE END
+                           (:+ parse-iwpe
+                               (:/ (list EmptyLine
+                                         (:seq no-op (list INDENTATION WheneverPart END)))))))
+               (:seq no-op
+                     (list WHITESPACE Expr (:* no-op WheneverExtras)
+                           ?WHITESPACE END
+                           (:+ parse-iwpe
+                               (:/ (list EmptyLine
+                                         (:seq no-op (list INDENTATION WheneverPart END)))))))
+               (:seq no-op
+                     (list WHITESPACE Expr (:* no-op WheneverExtras)))
+               (:seq no-op
+                     (list WHITESPACE LATEST WHITESPACE Expr (:* no-op WheneverExtras)))
+               (:seq no-op
+                     (list WHITESPACE LATEST WHITESPACE Expr)))))))
 
-                   (:seq (->stx parse-whenever)
-                         (list WHENEVER WHITESPACE NEW WHITESPACE ID
-                               (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))))
-                   (:seq (->stx parse-whenever)
-                         (list WHENEVER WHITESPACE LATEST WHITESPACE Expr))
-                   (:seq (->stx parse-whenever) (list WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
-                   (:seq (->stx parse-whenever) (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))))]
+     (:seq (->stx parse-whenever+parts)
+           (list Expr/CallId WHITESPACE WHENEVER WHITESPACE LATEST WHITESPACE Expr (:* no-op WheneverExtras)
+                 ?WHITESPACE END
+                 (:+ parse-iwpe
+                     (:/ (list EmptyLine
+                               (:seq no-op (list INDENTATION WheneverPart END)))))))
+     (:seq (->stx parse-whenever+parts)
+           (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)
+                 ?WHITESPACE END
+                 (:+ parse-iwpe
+                     (:/ (list EmptyLine
+                               (:seq no-op (list INDENTATION WheneverPart END)))))))
+     (:seq (->stx parse-whenever)
+           (list Expr/CallId WHITESPACE WHENEVER WHITESPACE Expr (:* no-op WheneverExtras)))
+     (:seq (->stx parse-whenever)
+           (list Expr/CallId WHITESPACE WHENEVER WHITESPACE LATEST WHITESPACE Expr (:* no-op WheneverExtras)))))]
+
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverExtras (:seq (lambda (r p) (fourth r))
-                        (list ?WHITESPACE COMMA ?WHITESPACE WheneverExtrasStx))]
+                         (list ?WHITESPACE COMMA ~ ?WHITESPACE WheneverExtrasStx))]
   [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (third r)))
-                                     (list X ?WHITESPACE NUMBER-RAW))
+                                     (list X ~ ?WHITESPACE NUMBER-RAW))
                                (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
                                      (list Number WHITESPACE APART))
                                (:seq (lambda (r p) (list ((->stx values) '#:since-last p) (last r)))
-                                     (list SINCELAST WHITESPACE CallId))))]
+                                     (list SINCELAST ~ WHITESPACE CallId))))]
 
   [WheneverPart (:/
                  (list
@@ -1212,6 +1247,12 @@ infusion:
    "handler t is\n  notifyDoctor whenever painscore > 8, x3, since last notifyDoctor"
    (define-handler t
      (whenever (> painscore 8) #:times 3 #:since-last (notifydoctor)
+               (notifydoctor))))
+
+  (test-parse
+   "handler t is\n  notifyDoctor whenever latest painscore > 8, x3, since last notifyDoctor"
+   (define-handler t
+     (whenever (> painscore 8) #:latest #t #:times 3 #:since-last (notifydoctor)
                (notifydoctor))))
 
   (let ([in (open-input-string "#lang test\nmessage test is [ a b: c ]")])

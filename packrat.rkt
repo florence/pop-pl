@@ -1,6 +1,8 @@
 #lang racket/base
-(provide 
- (prefix-out : (combine-out lit rx seq ! & + * ? / EOF))
+(provide
+ (prefix-out : (combine-out lit rx ! & + * ? / EOF ~))
+ (rename-out [cutpoint ~]
+             [~seq :seq])
  define-parser/colorer
  (struct-out position)
  position->vector)
@@ -45,20 +47,35 @@
 ;; Regex
 (struct lit pat (str) #:mutable #:transparent)
 (struct rx pat (pat) #:transparent #:mutable)
-                                        ; listof pattern
+;; listof pattern
 (struct / (values) #:transparent #:mutable)
-                                        ; listof pattern
+;; listof pattern
 (struct seq pat (values) #:transparent #:mutable)
-                                        ; pattern
+(define (~seq f pats)
+  (define-values (fst r)
+    (splitf-at pats (lambda (a) (not (eq? a '~)))))
+  (if (null? r)
+      (seq f pats)
+      (seq (lambda (r p) (f (apply list* r) p))
+           (append fst
+                   (list (~
+                          (~seq (lambda (r p) r) (rest r))))))))
+(define cutpoint '~)
+;; pattern
 (struct ! (pat) #:transparent #:mutable)
-                                        ; pattern
+;; pattern
 (struct & (pat) #:transparent #:mutable)
-                                        ; pattern
-(struct + pat (pat) #:transparent #:mutable)
-                                        ; pattern
+;; pattern
+(define (+ f pat)
+  (seq (lambda (r p) (f (cons (first r) (second r)) p))
+       (list pat (* (lambda (r p) r) pat))))
+;; pattern
 (struct * pat (pat) #:transparent #:mutable)
-                                        ; pattern
+;; pattern
 (struct ? pat (pat) #:transparent #:mutable)
+;; pattern
+(struct ~ (pat) #:transparent #:mutable)
+
 (struct eof ())
 (define EOF (eof))
 
@@ -110,7 +127,8 @@
          (define in (open-input-string s))
          (port-count-lines! in)
          (set-port-next-location! in (or a 1) (or b 0) (or c 1))
-         (parse pat in name table #:debug a:debug)]))
+         (let/ec k
+           (parse pat in name table #:debug a:debug #:escape k))]))
 
 (define (port->string/no-eof p)
   (define p2 (peeking-input-port p))
@@ -118,11 +136,12 @@
   (read-bytes (bytes-length s) p)
   (bytes->string/utf-8 s))
 
-(define (parse pat in [name #f] [table (make-hasheq)] #:debug [a:debug #f])
+(define (parse pat in [name #f] [table (make-hasheq)] #:debug [a:debug #f] #:escape escape)
   (define start (make-location in))
 
   (define (get-pos) (make-position start (make-location in) name))
-  (define (parse* pat) (parse pat in name table #:debug a:debug))
+  (define (parse* pat)
+    (parse pat in name table #:debug a:debug #:escape escape))
   (define (memoize val)
     ;;FIXME
     (define sub (hash-ref! table in (make-hash)))
@@ -143,9 +162,15 @@
         (define (fail p)
           (values #f p))
         (if v
-            (values v (get-pos)) 
+            (values v (get-pos))
             (match pat
               [(colorable c p) (parse* p)]
+              [(~ pat)
+               (define loc (get-pos))
+               (define-values (r p) (parse* pat))
+               (if r
+                   (values r p)
+                   (escape r loc))]
               [(pattern n p)
                (debug `(starting ,n))
                (parameterize ([tab-count (add1 (tab-count))])
@@ -157,7 +182,7 @@
               [(rx f reg)
                (define locs (regexp-match-peek-positions* reg in))
                (define has (and locs (assoc 0 locs)))
-               (define end (and has 
+               (define end (and has
                                 (cdr has)))
                (debug `(,reg matched ,locs))
                (if (not end)
@@ -166,10 +191,10 @@
                               (get-pos))
                            (get-pos)))]
               [(/ (list* pats))
-               (let loop ([pats pats] [pos (get-pos)]) 
+               (let loop ([pats pats] [pos (get-pos)])
                  (cond [(null? pats)
                         (fail pos)]
-                       [else 
+                       [else
                         (define pat (first pats))
                         (define-values (r p) (parse* pat))
                         (if r
@@ -198,9 +223,6 @@
                (if r
                    (values r loc)
                    (values #f (get-pos)))]
-              [(+ f pat)
-               (parse* (seq (lambda (r p) (f (cons (first r) (second r)) p))
-                            (list pat (* (lambda (r p) r) pat))))]
               [(* f pat)
                (let loop ([res null])
                  (with-reset in
@@ -236,7 +258,7 @@
             [else
              (reset)
              (define pat (first tt))
-             (define-values (r p) (parse pat in))
+             (define-values (r p) (let/ec k (parse pat in #:escape k)))
              (let ([offset (position-start p)])
                (if (not r)
                    (loop (rest tt))
@@ -257,13 +279,13 @@
       [Expr Sum]
       [Sum (seq (lambda (l p) (apply r:+ (flatten l)))
                 (list Product (* (lambda (l p) l)
-                                 (seq (match-lambda** 
+                                 (seq (match-lambda**
                                        [((list "+" n) _) n]
                                        [((list "-" n) _) (- n)])
                                       (list (/ (list "+" "-")) Product)))))]
       [Product (seq (lambda (l p) (apply r:* (flatten l)))
-                    (list Value (* (lambda (l p) l) 
-                                   (seq (match-lambda** 
+                    (list Value (* (lambda (l p) l)
+                                   (seq (match-lambda**
                                          [((list "*" n) _) n]
                                          [((list "/" n) _) (r:/ n)])
                                         (list (/ (list "*" "/")) Value)))))]
