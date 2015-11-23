@@ -1,10 +1,12 @@
 #lang racket/base
 (provide (struct-out in:number)
          (struct-out message)
-         time->stamp)
+         time->stamp
+         define-for-syntax/testing)
 (require racket/match
          racket/format
-         racket/list)
+         racket/list
+         (for-syntax syntax/parse racket/syntax racket/base syntax/strip-context))
 (module+ test (require rackunit))
 (struct in:number (value unit) #:transparent
         #:methods gen:custom-write
@@ -45,3 +47,18 @@
                 259200)
   (check-equal? (time->stamp (in:number 2 'hours))
                 7200))
+
+
+(define-for-syntax syntax-mod (generate-temporary))
+(define-syntax (define-for-syntax/testing stx)
+  (syntax-parse stx
+    [(_ (n a ...) b ...)
+     (define/with-syntax mod syntax-mod)
+     #`(begin
+         #,(replace-context
+            stx
+            #'(module mod racket
+                (provide n)
+                (define (n a ...) b ...)))
+         (require (for-syntax (submod "." mod)))
+         (module+ test (require (submod ".." mod))))]))

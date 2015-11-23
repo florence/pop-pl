@@ -13,4 +13,7 @@
   (fentanyl "fentaNYL")
   (insulin "insulin")
   (ondemandfentanyl "fentaNYL, on demand")
-  (iv "I.V."))
+  (iv "I.V.")
+  (im "I.M.")
+  (subcut "subcut")
+  (furosemide "FUROsemide"))

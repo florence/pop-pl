@@ -557,6 +557,7 @@
                        "cm"
                        "mgs"
                        "mg"
+                       "dl"
                        "micrograms"
                        "microgram"
                        "hours"

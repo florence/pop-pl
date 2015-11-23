@@ -359,6 +359,13 @@ with '-' prevents access.
          (values (cons #'body0 u) t)])))
   (list u t))
 
+#;
+(module+ test
+  (let-values ([(u t)
+                (split-body #'((define-message some stuff)))])
+    (check-equal? (map syntax->datum u) null)
+    (check-equal? (map syntax->datum t) '((define-message some stuff)))))
+
 (define-syntax (expand/capture stx)
   (syntax-parse stx
     [(_ body)

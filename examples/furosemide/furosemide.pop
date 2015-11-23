@@ -1,0 +1,33 @@
+#lang pop-pl/sexp
+
+(define-message start (amount #:of drug #:by route))
+(define-message givebolus (amount #:of drug #:by route))
+(define-message creatinine (level))
+
+(initially
+ ;; what do we do if there is no creatinine? answer, there must be!
+ ;; block on waiting? error? ask for?
+ (givebolus (-number 20 mg) #:of furosemide #:by iv)
+
+ (get creatinine weight age
+      =>
+      (if (some formula)
+          (start (-number 2.5 mg/minute) #:of furosemide #:by iv)
+          (start (-number 4 mg/minute) #:of furosemide #:by iv)))
+ )
+
+  
+
+;; rate no more than 4mg per minute
+;; 2.5mg on renal impermant (creatinine > 5mg/dl)
+;; initial bolus 20-50mg
+;; if more needed, 20mg increments at >2h intervals
+;; (can the initial bolus be still be 50mg?)
+
+;; overdose signs: hypovolaemia, dehydration, haemoconcentration, cardiac arrhythmias due to excessive diuresis
+;; symptoms: severe hypotension (progressing to shock), acute renal failure, throbosis, delerious states, flaccid paralysis,
+;; apathy and confusion
+;; treat by fluid replacement and electrolyte rebalancing.
+;; "Together with the prevention and treatment of serious complications resulting from such disturbances
+;; and of other effects on the body, this corrective action may necessitate general and specific intensive
+;; medical monitoring and therapeutic measures"
