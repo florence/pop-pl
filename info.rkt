@@ -1,6 +1,6 @@
 #lang info
 (define collection "pop-pl")
-(define deps '("base"
+(define deps '(("base" #:version "6.3")
                "gui-lib"
                "debug"
                "pict-lib"))
