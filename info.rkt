@@ -10,6 +10,12 @@
 
 (define test-omit-paths
   '("examples/heparin/sim-gui.rkt"
-    "examples/insulin/sim-gui.rkt"))
+    "examples/insulin/sim-gui.rkt"
+    "examples/furosemide"
+    "examples/BMZ-insulin"))
+
+(define compile-omit-paths
+  '("examples/furosemide"
+    "examples/BMZ-insulin"))
 
 (define module-suffixes '(#"pop"))

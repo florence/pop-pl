@@ -12,6 +12,7 @@
 (provide simulate)
 
 (require "heparin.pop" pop-pl/private/shared pop-pl/system-unit
+         pop-pl/constants
          racket/runtime-path)
 (define-values/invoke-unit/infer system@)
 (module+ test (require rackunit))
@@ -36,7 +37,7 @@
     (for/fold ([heparin-continous null] [heparin-bolus null] [measured null] [count 0])
               ([m (reverse log)])
       (match m
-        [(message (list-no-order 'change _ ...) (list "heparin" (in:number amount _)) t)
+        [(message (list-no-order 'change _ ...) (list heparin (in:number amount _)) t)
          (define new-count
            (if restart-value
                (begin0 (+ restart-value amount)
@@ -46,23 +47,23 @@
                  heparin-bolus
                  measured
                  new-count)]
-        [(message (list-no-order 'start _ ...) (list (in:number amount _) "heparin" "iv") t)
+        [(message (list-no-order 'start _ ...) (list (in:number amount _) heparin iv) t)
          (values (cons (vector t amount) heparin-continous)
                  heparin-bolus
                  measured
                  amount)]
-        [(message (list-no-order 'hold _ ...) (list "heparin") t)
+        [(message (list-no-order 'hold _ ...) (list heparin) t)
          (set! restart-value count)
          (values (cons (vector t 0) heparin-continous)
                  heparin-bolus
                  measured
                  0)]
-        [(message (list-no-order 'restart _ ... ) (list "heparin") t)
+        [(message (list-no-order 'restart _ ... ) (list heparin) t)
          (values heparin-continous
                  heparin-bolus
                  measured
                  count)]
-        [(message (list-no-order 'give _ ...) (list (in:number amount _) "heparin" _) t)
+        [(message (list-no-order 'give _ ...) (list (in:number amount _) heparin _) t)
          (values heparin-continous
                  (cons (vector t amount) heparin-bolus)
                  measured
@@ -83,7 +84,7 @@
 (define (run-simulation-for time factor)
   (set! first-time-tested #t)
   (define-values (res _in-system _cont-dosage _next)
-    (for/fold ([outgoing (spawn-actor! heparin.pop)]
+    (for/fold ([outgoing (spawn-actor! the-network heparin.pop)]
                [heparin-in-system 0] [heparin-continous 0] [next null])
               ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
@@ -118,18 +119,18 @@
       (values outgoing heparin-in-system heparin-continous handle-next)
       (let ([msg (first new-log)])
         (match msg
-          [(message (list-no-order 'give _ ...) (list (in:number amt _) "heparin" _) _)
+          [(message (list-no-order 'give _ ...) (list (in:number amt _) heparin _) _)
            (eval-log*  (+ amt heparin-in-system) heparin-continous)]
-          [(message (list-no-order 'change _ ...) (list "heparin" (in:number amt _)) _)
+          [(message (list-no-order 'change _ ...) (list heparin (in:number amt _)) _)
            (eval-log* heparin-in-system (+ amt heparin-continous))]
-          [(message '(start) (list (in:number amt _) "heparin" "iv") _)
+          [(message '(start) (list (in:number amt _) heparin iv) _)
            (eval-log* heparin-in-system amt)]
-          [(message '(hold) (list "heparin") _)
+          [(message '(hold) (list heparin) _)
            (set! restart-amount heparin-continous)
            (eval-log*  heparin-in-system 0)]
-          [(message '(start) (list (in:number n _) "heparin") t)
+          [(message '(start) (list (in:number n _) heparin) t)
            (eval-log* heparin-in-system n)]
-          [(message '(restart) (list "heparin") _)
+          [(message '(restart) (list heparin) _)
            (eval-log* heparin-in-system restart-amount)]
           [(message '(checkaptt) _ t)
            (eval-log (rest new-log)
