@@ -11,6 +11,7 @@
       ;;#:at time meal
       (=> meal ;; need to have some notion of when it should arrive
           ;; if we do not recieve this by the given absolute time, call the #:else block
+          ;; what it means to be absolute is tricky. see note on time below
           #:by (+ t (n 1/2 hours))
           (at (+ time (n 1 hour))
               (=> (check CBG)
@@ -20,6 +21,13 @@
           #:else (intervene))))
 
 
+;; time basically has several forms:
+;; 1. absolute: date/day/hour/year
+;; 2. cyclic absolute: something like "8 am" or "first monday of the month"
+;; its absolute within some given time frame (year, month, day etc)
+;; 3. relative: like n hours.
+;; relative can be compined (ie added) to any other time
+;; absolute and cylcic absolute time cannot
 (meal-protocol (n 8 am))
 (meal-protocol (n 1 pm))
 (meal-protocol (n 6 pm))
