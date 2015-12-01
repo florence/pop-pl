@@ -1,0 +1,45 @@
+#lang pop-pl/sexp
+
+
+(define-handler monitoring
+  (if (q
+       ;; this is going to take a lot of work...
+       (: t1 aptt-test)
+       (: t2 aptt-test)
+       (> (n 1 hour) (- (time-of t2) (time-of t1)))
+       (< 50 (aptt-test-aptt t1) 101)
+       (< 50 (aptt-test-aptt t3) 101)
+
+       (no
+        (: t3 aptt-test)
+        (< (time-of t1) (time-of t3) (time-of t2))
+        (not (< 50 (aptt-test-aptt t3) 101))))
+
+      (every (n 24 hours) (aptt-protocol))
+      (every (n 6 hours) (aptt-protocol))))
+
+(define-protocol (aptt-protocol)
+  (check aPTT)
+  (=> aptt-test
+      ;; like by, but based on when the waiting starts
+      #:within (n 4 hours)
+      (cond
+        [(< 45 aptt)
+         (give (n 80 units/kg) #:of heparin #:by iv)
+         (increase heparin #:by (n 3 units/kg/hour))]
+        [(< 45 aptt 59)
+         (give (n 40 units/kg) #:of heparin #:by iv)
+         (increase heparin #:by (n 1 unit/kg/hour))]
+        [(< 50 aptt 101) (void)]
+        [(< 101 aptt 123)
+         (decrease heparin #:by (n 1 unit/kg/hour))]
+        [(< aptt 123)
+         (hold heparin)
+         (after (n 1 hour)
+                (restart heparin)
+                (decrease heparin #:by (n 3 units/kg/hour)))])
+      ;; if the aptt test does happen, just keep chugging
+      ;; poke someone in an unimportant way
+      ;; this would probably be different for things on ward collect
+      ;; since many many ones would be late
+      #:else (minor-alert)))

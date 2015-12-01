@@ -1,0 +1,28 @@
+#lang pop-pl/sexp
+
+(define-protocol (meal-protocol #:at t)
+  ;(daily)
+  ;; daily not needed, covered by at
+  (at (- t (n 1 hours))
+      (=> (check CBG)
+          (if (> CGB ???)
+              (notify doctor)))
+      (message "have patient order")
+      ;;#:at time meal
+      (=> meal ;; need to have some notion of when it should arrive
+          ;; if we do not recieve this by the given absolute time, call the #:else block
+          #:by (+ t (n 1/2 hours))
+          (at (+ time (n 1 hour))
+              (=> (check CBG)
+                  (if (> CGB ???)
+                      (notify doctor))))
+          ;; if we dont get it in the default time frame, do this
+          #:else (intervene))))
+
+
+(meal-protocol (n 8 am))
+(meal-protocol (n 1 pm))
+(meal-protocol (n 6 pm))
+(meal-protocol (n 9 pm))
+
+(extra-bgc-protocol (n 8 pm))

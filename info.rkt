@@ -11,6 +11,7 @@
 (define test-omit-paths
   '("examples/heparin/sim-gui.rkt"
     "examples/insulin/sim-gui.rkt"
+    "examples/heparin/hep.pop"
     "examples/furosemide"
     "examples/BMZ-insulin"))
 
