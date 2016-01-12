@@ -586,7 +586,7 @@
           CARROT
           ?WHITESPACE
           CallId
-          (:* no-op END)
+          END
           TestResults))]
   [TestResults
    (:* no-op
