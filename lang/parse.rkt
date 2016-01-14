@@ -271,6 +271,7 @@
                                 (:/  (list Require COMMENT Initially Handler Message Use)))))))
               (:* no-op NEWLINE)
               (:? no-op Tests)
+              END*
               :EOF))]
   [COMMENT (:rx (->stx (const '(void)))
                 #rx"//.*?(\n|$)")]
@@ -647,6 +648,8 @@
                        (list ?WHITESPACE (:& COMMENT)
                              (:rx no-op #px"//.*?(?=(\n|$))")
                              (:& (:/ (list NEWLINE &EOF)))))))]
+  [END* (:* (const 'END)
+            (:/ (list WHITESPACE NEWLINE)))]
   [&EOF (:& :EOF)]
   [NEWLINE "\n"]
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
