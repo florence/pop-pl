@@ -535,7 +535,7 @@
                  (list NValue
                        (:* no-op
                            (:seq (->stx/filter (lambda (r) (if (null? (rest r)) (first r) r)))
-                                 (list ?WHITESPACE TS ?WHITESPACE NValue)))))]
+                                 (list ?WHITESPACE TS ?WHITESPACE Product)))))]
   [TS (:/ (list TIMES DIVIDE))]
   [TIMES "*"]
   [DIVIDE (:seq (->stx (const '/)) (list "/"))]
@@ -543,7 +543,8 @@
   [Number (:/
            (list Number+Unit
                  NUMBER-RAW))]
-  [Number+Unit (:seq (->stx (lambda (s) `(-number ,(first s) ,(third s)))) (list NUMBER-RAW WHITESPACE Unit))]
+  [Number+Unit (:seq (->stx (lambda (s) `(-number ,(first s) ,(third s))))
+                     (list NUMBER-RAW WHITESPACE Unit))]
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
   [NUMBER-RAW-TOK (:rx no-op #rx"[0-9]+(\\.[0-9]*)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
@@ -561,6 +562,8 @@
                        "dl"
                        "micrograms"
                        "microgram"
+                       "gram"
+                       "grams"
                        "hours"
                        "hour"
                        "days"
