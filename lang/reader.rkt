@@ -5,6 +5,8 @@
 (define (get-info . default)
   (match-lambda**
    [('color-lexer _) lex]
+   [('drracket:default-extension _)
+    "pop"]
    [(_ d) d]))
 
 (define (read-syntax src in)

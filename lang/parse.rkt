@@ -693,9 +693,9 @@
        Other
        (:& (:/ (list WHITESPACE END)))))))]
   #:tokens
-  (comment LANG COMMENT)
+  (comment COMMENT)
   (hash-colon-keyword KEYWORD)
-  (other Other+End)
+  (other LANG Other+End)
   (white-space NEWLINE WHITESPACE)
   (constant STRING INCOMPLETE-STRING NUMBER-RAW-TOK UnitTok)
   (symbol ID)
