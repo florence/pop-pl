@@ -639,9 +639,12 @@
   [TO "to"]
   [OUTSIDE "outside"]
   [OF "of"]
-  [USE (:seq (->stx (const 'use)) (list USED WHITESPACE BY))]
+  [USE (:seq (->stx (const 'use))
+             (list (:/ (list (:seq no-op (list USED WHITESPACE BY))
+                             (:seq no-op (list USED WHITESPACE AT))))))]
   [USED "used"]
   [BY "by"]
+  [AT "at"]
   [BETWEEN "between"]
   [LATEST  "latest"]
 
