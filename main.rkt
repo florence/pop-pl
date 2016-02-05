@@ -196,6 +196,7 @@ with '-' prevents access.
 ;; Message -> Void
 ;; E: add the message to the current message queue (and caches)
 (define (send-message! m)
+  ;(printf "~a sending ~a\n" (current-handler) m)
   (cache-message! m)
   (define out (current-outgoing-log))
   (set-environment-outgoing-log!
@@ -397,6 +398,8 @@ with '-' prevents access.
 
 ;;; handlers
 
+(define current-handler (make-parameter #f))
+
 (define-syntax (initially stx)
   (syntax-parse stx
     [(_ body ...)
@@ -408,7 +411,7 @@ with '-' prevents access.
     [(_ n:id body ...)
      (syntax/loc stx
        (begin
-         (define/func n (make-handler body ...))
+         (define/func n (make-handler (parameterize ([current-handler 'n]) body ...)))
          (add-handler n)))]))
 
 (define-syntax (make-handler stx)
@@ -458,11 +461,11 @@ with '-' prevents access.
                          (map syntax->list (syntax->list #'((k e) ...))))])
                (cond [(null? asc) #'t]
                      [else
-                      (with-syntax ([since-last (make-since-last (assoc '#:since-last asc))]
-                                    [apart (make-apart-filter (assoc '#:apart asc))]
+                      (with-syntax ([apart (make-apart-filter (assoc '#:apart asc))]
                                     [times? (make-times-filter (assoc '#:times asc))]
                                     [get-matching
-                                     (make-get-matching
+                                     (make-get-matching/since-last
+                                      (assoc '#:since-last asc)
                                       (assoc '#:latest asc)
                                       (syntax-parse #'t
                                         #:literals (not)
@@ -477,7 +480,7 @@ with '-' prevents access.
                         (syntax/loc #'t
                           (let ([matching (get-matching)])
                             (and matching
-                                 (n (let* ([since (since-last matching)]
+                                 (n (let* ([since matching]
                                            [acceptable (apart since)])
                                       (times? acceptable)))))))]))))
   (syntax-parse stx
@@ -488,22 +491,19 @@ with '-' prevents access.
   (if (not maybe-stx)
       #'values
       (l (second maybe-stx))))
-(define-for-syntax make-since-last
-  (maybe-filter
-   (lambda (stx)
-     (syntax-parse stx
-       [(name args ...)
-        (syntax/loc stx
-          (lambda (log)
-            (for/list ([l log]
-                       #:final
-                       (match l
-                         [(message (? (lambda (l) (member 'name l)))
-                                   (list args ... _ ___)
-                                   _)
-                          #t]
-                         [_ #f]))
-              l)))]))))
+(define-for-syntax (make-since-last maybe-stx)
+  (if (not maybe-stx)
+      #'(lambda _ #f)
+      (syntax-parse (second maybe-stx)
+        [(name args ...)
+         (syntax/loc this-syntax
+           (lambda (msg)
+             (match msg
+               [(message (? (lambda (l) (member 'name l)))
+                         (list args ... _ ___)
+                         _)
+                #t]
+               [_ #f])))])))
 
 (define-for-syntax make-apart-filter
   (maybe-filter
@@ -521,7 +521,7 @@ with '-' prevents access.
 
 (struct failure ())
 
-(define-for-syntax (make-get-matching match-only-on-latest? stx)
+(define-for-syntax (make-get-matching/since-last since match-only-on-latest? stx)
   (syntax-parse stx
     [e:expr
      (with-syntax* ([msg (generate-temporary)]
@@ -540,17 +540,22 @@ with '-' prevents access.
                                                _)
                                       x]
                                      [_ (raise (failure))])]))])))]
+                    [reset? (make-since-last since)]
                     [key (generate-temporary)]
                     [enabled? (syntax-local-lift-expression #'#f)]
                     [x
                      (syntax-local-lift-expression
                       #'(add-matcher!
                          (lambda (msg)
-                           (with-handlers ([failure? (lambda _ (set! enabled? #f))])
-                             (set! enabled? #t)
-                             (if (not (let-syntax pats e))
-                                 (clear-cached-matches! 'key)
-                                 (add-cached-match! 'key msg))))))])
+                           (if (reset? msg)
+                               (begin
+                                 (set! enabled? #f)
+                                 (clear-cached-matches! 'key))
+                               (with-handlers ([failure? (lambda _ (set! enabled? #f))])
+                                 (set! enabled? #t)
+                                 (if (not (let-syntax pats e))
+                                     (clear-cached-matches! 'key)
+                                     (add-cached-match! 'key msg)))))))])
        (quasisyntax/loc stx
          (lambda () x
                  (and
