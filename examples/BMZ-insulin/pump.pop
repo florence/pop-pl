@@ -8,10 +8,11 @@
           (if (> CGB ???)
               (notify doctor)))
       (message "have patient order")
-      ;;#:at time meal
       (=> meal ;; need to have some notion of when it should arrive
           ;; if we do not recieve this by the given absolute time, call the #:else block
           ;; what it means to be absolute is tricky. see note on time below
+
+          ;; this kind of message implies that not all messages will be paired in to taskes.
           #:by (+ t (n 1/2 hours))
           (at (+ time (n 1 hour))
               (=> (check CBG)
@@ -28,9 +29,40 @@
 ;; 3. relative: like n hours.
 ;; relative can be compined (ie added) to any other time
 ;; absolute and cylcic absolute time cannot
+
+;; i worry that this could lead to odd errors...
+;; maybe we want plus and shift (id rel rel => rel and abs rel => abs).
+;; what would it mean to shift a cyclic time by more than its cycle?
+;; or maybe its more like patterns on time, and transformations on those patterns.
+;; The previous question still stands in that case.
 (meal-protocol (n 8 am))
 (meal-protocol (n 1 pm))
 (meal-protocol (n 6 pm))
 (meal-protocol (n 9 pm))
 
-(extra-bgc-protocol (n 8 pm))
+;; prompt, get value
+(get home-basal "home basal insulin dose")
+
+(initially
+
+ (give BMZ ... ?)
+ (set insulin #:to (* (n 50 %) home-basal))
+
+ ;; time bound to start time... needs better name
+ (at (+ time (n 1 day))
+     (set insulin #:to (* (n 50 %) home-basal)))
+
+ (at (+ time (n 2 day))
+     (set insulin #:to (* (n 40 %) home-basal)))
+
+ (at (+ time (n 3 day))
+     (set insulin #:to (* (n 30 %) home-basal)))
+
+ (at (+ time (n 4 day))
+     (set insulin #:to (* (n 20 %) home-basal)))
+
+ (at (+ time (n 5 day))
+     (set insulin #:to (* (n 10 %) home-basal)))
+
+ (at (+ time (n 6 day))
+     (set insulin #:to home-basal)))

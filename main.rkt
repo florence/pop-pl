@@ -477,7 +477,7 @@ with '-' prevents access.
                                        [(not e)
                                         #'not]
                                        [_ #'values])])
-                        (syntax/loc #'t
+                        (quasisyntax/loc #'t
                           (let ([matching (get-matching)])
                             (and matching
                                  (n (let* ([since matching]
@@ -545,13 +545,16 @@ with '-' prevents access.
                     [enabled? (syntax-local-lift-expression #'#f)]
                     [x
                      (syntax-local-lift-expression
-                      #'(add-matcher!
+                      #`(add-matcher!
                          (lambda (msg)
                            (if (reset? msg)
                                (begin
                                  (set! enabled? #f)
                                  (clear-cached-matches! 'key))
-                               (with-handlers ([failure? (lambda _ (set! enabled? #f))])
+                               (with-handlers ([failure? (lambda _
+                                                           #,(if match-only-on-latest?
+                                                                 #'(void)
+                                                                 #'(set! enabled? #f)))])
                                  (set! enabled? #t)
                                  (if (not (let-syntax pats e))
                                      (clear-cached-matches! 'key)
@@ -588,17 +591,36 @@ with '-' prevents access.
 (define (after? diff start)
   (< (+ (time->stamp diff) (time->stamp start))
      (time->stamp (current-time))))
+(begin-for-syntax
+  (struct syntax-info (source position span)
+    #:prefab)
+  (define (syntax-loc-union . stx)
+    (syntax-info (syntax-source (first stx))
+                 (apply min (map syntax-position stx))
+                 (apply max (map syntax-span stx))))
+  (define (syntax-loc stx)
+    (syntax-info (syntax-source stx) (syntax-position stx) (syntax-span stx))))
 (define-syntax (every stx)
   (syntax-parse stx
-    [(every n:number+unit name:id exprs ...)
+    [(every
+      n:number+unit name:id
+      . exprs)
      (with-syntax ([(args ...)
-                    (for/list ([e (in-syntax #'(exprs ...))]
+                    (for/list ([e (in-syntax #'exprs)]
                                #:unless (keyword? (syntax-e e)))
                       e)])
-       #'(when
-             (let ([m (hash-ref (current-message-query-cache:last-time) 'name #f)])
-               (implies m (after? n m)))
-           (name exprs ...)))]))
+       (syntax-property
+        (quasisyntax/loc this-syntax
+          (begin
+            (when
+                (let ([m (hash-ref (current-message-query-cache:last-time) 'name #f)])
+                  (implies m (after? n m)))
+              (name . exprs))))
+        'refactor
+        (list
+         (syntax-loc this-syntax)
+         (syntax-loc-union #'n #'name)
+         (syntax-loc #'exprs))))]))
 ;;; numbers
 
 (define-syntax (-number stx)

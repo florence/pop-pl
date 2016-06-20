@@ -68,7 +68,7 @@
                  (cons (vector t amount) heparin-bolus)
                  measured
                  count)]
-        [(message '(ptt) (list v) t)
+        [(message '(apttresult) (list v) t)
          (values heparin-continous
                  heparin-bolus
                  (cons (vector t v) measured)

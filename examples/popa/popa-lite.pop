@@ -3,16 +3,16 @@
 used by OSFSaintFrancis
 
 breakthroughPain:
-  whenever latest painscore > 8 cm, x2, 1 hour apart, since last decrease onDemandFentanyl
+  whenever painscore > 8 cm, x2, 1 hour apart, since last increase onDemandFentanyl
       increase onDemandFentanyl by: 10 micrograms
 
 minimalPain:
-  whenever latest painscore < 3 cm, x2
+  whenever painscore < 3 cm, x2, since last decrease onDemandFentanyl
      decrease onDemandFentanyl by: 10 micrograms
 
 monitoring:
   every 4 hours checkPainScore
-  whenever latest PulseOx < 92
+  whenever new PulseOx and PulseOx < 92
      notifyDoctor
 
 --- Tests ---
@@ -23,6 +23,9 @@ monitoring:
 [checkPainScore]
 > painscore 2
 [decrease onDemandFentanyl by: 10 micrograms]
+> wait 4.1 hours
+[checkPainScore]
+> painscore 2
 > wait 4.1 hours
 [checkPainScore]
 > painscore 2

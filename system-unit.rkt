@@ -6,7 +6,7 @@
 (import)
 (export system^)
 
-(define TIME-ADVANCE 60)
+(define TIME-ADVANCE 30)
 
 ;; Network: [Hashof Any Actor]
 (struct network (actors))

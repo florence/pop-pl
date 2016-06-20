@@ -1,9 +1,18 @@
 #lang pop-pl/sexp
 
-
 (define-handler monitoring
-  (if (q
+  (if (query
        ;; this is going to take a lot of work...
+
+       ;; is this stateless?
+
+
+       ;; we might be able to make it so by building an "expected trace"
+       ;; of the program from queries that are true
+       ;; (specifically from the first point in the log that they are true?
+       ;;  but that wouldnt work if it became true while you were stuck in a later handler
+       ;;  possible solution: possible reentrance is an error. but then how would you encode wanting
+       ;; reentrance?)
        (: t1 aptt-test)
        (: t2 aptt-test)
        (> (n 1 hour) (- (time-of t2) (time-of t1)))
@@ -16,15 +25,19 @@
         (not (< 50 (aptt-test-aptt t3) 101))))
 
       (every (n 24 hours) (aptt-protocol))
+
       (every (n 6 hours) (aptt-protocol))))
 
 (define-protocol (aptt-protocol)
+  ;; need some way to corroberate this send/receive pair
+  ;; but allow for simple recieves like meal in BMZ/pump.pop
   (check aPTT)
   (=> aptt-test
       ;; like by, but based on when the waiting starts
       #:within (n 4 hours)
       (cond
         [(< 45 aptt)
+         ;; not sure how to handle send/recieve pairs/scheduling on these
          (give (n 80 units/kg) #:of heparin #:by iv)
          (increase heparin #:by (n 3 units/kg/hour))]
         [(< 45 aptt 59)

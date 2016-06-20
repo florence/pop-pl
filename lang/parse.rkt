@@ -327,7 +327,7 @@
                (:seq no-op
                      (list WHITESPACE NEW WHITESPACE ID
                            (:? no-op (:seq no-op (list WHITESPACE AND WHITESPACE Expr)))
-                           ?WHITESPACE END 
+                           ?WHITESPACE END
                            (:+ parse-iwpe
                                (:/ (list EmptyLine
                                          (:seq no-op (list INDENTATION WheneverPart END)))))))
