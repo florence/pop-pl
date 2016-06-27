@@ -378,7 +378,7 @@
 
   [Means (:seq (->stx parse-means) (list ID WHITESPACE MEANS WHITESPACE Expr))]
   [WheneverExtras (:seq (lambda (r p) (fourth r))
-                         (list ?WHITESPACE COMMA ~ ?WHITESPACE WheneverExtrasStx))]
+                         (list ?WHITESPACE COMMA ~ ?WNL ~ WheneverExtrasStx))]
   [WheneverExtrasStx (:/ (list (:seq (lambda (r p) (list ((->stx values) '#:times p) (third r)))
                                      (list X ~ ?WHITESPACE NUMBER-RAW))
                                (:seq (lambda (r p) (list ((->stx values) '#:apart p) (first r)))
@@ -661,6 +661,10 @@
   [STRING (:rx (->stx (lambda (s) (substring s 1 (sub1 (string-length s))))) #rx"\".*?[^\\]\"")]
   ;; handle non-breaking spaces for scribble
   [WHITESPACE (:rx no-op #px"( |\xA0)+")]
+  [?WNL (:? no-op
+            (:/ (list WHITESPACE
+                      (:seq no-op
+                            (list ?WHITESPACE NEWLINE ?WHITESPACE)))))]
   [?WHITESPACE (:? no-op WHITESPACE)]
   [KEYWORD (:seq (->stx (compose string->keyword symbol->string syntax->datum first))
                  (list ID-LIKE ":"))]
