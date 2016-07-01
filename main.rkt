@@ -589,8 +589,8 @@ with '-' prevents access.
 ;; time time -> boolean
 ;; are we currently `diff` after `start`
 (define (after? diff start)
-  (< (+ (time->stamp diff) (time->stamp start))
-     (time->stamp (current-time))))
+  (<= (+ (time->stamp diff) (time->stamp start))
+      (time->stamp (current-time))))
 (begin-for-syntax
   (struct syntax-info (source position span)
     #:prefab)
