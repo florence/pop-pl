@@ -2,7 +2,6 @@
 (define collection "pop-pl")
 (define deps '(("base" #:version "6.3")
                "gui-lib"
-               "debug"
                "pict-lib"))
 (define build-deps
   '("rackunit-lib"
