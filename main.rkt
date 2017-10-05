@@ -144,7 +144,7 @@ with '-' prevents access.
   (next-message! m)
   (define msg (current-message))
   (cache-message! msg)
-  (for ([(_ h!) (in-hash (current-handlers))])
+  (for ([(h!)  (in-list (reverse (hash-values (current-handlers))))])
     (h!))
   (cycle-env!))
 
@@ -201,7 +201,7 @@ with '-' prevents access.
   (define out (current-outgoing-log))
   (set-environment-outgoing-log!
    (current-environment)
-   (cons m out)))
+   (append out (list m))))
 
 ;; Message -> Void
 ;; E: Update the caches with this message
