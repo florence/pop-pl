@@ -1,0 +1,61 @@
+#lang pop-pl
+
+used by lurieChildrens
+
+//checkaPTT means "draw blood from line
+//                 where there is not heparin infusion"
+
+initially
+  giveBolus 75 units/kg of: heparin
+  start 20 units/kg/hour of: heparin by: IV
+
+infusion:
+  whenever new aPTT
+// threshold over an hour is good
+// threshold of two hours is upper bound
+    aPTT < 50               | giveBolus 50 units/kg of: heparin
+                            | increase heparin by: 10%
+
+    aPTT between 50 and 59  | increase heparin by: 10%
+//  aPTT between 60 and 85  | do nothing
+    aPTT between 86 and 96  | decrease heparin by: 10%
+    aPTT between 96 and 120 | hold heparin 
+                            | after 30 minutes
+                            |    decrease heparin by: 10%
+                            |    resume heparin
+    aPTT > 120              | hold heparin
+                          //| checkaPTT
+                          //| notifiyPhysician
+
+
+
+                          //| checkaPTT <- what actually happened
+                            | after 1 hour  // and aptt is back
+                            // if was high?
+                            |    decrease heparin by: 15%
+                            |    resume heparin
+
+monitoring:
+  every 1 day checkCBC
+// extra aptt is not an error
+// what we want is "make a value appear every 4 hours"
+// that is NOT what this says.
+// Question: How would a nurse interperet this order? how would they execute it?
+// Follow up questions: What should we put on the nurses task lisk? when should the program
+//        detect a "medical error"?
+// AKA: What does BID mean *to you*?
+  every 4 hours checkaPTT whenever aPTT outside 60 to 85, x1
+  every 1 day checkaPTT whenever aPTT between 60 to 85, x1
+
+
+--- Tests ---
+
+[givebolus 75 units/kg HEParin]
+[start 20 units/kg/hour HEParin IV]
+[checkcbc]
+[checkaptt]
+> aPTT 97
+[hold heparin]
+> wait 30 minutes
+[decrease heparin by: 10%]
+[resume heparin]

@@ -1,0 +1,11 @@
+#lang pop-pl
+
+message giveBolus is [ amount of:  dose ]
+message start is [ amount of: drug by: route ]
+message checkCBC is []
+message checkaPTT is []
+message aPTT is [ aPTT ]
+message increase is [ drug by: amount ]
+message decrease is [ drug by: amount ]
+message hold is [ drug ]
+message resume is [ drug ]
