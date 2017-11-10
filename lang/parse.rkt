@@ -544,7 +544,7 @@
            (list Number+Unit
                  NUMBER-RAW))]
   [Number+Unit (:seq (->stx (lambda (s) `(-number ,(first s) ,(third s))))
-                     (list NUMBER-RAW WHITESPACE Unit))]
+                     (list NUMBER-RAW ?WHITESPACE Unit))]
   [NUMBER-RAW (:rx (->stx string->number) #rx"[0-9]+(\\.[0-9]+)?")]
   [NUMBER-RAW-TOK (:rx no-op #rx"[0-9]+(\\.[0-9]*)?")]
   [Unit (:seq (->stx (compose string->symbol (curry apply string-append) flatten))
@@ -553,6 +553,7 @@
                  (list UNIT-RAW (:? no-op (:* no-op (:seq no-op (list "/" (:? no-op UNIT-RAW)))))))]
   [UNIT-RAW (:/ (sort
                  (list "units"
+                       "%"
                        "unit"
                        "kgs"
                        "kg"

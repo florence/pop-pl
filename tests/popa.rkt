@@ -1,8 +1,9 @@
 #lang racket/base
-(require "harness.rkt" pop-pl/constants)
+(require "harness.rkt" pop-pl/constants
+         "../examples/popa/popa.pop")
 
 (prescription-test
- "../examples/popa/popa.pop"
+ the-unit
  (=> start
      (start (n 25 micrograms/hour) fentanyl)
      (set ondemandfentanyl (n 25 micrograms)))

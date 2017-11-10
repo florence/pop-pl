@@ -1,5 +1,5 @@
 #lang racket/base
-(provide prescription-test n advance send current-eval -number)
+(provide prescription-test n current-eval -number)
 (require (for-syntax racket/base
                      syntax/parse)
          pop-pl/private/shared
@@ -9,17 +9,13 @@
          racket/unit
          rackunit
          rackunit/text-ui
+         "../system-sig.rkt"
          "../system-unit.rkt")
 
-(define-values/invoke-unit/infer system@)
+
 
 (define current-network (make-parameter #f))
 (define testing-module (make-parameter #f))
-
-(define (advance t)
-  (advance! (current-network) t))
-(define (send msg)
-  (send-message! (current-network) msg))
 
 (define-syntax n (make-rename-transformer #'-number))
 
@@ -46,7 +42,7 @@
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (spawn-actor! (current-network) (testing-module))
+               (check-match (start!)
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
@@ -61,7 +57,7 @@
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (advance t)
+               (check-match (advance! t)
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
@@ -72,7 +68,7 @@
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (advance (in:number t 'u.down))
+               (check-match (advance! (in:number t 'u.down))
                             (list-no-order m.pat ...))))
     (pattern (~and
               stx
@@ -83,7 +79,7 @@
                    m:pat ...)))
              #:with parsed
              (syntax/loc #'stx
-               (check-match (send (message '(mes.down) (list e.down ...) #f))
+               (check-match (send-message! (message '(mes.down) (list e.down ...) #f))
                             (list-no-order m.pat ...)))))
   (define-syntax-class pat
     (pattern (m:id e:expr ...)
@@ -94,11 +90,11 @@
              #:with pat
              #'(message (list-no-order 'm ... _ ___) (list e ...) _)))
   (syntax-parse stx
-    [(_ path t:test-clause ...)
+    [(_ the-unit t:test-clause ...)
      #`(let ()
-         (define the-network (new-network))
-         (parameterize ([current-network the-network]
-                        [testing-module 'path])
+         (define-values/invoke-unit/infer (export system^)
+           (link the-unit system@))
+         (parameterize ([testing-module 'path])
            (void
             (run-tests
              (test-suite

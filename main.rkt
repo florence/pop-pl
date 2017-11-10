@@ -265,6 +265,31 @@ with '-' prevents access.
                   'the-environment
                   loc)))
 
+
+
+;                                                        
+;                                                        
+;                                                        
+;                                                        
+;                          ;;  ;;                        
+;                          ;;  ;;                        
+;                          ;;  ;;                        
+;   ;;;; ;;     ;;;      ;;;;  ;; ;;;     ;;;       ;;;; 
+;   ;;;;;;;;  ;;;;;;   ;;;;;;  ;;;;;;;   ;;;;;    ;;;;;; 
+;   ;; ;; ;;  ;;  ;;;  ;;  ;;  ;;   ;;;  ;;  ;;   ;;  ;; 
+;   ;; ;; ;; ;;    ;; ;;   ;;  ;;    ;; ;;   ;;  ;;   ;; 
+;   ;; ;; ;; ;;    ;; ;;   ;;  ;;    ;; ;;;;;;;  ;;   ;; 
+;   ;; ;; ;; ;;    ;; ;;   ;;  ;;    ;; ;;;;;;;  ;;   ;; 
+;   ;; ;; ;; ;;;  ;;  ;;;  ;;  ;;   ;;  ;;       ;;;  ;; 
+;   ;; ;; ;;  ;;;;;;   ;;;;;;  ;;;;;;    ;;;;;;   ;;;;;; 
+;   ;; ;; ;;   ;;;;     ;; ;;  ;;;;;       ;;;     ;; ;; 
+;                                                     ;  
+;                                                  ;;;;  
+;                                                 ;;;    
+;                                                        
+;                                                        
+
+
 (define-syntax (in:module-begin stx)
   (syntax-parse stx
     [(_ body ...)
@@ -294,17 +319,12 @@ with '-' prevents access.
           (module* main #f
             (#%plain-module-begin
              (require pop-pl/system-unit pop-pl/system-sig)
-             (define-values/invoke-unit system@
-               (import)
-               (export (rename system^
-                               (send! send-message!)
-                               #;
-                               (mk-network new-network))))
-             (define the-network (new-network))
-             (set-wait! (lambda (t) (advance! the-network t)))
-             (for-each displayln (spawn-actor! the-network the-unit))
-             (current-send-message
-              (lambda (m) (send! the-network m)))))
+             (define-values/invoke-unit/infer
+               (export (rename system^ (send! send-message!)))
+               (link the-unit system@))
+             (set-wait! advance!)
+             (for-each displayln (start!))
+             (current-send-message send!)))
 
           (define (set-wait! f) (set! -wait f))
           (define -wait #f)
@@ -317,30 +337,29 @@ with '-' prevents access.
           ;;TODO get module path
           (define the-name (gensym))
           (provide the-unit)
-          (define the-unit
-            (unit
-             (import)
-             (export prescription^/stx)
-             ;; global state
-             (define the-environment/stx (make-empty-environment))
+          (define-unit the-unit
+            (import)
+            (export prescription^/stx)
+            ;; global state
+            (define the-environment/stx (make-empty-environment))
 
-             (define name/stx the-name)
+            (define name/stx the-name)
 
-             (define -start/stx
-               (lambda ()
-                 ;;TODO shouldn't need to do this twice...
-                 (parameterize ([current-environment the-environment/stx]
-                                [current-send-message send-message!])
-                   (-eval/stx (message '(time) (list 1) #f))
-                   (-eval/stx (message '(time) (list 1) #f)))))
+            (define -start/stx
+              (lambda ()
+                ;;TODO shouldn't need to do this twice...
+                (parameterize ([current-environment the-environment/stx]
+                               [current-send-message send-message!])
+                  (-eval/stx (message '(time) (list 1) #f))
+                  (-eval/stx (message '(time) (list 1) #f)))))
 
-             (define -eval/stx
-               (lambda (m)
-                 (parameterize ([current-environment the-environment/stx]
-                                [current-send-message send-message!])
-                   (eval m))))
-             (parameterize ([current-environment the-environment/stx])
-               (expand/capture (let () (void) in-unit ...)))))))]))
+            (define -eval/stx
+              (lambda (m)
+                (parameterize ([current-environment the-environment/stx]
+                               [current-send-message send-message!])
+                  (eval m))))
+            (parameterize ([current-environment the-environment/stx])
+              (expand/capture (let () (void) in-unit ...))))))]))
 
 (define-for-syntax (split-body stx)
   (define-values (u t)
@@ -776,14 +795,14 @@ There are three ways to define a message
 (define-syntax (here-be-tests stx)
   (syntax-parse stx
     [(_ body-start body ...)
-     (with-syntax ([mod (syntax-source stx)])
-       (replace-context
-        stx
-        (syntax/loc stx
-          (module* test racket
-            (local-require pop-pl/tests/harness
-                           pop-pl/constants)
-            (prescription-test
-             mod
-             body-start
-             body ...)))))]))
+     (replace-context
+      stx
+      (syntax/loc stx
+        (module* test racket
+          (require (submod ".."))
+          (local-require pop-pl/tests/harness
+                         pop-pl/constants)
+          (prescription-test
+           the-unit
+           body-start
+           body ...))))]))

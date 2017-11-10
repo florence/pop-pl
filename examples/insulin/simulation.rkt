@@ -9,8 +9,10 @@
 
 (provide simulate)
 
-(require "insulin.pop" pop-pl/private/shared pop-pl/system-unit racket/runtime-path)
-(define-values/invoke-unit/infer system@)
+(require "insulin.pop" pop-pl/system-sig pop-pl/private/shared pop-pl/system-unit racket/runtime-path)
+(define-values/invoke-unit/infer
+  (export system^)
+  (link the-unit system@))
 
 (define time-advance 60);in seconds
 (define perterb-percent 0.2)
@@ -36,29 +38,27 @@
   (values (cons last (reverse ic))
           (reverse bg)))
 
-(define the-network (new-network))
 (define-runtime-path insulin.pop "insulin.pop")
 (define (run-simulation-for time factor)
   (define-values (res _in-system _cont-dosage _next)
-    (for/fold ([outgoing (spawn-actor! the-network insulin.pop)]
+    (for/fold ([outgoing (start!)]
                [insulin-in-system 0] [insulin-continous 0] [next null])
               ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (send-message! the-network msg) (list msg)))))
+                  (append r (send-message! msg) (list msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing insulin-in-system insulin-continous factor))
       (values o
               (insulin-values-after his hc time-advance)
               hc
               n)))
-  (set! the-network (new-network))
   res)
 
 (define (inc-time)
-  (advance! the-network time-advance))
+  (advance! time-advance))
 
 (define (eval-log new-log outgoing insulin-in-system insulin-continous factor [handle-next null])
   (define restart-amount 0)

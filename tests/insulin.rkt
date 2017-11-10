@@ -1,8 +1,8 @@
 #lang racket/base
-(require "harness.rkt" pop-pl/constants)
+(require "harness.rkt" pop-pl/constants "../examples/insulin/insulin.pop")
 
 (prescription-test
- "../examples/insulin/insulin.pop"
+ the-unit
  (start
   => (start insulin (n 1 unit/hour) iv)
   (checkBG))

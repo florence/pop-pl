@@ -2,8 +2,9 @@
 (require pop-pl/constants
          "harness.rkt")
 
+(require "../examples/heparin/heparin.pop")
 (prescription-test
- "../examples/heparin/heparin.pop"
+ the-unit
  (=> start
      (givebolus (-number 80 units/kg) heparin iv)
      (start (-number 18 units/kg/hour) heparin iv)

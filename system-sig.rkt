@@ -1,10 +1,8 @@
 #lang racket/signature
 
-;; -> Network
-new-network
-;; Network (or module-path? prescription^) -> (Listof Messages)
-spawn-actor!
-;; Network Message -> (Listof Messages)
+;; -> (Listof Messages)
+start!
+;; Message -> (Listof Messages)
 send-message!
-;; Network Time -> (Listof Messages)
+;; Time -> (Listof Messages)
 advance!

@@ -11,10 +11,13 @@
 
 (provide simulate)
 
-(require "heparin.pop" pop-pl/private/shared pop-pl/system-unit
+(require "heparin.pop" pop-pl/system-sig
+         pop-pl/private/shared pop-pl/system-unit
          pop-pl/constants
          racket/runtime-path)
-(define-values/invoke-unit/infer system@)
+(define-values/invoke-unit/infer
+  (export system^)
+  (link the-unit system@))
 (module+ test (require rackunit))
 
 (define time-advance 60);in seconds
@@ -79,30 +82,29 @@
           (reverse hb)
           (reverse m)))
 
-(define the-network (new-network))
+
 (define-runtime-path heparin.pop "heparin.pop")
 (define (run-simulation-for time factor)
   (set! first-time-tested #t)
   (define-values (res _in-system _cont-dosage _next)
-    (for/fold ([outgoing (spawn-actor! the-network heparin.pop)]
+    (for/fold ([outgoing (start!)]
                [heparin-in-system 0] [heparin-continous 0] [next null])
               ([_ (in-range 0 time 60)])
       (define tlog (inc-time))
       (define log
         (append tlog
                 (for/fold ([r null]) ([msg next])
-                  (append r (send-message! the-network msg) (list msg)))))
+                  (append r (send-message! msg) (list msg)))))
       (define-values (o his hc n)
         (eval-log (reverse log) outgoing heparin-in-system heparin-continous factor))
       (values o
               (heparin-values-after his hc time-advance)
               hc
               n)))
-  (set! the-network (new-network))
   res)
 
 (define (inc-time)
-  (advance! the-network time-advance))
+  (advance! time-advance))
 (module+ test
   (check-true (list? (inc-time))))
 
