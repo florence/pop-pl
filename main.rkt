@@ -226,7 +226,7 @@ with '-' prevents access.
 ;; clear the delayed-cache-updates, adding them to the caches
 (define (touch-caches!)
   (for ([m (reverse (current-delayed-cache-updates))])
-    (define t (message-time m))
+    (define t (current-time))
     (for ([n (message-tags m)])
       (hash-set! (current-message-query-cache:last-time) n t))
     (for ([! (current-message-query-cache-generators)])
