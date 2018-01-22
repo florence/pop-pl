@@ -12,20 +12,34 @@
         #:methods gen:custom-write
         [(define (write-proc n port mode)
            (define v (in:number-value n))
+           (define u (in:number-unit n))
+           (case mode
+             [(#f)
+               
            (fprintf port
                     "~a ~a"
                     (if (integer? v) v (exact->inexact v))
-                    (in:number-unit n)))])
+                    u)]
+             [(#t) (write (list 'in:number v u) port)]
+             [else (print (list 'in:number v u) port mode)]))])
 (struct message (tags values time) #:transparent
         #:methods gen:custom-write
         [(define (write-proc m port mode)
-           (parameterize ([current-output-port port])
-             (printf "[~a"
-                      (last (message-tags m)))
-             (for-each (lambda (a) (printf " ~a" a))
-                       (message-values m))
-             ;(printf " @ ~a" (message-time m))
-             (printf "]")))])
+           (if (equal? mode #f) ;display
+               (parameterize ([current-output-port port])
+                 (printf "[~a"
+                         (last (message-tags m)))
+                 (for-each (lambda (a) (printf " ~a" a))
+                           (message-values m))
+                 ;(printf " @ ~a" (message-time m))
+                 (printf "]"))
+               (let ([v (list 'message
+                              (message-tags m)
+                              (message-values m)
+                              (message-time m))])
+                 (case mode
+                   [(#t) (write v port)]
+                   [else (print v port mode)]))))])
 
 (define (time->stamp t)
   (match t
