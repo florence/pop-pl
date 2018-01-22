@@ -622,24 +622,16 @@ with '-' prevents access.
 (define-syntax (every stx)
   (syntax-parse stx
     [(every
-      n:number+unit name:id
-      . exprs)
-     (with-syntax ([(args ...)
-                    (for/list ([e (in-syntax #'exprs)]
-                               #:unless (keyword? (syntax-e e)))
-                      e)])
-       (syntax-property
-        (quasisyntax/loc this-syntax
-          (begin
-            (when
-                (let ([m (hash-ref (current-message-query-cache:last-time) 'name #f)])
-                  (implies m (after? n m)))
-              (name . exprs))))
-        'refactor
-        (list
-         (syntax-loc this-syntax)
-         (syntax-loc-union #'n #'name)
-         (syntax-loc #'exprs))))]))
+      n:number+unit name:id exprs:expr ...
+      (~optional (~seq #:after others:id ...) #:defaults ([(others 1) empty])))
+     (define/with-syntax (oid ...) (generate-temporaries #'(others ...)))
+     (quasisyntax/loc this-syntax
+       (when
+           (let ([m (hash-ref (current-message-query-cache:last-time) 'name #f)]
+                 [oid (hash-ref (current-message-query-cache:last-time) 'others #f)] ...)
+             (implies (or m oid ...)
+                      (after? n (apply max (filter values (list m oid ...))))))
+         (name exprs ...)))]))
 ;;; numbers
 
 (define-syntax (-number stx)
