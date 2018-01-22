@@ -650,6 +650,9 @@ with '-' prevents access.
       n:number+unit name:id exprs:expr ...
       (~optional (~seq #:after others:id ...) #:defaults ([(others 1) empty])))
      (define/with-syntax (oid ...) (generate-temporaries #'(others ...)))
+     (for ([id (in-list (cons #'name (syntax->list #'(others ...))))])
+       (unless (identifier-binding id)
+         (raise-syntax-error #f "unknown message" id)))
      (quasisyntax/loc this-syntax
        (when
            (let ([m (hash-ref (current-message-query-cache:last-time) 'name #f)]
