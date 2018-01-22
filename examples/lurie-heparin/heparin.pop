@@ -10,7 +10,7 @@ initially
   start 20 units/kg/hour of: heparin by: IV
 
 infusion:
-  whenever new aPTT
+  whenever new aPTTResult
 // threshold over an hour is good
 // threshold of two hours is upper bound
     aPTT < 50               | giveBolus 50 units/kg of: heparin
@@ -44,8 +44,8 @@ monitoring:
 // Follow up questions: What should we put on the nurses task lisk? when should the program
 //        detect a "medical error"?
 // AKA: What does BID mean *to you*?
-  every 4 hours checkaPTT whenever aPTT outside 60 to 85, x1
-  every 1 day checkaPTT whenever aPTT between 60 to 85, x1
+  every 4 hours checkaPTT whenever aPTTResult outside 60 to 85, x1
+  every 1 day checkaPTT whenever aPTTResult between 60 to 85, x1
 
 
 --- Tests ---
@@ -54,7 +54,7 @@ monitoring:
 [start 20 units/kg/hour HEParin IV]
 [checkcbc]
 [checkaptt]
-> aPTT 97
+> aPTTResult 97
 [hold heparin]
 > wait 30 minutes
 [decrease heparin by: 10%]

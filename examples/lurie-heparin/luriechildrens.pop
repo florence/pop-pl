@@ -4,8 +4,9 @@ message giveBolus is [ amount of:  dose ]
 message start is [ amount of: drug by: route ]
 message checkCBC is []
 message checkaPTT is []
-message aPTT is [ aPTT ]
-message increase is [ drug by: amount ]
-message decrease is [ drug by: amount ]
+message aPTTResult is [ aPTT ]
+message change is [ drug by: amount ]
+message increase is change
+message decrease is change
 message hold is [ drug ]
 message resume is [ drug ]
