@@ -90,7 +90,9 @@ with '-' prevents access.
    next-handlers ; hahsof Sym Handlers
    message-query-cache ; hashof Sym (listof Message)
    message-query-cache-generators ; listof (-> Message Void)
-   message-query-cache:last-time) ; hashof Sym Time
+   message-query-cache:last-time ; hashof Sym Time
+   delayed-cache-updates ; (listof Message)
+   )
   #:mutable
   #:transparent)
 
@@ -116,6 +118,8 @@ with '-' prevents access.
   (environment-outgoing-log (get-current-environment)))
 (define (current-handlers)
   (environment-handlers (get-current-environment)))
+(define (current-delayed-cache-updates)
+  (environment-delayed-cache-updates (get-current-environment)))
 (define (current-message)
   (define cenv (get-current-environment))
   (define cmes (environment-message cenv))
@@ -134,6 +138,7 @@ with '-' prevents access.
    (make-hash);cache
    null       ;generatiors
    (make-hash);time cache
+   null       ;delayed cache updates
    ))
 
 ;;; evaluator
@@ -144,6 +149,7 @@ with '-' prevents access.
   (next-message! m)
   (define msg (current-message))
   (cache-message! msg)
+  (touch-caches!)
   (for ([(h!)  (in-list (reverse (hash-values (current-handlers))))])
     (h!))
   (cycle-env!))
@@ -173,6 +179,7 @@ with '-' prevents access.
 ;; returns the messages to send back out
 (define (cycle-env!)
   (swap-handlers!)
+  (touch-caches!)
   (swap-log!))
 
 ;; -> Void
@@ -206,11 +213,28 @@ with '-' prevents access.
 ;; Message -> Void
 ;; E: Update the caches with this message
 (define (cache-message! m)
-  (define t (message-time m))
-  (for ([n (message-tags m)])
-    (hash-set! (current-message-query-cache:last-time) n t))
-  (for ([! (current-message-query-cache-generators)])
-    (! m)))
+  (delay-cache! m))
+
+;; Message -> Void
+;; remember to add this message to the caches after the reaction
+(define (delay-cache! m)
+  (set-environment-delayed-cache-updates!
+   (get-current-environment)
+   (cons m (current-delayed-cache-updates))))
+
+;; -> Void
+;; clear the delayed-cache-updates, adding them to the caches
+(define (touch-caches!)
+  (for ([m (reverse (current-delayed-cache-updates))])
+    (define t (message-time m))
+    (for ([n (message-tags m)])
+      (hash-set! (current-message-query-cache:last-time) n t))
+    (for ([! (current-message-query-cache-generators)])
+      (! m)))
+  (set-environment-delayed-cache-updates!
+   (get-current-environment)
+   null))
+
 
 ;;; runtime helpers
 
@@ -347,9 +371,10 @@ with '-' prevents access.
 
             (define -start/stx
               (lambda ()
-                ;;TODO shouldn't need to do this twice...
                 (parameterize ([current-environment the-environment/stx]
                                [current-send-message send-message!])
+                  ;; react twice, once to add the handlers
+                  ;; and ones to execute them
                   (-eval/stx (message '(time) (list 1) #f))
                   (-eval/stx (message '(time) (list 1) #f)))))
 
