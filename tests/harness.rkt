@@ -1,5 +1,5 @@
 #lang racket/base
-(provide prescription-test n current-eval -number)
+(provide prescription-test n -number)
 (require (for-syntax racket/base
                      syntax/parse)
          pop-pl/private/shared
